@@ -11,6 +11,8 @@ metrics:
   - wall_clock_ms
   - token_usage
 release_gates:
+  resolution_rate_min: 1.0
   issue_resolution_regression_max: 0.02
   unauthorized_tool_call_rate_max: 0.0
+  regression_rate_max: 0.0
   privacy_findings_max: 0

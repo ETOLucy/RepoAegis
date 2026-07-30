@@ -1240,3 +1240,55 @@ Context7 提供当前技术文档；MCP 是把这类外部能力接入 Agent 的
 - Trace、成本、耗时和工具调用记录完整。
 
 若任何条件不满足，状态应是 `failed`、`needs_input` 或 `needs_approval`，不能以自然语言“看起来已完成”代替系统状态。
+
+## 20. Evaluation Operations（已实现）
+
+### 20.1 高级 Harness
+
+评测系统不再只是对单个 Observation 打分，而是独立于 LangGraph Runtime 的可复现执行层：
+
+```text
+Versioned Suite
+      |
+      v
+EvaluationHarness
+  |     |      |
+并发   重试   失败分类
+  |     |      |
+  +-----+------+
+        |
+Case Evidence
+        |
+Aggregate -> Baseline Delta -> Release Gate
+        |
+SQL / JSON / Markdown / Console
+```
+
+核心约束：
+
+- Suite 固定用例顺序、仓库、Commit、隐藏命令、并发度、最大尝试次数和 Gate。
+- Run 固定 Provider、Model、Prompt、Tool Schema、Policy、Dataset、环境指纹和随机种子。
+- Case 只对 Timeout 和 Infrastructure Failure 重试；Policy、Execution 与 Invalid Output 不伪装成可重试故障。
+- 并发完成顺序不影响最终报告顺序，结果始终按 Suite Manifest 输出。
+- Replay 创建新 Run 并记录来源，不修改原始证据。
+- PostgreSQL 使用 `(tenant_id, run_id)` 隔离身份，并以乐观版本防止覆盖。
+
+聚合指标包括 Resolution Rate、Recall@10、MRR、Unauthorized Tool Call Rate、Regression Rate、p50/p95 Latency、Model Calls 和 Tokens。Release Gate 同时检查绝对解决率下限、相对 Baseline 回归、安全调用、代码回归、隐私发现以及基础设施/无效输出终止故障。没有 Baseline 时明确显示 `No baseline`，不会把缺失数据当作零差值。
+
+当前 `ObservationExecutor` 用于确定性 CI 与示例数据。真实 Agent Graph 只需实现同一个 `CaseExecutor` 协议，不需要修改聚合、存储、API 和控制台。
+
+### 20.2 轻量管理控制台
+
+控制台由 FastAPI 直接提供版本化 HTML、CSS 和 JavaScript，不引入 Node 构建链。首屏就是运营工作台，而不是 Landing Page，包含：
+
+- Evaluation Run 列表和 Gate 筛选；
+- Candidate/Baseline 指标差值；
+- Release Gate 矩阵；
+- 按 Manifest 排序的 Case Execution Rail；
+- 失败 Case Replay；
+- JSON/Markdown 报告；
+- Tenant 范围内的 Repository Task 列表。
+
+浏览器 Bearer Identity 只保存在 JavaScript 内存，不写 Cookie、Local Storage、Session Storage 或 URL。页面使用同源 API、严格 CSP、`no-store`、`nosniff` 和 `no-referrer`。生产环境即使关闭 OpenAPI 与交互式 Docs，`/console` 仍可作为受 API 身份保护的数据操作入口。
+
+控制台已在 1440×900 与 390×844 视口验证，覆盖身份连接、Runs/Tasks 切换、失败 Case Replay、空状态和错误状态；截图中的数据来自仓库内确定性示例，不作为模型 Benchmark 成绩。

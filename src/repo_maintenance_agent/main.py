@@ -11,6 +11,7 @@ from sqlalchemy.engine import make_url
 from repo_maintenance_agent.api.app import create_app
 from repo_maintenance_agent.api.auth import Principal, StaticTokenAuthenticator
 from repo_maintenance_agent.config import Settings
+from repo_maintenance_agent.evaluation.storage import SqlEvaluationRepository
 from repo_maintenance_agent.storage.sql import Base, SqlTaskRepository
 
 
@@ -24,6 +25,7 @@ def build_application() -> FastAPI:
     Path(settings.artifact_root).mkdir(parents=True, exist_ok=True)
     return create_app(
         repository=SqlTaskRepository(engine),
+        evaluation_repository=SqlEvaluationRepository(engine),
         authenticator=StaticTokenAuthenticator(tokens),
         production=settings.environment == "production",
         allowed_hosts=settings.allowed_hosts,

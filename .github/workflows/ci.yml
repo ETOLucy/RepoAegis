@@ -23,6 +23,7 @@ jobs:
       - run: python -m pip install -e ".[dev,postgres,observability]"
       - run: ruff check src tests
       - run: mypy src
+      - run: node --check src/repo_maintenance_agent/console/app.js
       - run: pytest --cov --cov-report=term-missing
       - run: python -m repo_maintenance_agent.security.scanner
       - run: pip-audit

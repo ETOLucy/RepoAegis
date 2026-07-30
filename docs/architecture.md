@@ -95,6 +95,53 @@ Structured traces include model, prompt, tool-schema, and policy versions. Recur
 
 Evaluation keeps hard and soft signals separate. Tests, patch application, regressions, and unauthorized calls are hard gates. Retrieval, latency, cost, and model-based review are optimization metrics.
 
+### Evaluation Operations
+
+The implemented Harness is separate from the LangGraph runtime:
+
+```text
+versioned suite + observations
+              |
+              v
+       EvaluationHarness
+        /      |       \
+ bounded   stable    classified
+ parallel  ordering  retry/failure
+        \      |       /
+              v
+ aggregate -> baseline delta -> release gates
+              |
+        +-----+------+
+        |            |
+   SQL evidence   JSON/Markdown
+        |
+   tenant-scoped API
+        |
+   operations console
+```
+
+`EvaluationHarness` executes through a `CaseExecutor` protocol. The included
+`ObservationExecutor` makes checked-in fixtures and CI deterministic; a live Agent Graph adapter
+can implement the same contract without changing aggregation, storage, APIs, or the console.
+
+Each run records the immutable suite, case results, deterministic seed, provider/model identity,
+prompt/tool-schema/policy/dataset versions, and a normalized environment fingerprint. Cases execute
+under a semaphore. Only timeout and infrastructure failures retry. Result ordering always follows
+the suite manifest.
+
+Aggregates include resolution, Recall@10, MRR, unauthorized-call and regression rates, p50/p95
+latency, calls, and tokens. Release gates combine an absolute resolution floor, baseline regression
+limit, safety limits, privacy findings, and terminal infrastructure/invalid-output failures.
+Missing baselines remain explicit rather than becoming a zero delta.
+
+Evaluation rows use `(tenant_id, run_id)` identity and optimistic versions. Replay creates a new run
+containing selected cases and links to the source run without mutating prior evidence. JSON response
+models omit tenant identity; Markdown exports use deterministic ordering.
+
+The zero-build console is served from package-owned HTML, CSS, and JavaScript. It consumes only
+versioned APIs, stores bearer identity in JavaScript memory, applies a restrictive Content Security
+Policy, and remains available when production disables interactive OpenAPI documentation.
+
 ## Dependency Direction
 
 ```text

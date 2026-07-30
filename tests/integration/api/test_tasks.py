@@ -73,6 +73,22 @@ async def test_create_and_read_task_are_tenant_scoped() -> None:
 
 
 @pytest.mark.asyncio
+async def test_task_list_is_tenant_scoped_and_bounded() -> None:
+    headers = {"Authorization": "Bearer test-token"}
+    async with client() as api:
+        created = await api.post("/v1/tasks", json=payload(), headers=headers)
+        listed = await api.get("/v1/tasks?limit=1", headers=headers)
+        other = await api.get(
+            "/v1/tasks?limit=1",
+            headers={"Authorization": "Bearer other-token"},
+        )
+
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["task_id"] == created.json()["task_id"]
+    assert other.json() == {"items": []}
+
+
+@pytest.mark.asyncio
 async def test_create_rejects_unknown_fields() -> None:
     body = payload() | {"tenant_id": "attacker", "unexpected": True}
     async with client() as api:

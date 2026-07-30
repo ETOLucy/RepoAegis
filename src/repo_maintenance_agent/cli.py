@@ -1,18 +1,28 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import platform
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import httpx
 import typer
+from pydantic import TypeAdapter
 
 from repo_maintenance_agent import __version__
 from repo_maintenance_agent.config import Settings
+from repo_maintenance_agent.evaluation.harness import (
+    EvaluationHarness,
+    ObservationExecutor,
+)
 from repo_maintenance_agent.evaluation.models import (
     EvaluationCase,
     EvaluationObservation,
+    EvaluationProvenance,
+    EvaluationSuite,
 )
+from repo_maintenance_agent.evaluation.reports import render_markdown_report
 from repo_maintenance_agent.evaluation.runner import grade_case
 
 app = typer.Typer(
@@ -223,6 +233,87 @@ def evaluate(case_file: Path, result_file: Path) -> None:
         output_tokens=observation.output_tokens,
     )
     typer.echo(report.model_dump_json(indent=2))
+
+
+@app.command("evaluate-suite")
+def evaluate_suite(
+    suite_file: Path,
+    observations_file: Path,
+    json_report: Annotated[
+        Path,
+        typer.Option(help="Destination for the complete run report."),
+    ],
+    markdown_report: Annotated[
+        Path,
+        typer.Option(help="Destination for the review report."),
+    ],
+    candidate_label: str = typer.Option("candidate", help="Candidate build or model label."),
+    model: str = typer.Option("deterministic", help="Model identifier recorded in provenance."),
+    provider: str = typer.Option("fixture", help="Provider identifier recorded in provenance."),
+    seed: int = typer.Option(0, min=0, help="Deterministic suite seed."),
+) -> None:
+    """Execute a versioned observation suite and enforce its release gates."""
+    suite = EvaluationSuite.model_validate_json(
+        suite_file.read_text(encoding="utf-8")
+    )
+    observations = TypeAdapter(dict[str, EvaluationObservation]).validate_json(
+        observations_file.read_text(encoding="utf-8")
+    )
+    if set(observations) != set(suite.case_ids):
+        raise typer.BadParameter("observations must exactly match evaluation case IDs")
+    provenance = EvaluationProvenance(
+        model=model,
+        provider=provider,
+        prompt_version="cli-observation-v1",
+        tool_schema_version="tools-v1",
+        policy_version="policy-v1",
+        dataset_version=suite.version,
+        environment_fingerprint=(
+            f"python-{platform.python_version()}-"
+            f"{platform.system().lower()}-{platform.machine().lower()}"
+        ),
+        seed=seed,
+    )
+    run = asyncio.run(
+        EvaluationHarness(ObservationExecutor(observations)).run(
+            tenant_id="local-evaluation",
+            suite=suite,
+            candidate_label=candidate_label,
+            provenance=provenance,
+        )
+    )
+    if run.aggregate is None or run.gate_decision is None:
+        raise RuntimeError("evaluation run did not produce a report")
+    json_report.parent.mkdir(parents=True, exist_ok=True)
+    markdown_report.parent.mkdir(parents=True, exist_ok=True)
+    json_report.write_text(
+        run.model_dump_json(exclude={"tenant_id"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    markdown_report.write_text(
+        render_markdown_report(
+            run_id=run.run_id,
+            candidate_label=run.candidate_label,
+            aggregate=run.aggregate,
+            comparison=run.comparison,
+            decision=run.gate_decision,
+            results=run.results,
+        ),
+        encoding="utf-8",
+    )
+    typer.echo(
+        json.dumps(
+            {
+                "run_id": run.run_id,
+                "passed": run.gate_decision.passed,
+                "json_report": str(json_report),
+                "markdown_report": str(markdown_report),
+            },
+            sort_keys=True,
+        )
+    )
+    if not run.gate_decision.passed:
+        raise typer.Exit(code=1)
 
 
 def _control_plane_client() -> ControlPlaneClient:

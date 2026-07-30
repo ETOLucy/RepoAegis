@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import json
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -101,6 +102,21 @@ class SqlTaskRepository:
         if row is None:
             raise ResourceNotFound("task not found")
         return RepoTaskState.model_validate_json(row.state_json)
+
+    async def list(self, tenant_id: str, *, limit: int = 50) -> list[RepoTaskState]:
+        return await asyncio.to_thread(self._list, tenant_id, limit)
+
+    def _list(self, tenant_id: str, limit: int) -> builtins.list[RepoTaskState]:
+        if not 1 <= limit <= 200:
+            raise ValueError("task list limit must be between 1 and 200")
+        with Session(self._engine) as session:
+            rows = session.scalars(
+                select(TaskRow)
+                .where(TaskRow.tenant_id == tenant_id)
+                .order_by(TaskRow.updated_at.desc(), TaskRow.task_id.desc())
+                .limit(limit)
+            ).all()
+        return [RepoTaskState.model_validate_json(row.state_json) for row in rows]
 
     async def save(self, state: RepoTaskState, expected_version: int) -> RepoTaskState:
         return await asyncio.to_thread(self._save, state, expected_version)

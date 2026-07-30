@@ -69,6 +69,27 @@ The Python/FastAPI control plane was reviewed against tenant isolation, authenti
 - Evidence: the scanner covers tracked and untracked non-ignored files and detects OpenAI/GitHub credential shapes, private keys, personal Windows paths, and private local proxy data.
 - Result: findings are redacted and cause a non-zero CI/pre-push result.
 
+### SEC-010: Evaluation tenant isolation
+
+- Severity: verified control
+- Location: `src/repo_maintenance_agent/api/app.py:193`, `src/repo_maintenance_agent/evaluation/storage.py:111`, `src/repo_maintenance_agent/evaluation/storage.py:135`
+- Evidence: evaluation baselines, run reads, replays, exports, and list queries take the authenticated principal's tenant identity; SQL predicates include both tenant and run identity.
+- Result: run identifiers cannot be used to read, replay, compare against, or export another tenant's evaluation data.
+
+### SEC-011: Console token and browser-content safety
+
+- Severity: verified control
+- Location: `src/repo_maintenance_agent/api/app.py:100`, `src/repo_maintenance_agent/api/app.py:101`, `src/repo_maintenance_agent/console/app.js:19`, `src/repo_maintenance_agent/console/app.js:403`
+- Evidence: console responses disable caching and enforce a same-origin CSP; API data is rendered with `textContent`; bearer identity is kept only in module memory and the input is cleared after connection.
+- Result: the console does not persist credentials in cookies or browser storage and does not pass API-controlled strings to HTML parsing sinks.
+
+### SEC-012: Evaluation failure redaction
+
+- Severity: verified control
+- Location: `src/repo_maintenance_agent/evaluation/harness.py:217`, `src/repo_maintenance_agent/evaluation/harness.py:262`
+- Evidence: every executor exception category passes through the shared secret redactor before its bounded summary is stored.
+- Result: provider keys and bearer values embedded in exception messages are replaced before database persistence, API responses, or report export.
+
 ## Production Deployment Requirements
 
 The application expects TLS termination, request-size and rate limits, encrypted storage, centralized audit export, short-lived GitHub App installation tokens, and a managed secret broker at the platform edge. The local Compose profile binds externally visible services to loopback and disables OpenSearch security only for local development.

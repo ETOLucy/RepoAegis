@@ -15,7 +15,9 @@ build/
 .idea/
 .vscode/
 .worktrees/
+.playwright-cli/
 artifacts/
 data/
+output/
+private/
 *.log
-

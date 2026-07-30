@@ -44,6 +44,9 @@ The attacker does not initially control the host, database administrator, secret
 | Secret leakage through logs or child processes | environment allowlist; secret broker; `SecretStr`; recursive redaction | tracing and privacy tests |
 | Malicious repository build | non-root container; read-only root; controlled setup egress; offline checks; resource limits; no Docker socket | sandbox command tests |
 | Duplicate or stale worker writes | optimistic versions; rotating lease IDs; idempotency keys | queue, worker, and SQL tests |
+| Cross-tenant evaluation evidence | composite tenant/run identity; authenticated lookup; public schemas omit tenant IDs | evaluation API and SQL tests |
+| Browser credential persistence | bearer identity kept in JavaScript memory only; no cookies or Web Storage | console asset tests and browser inspection |
+| Console script or framing injection | same-origin assets; restrictive CSP; `frame-ancestors 'none'`; text-only DOM rendering | API header tests and Playwright checks |
 | Approval replay after plan change | approval contains exact SHA-256 plan hash | API and policy tests |
 | Incorrect patch presented as fixed | apply preflight; sandbox tests/lints; bounded review loop | patch, verifier, and graph tests |
 | Dependency substitution | immutable image and Action pins; dependency audit in CI | Compose validation and CI |

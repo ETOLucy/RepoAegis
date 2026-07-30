@@ -25,6 +25,8 @@ class TaskRepository(Protocol):
 
     async def get(self, tenant_id: str, task_id: str) -> RepoTaskState: ...
 
+    async def list(self, tenant_id: str, *, limit: int = 50) -> list[RepoTaskState]: ...
+
     async def save(self, state: RepoTaskState, expected_version: int) -> RepoTaskState: ...
 
 
@@ -45,4 +47,3 @@ class ModelPort(Protocol):
 class BaseModelLike(Protocol):
     @classmethod
     def model_validate(cls, obj: Any) -> BaseModelLike: ...
-

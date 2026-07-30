@@ -1,81 +1,124 @@
 # Repo Maintenance Agent
 
-A policy-controlled, multi-agent system that turns GitHub issues into evidence-backed patches and reviewable draft pull requests.
+[![CI](https://github.com/ETOLucy/Repo_Maintenance_Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ETOLucy/Repo_Maintenance_Agent/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-245dcc.svg)](https://www.python.org/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-177245.svg)](LICENSE)
 
-The control plane is Python. Repository code is treated as untrusted input and executes through language-independent Docker sandbox profiles. Every task, search query, artifact, queue lease, and tool call is scoped by tenant, repository, and immutable commit.
+A policy-controlled agent system that turns repository issues into evidence-backed patches,
+sandbox verification, and reviewable draft pull requests.
 
-## Architecture
+Repo Maintenance Agent is built as an AI control plane rather than a chat wrapper. Typed state,
+tenant isolation, deterministic routing, tool authorization, leased workers, hybrid retrieval,
+container isolation, and reproducible evaluation sit between a model decision and every side
+effect.
+
+![Evaluation operations console](docs/images/evaluation-console.png)
+
+> The screenshot shows the checked-in deterministic example suite. It demonstrates comparison,
+> gate, and replay behavior; it is not a published model benchmark.
+
+## Why This Exists
+
+Repository maintenance agents operate on hostile input and high-impact tools. Issue text can carry
+prompt injection, source trees can contain secrets, tests execute untrusted code, and remote writes
+can affect production repositories. A useful system therefore needs more than an agent loop:
+
+- immutable task scope: tenant, repository, and commit
+- deny-by-default tools with stage-aware permissions
+- plan-bound human approval for remote writes
+- isolated execution with bounded resources and network policy
+- durable concurrency control and replay-safe side effects
+- evaluation that distinguishes correctness, safety, retrieval, and cost
+
+This repository implements those boundaries end to end.
+
+## System Map
 
 ```mermaid
 flowchart LR
-    Client[CLI / GitHub Event] --> API[FastAPI Control Plane]
+    Client[CLI / Console / GitHub Event] --> API[FastAPI Control Plane]
     API --> DB[(PostgreSQL)]
     DB --> Queue[Leased Task Queue]
     Queue --> Worker[Worker Pool]
     Worker --> Graph[LangGraph State Machine]
-    Graph --> Agents[Intake · Research · Plan · Code · Verify · Review · PR]
+    Graph --> Agents[Intake / Research / Plan / Code / Verify / Review / PR]
     Agents --> Gateway[Policy Tool Gateway]
     Gateway --> Search[Hybrid Search]
-    Gateway --> GitHub[GitHub CLI Adapter]
+    Gateway --> GitHub[GitHub CLI]
     Gateway --> Sandbox[Docker Sandbox]
     Search --> OpenSearch[(OpenSearch)]
-    Agents --> Artifacts[(Artifact Store)]
-    Graph --> Approval{Human Approval}
-    Approval --> API
+    Graph --> Approval{Plan Approval}
+    API --> Harness[Evaluation Harness]
+    Harness --> EvalDB[(Run Evidence)]
+    Harness --> Console[Evaluation Operations]
 ```
 
-The authoritative design and interview narrative live in [Repo_Maintenance_Agent_Design.md](Repo_Maintenance_Agent_Design.md). The code-level view is in [docs/architecture.md](docs/architecture.md), and security boundaries are in [docs/threat-model.md](docs/threat-model.md).
+The Python control plane owns identity, state, policy, evidence, and orchestration. Repository code
+executes only in assigned workspaces or language-specific Docker sandboxes.
 
-## Engineering Guarantees
+## Implemented Guarantees
 
-- Strict Pydantic state and legal lifecycle transitions
-- Tenant/repository/commit-scoped persistence and retrieval
-- PostgreSQL optimistic concurrency and atomic task enqueue
-- Worker leases with fencing tokens, heartbeat renewal, retry backoff, and dead letters
-- Hybrid lexical/semantic retrieval with deterministic reciprocal-rank fusion
-- Deny-by-default agent permissions and plan-bound remote writes
-- Argument-array process execution with executable and environment allowlists
-- Patch preflight with declared-file enforcement before `git apply`
-- Non-root, read-only, capability-dropped sandboxing with offline test/lint phases
-- Structured OpenAI Responses with `store=False`
-- Privacy-safe tracing, repository and history scanning, and an 80% coverage gate
+| Boundary | Implementation |
+|---|---|
+| Agent state | Strict Pydantic models and legal lifecycle transitions |
+| Concurrency | Atomic enqueue, optimistic versions, leased claims, rotating fencing IDs |
+| Retrieval | Lexical and semantic adapters with deterministic reciprocal-rank fusion |
+| Tool use | Tenant/repository/commit scope plus role and stage authorization |
+| Remote writes | Human decision bound to the current SHA-256 plan hash |
+| Patch safety | Declared-file enforcement and `git apply --check` preflight |
+| Commands | Argument arrays, executable allowlist, timeout, output limit, sanitized environment |
+| Sandbox | Digest-pinned image, non-root user, read-only root, dropped capabilities, offline checks |
+| Model output | Structured Responses parsing with `store=False` |
+| Evaluation | Concurrent suites, retries, provenance, baseline deltas, hard gates, deterministic replay |
+| Privacy | Recursive redaction plus current-tree and reachable-history publication scanning |
+| Browser surface | Same-origin console with CSP and in-memory-only bearer identity |
 
-## Repository Layout
+## Evaluation Harness
 
-```text
-src/repo_maintenance_agent/
-  agents/          structured agent nodes and output schemas
-  api/             authenticated FastAPI control plane
-  domain/          framework-independent state, errors, and ports
-  evaluation/      deterministic benchmark graders
-  graph/           LangGraph construction and routing
-  models/          model-provider gateway
-  observability/   redacted traces and metrics
-  policies/        authorization and recursive redaction
-  sandbox/         environment profiles and Docker verification
-  search/          routing, OpenSearch/local adapters, and RRF
-  security/        privacy and credential scanner
-  storage/         task state, queue leases, and artifacts
-  tools/           Git, GitHub CLI, Context7, patch, and process adapters
-  worker.py        leased worker execution and retry control
-configs/           versionable agent, tool, policy, and evaluation settings
-sandbox/           immutable worker image and optional seccomp profile
-tests/             unit and integration contracts
+The Harness evaluates a versioned suite under a bounded concurrency limit. It preserves manifest
+order, retries only timeout and infrastructure failures, and records:
+
+- immutable repository commit and dataset version
+- provider, model, prompt, tool-schema, and policy versions
+- deterministic seed and normalized environment fingerprint
+- observation, attempts, failure category, latency, retrieval, calls, and tokens per case
+- aggregate resolution, Recall@10, MRR, regressions, safety rate, and p50/p95 latency
+- candidate-minus-baseline deltas
+- individual release-gate checks and one final decision
+
+Replay creates a new run for selected cases and never mutates the source evidence.
+
+Run the included credential-free example:
+
+```powershell
+.venv\Scripts\python.exe -m repo_maintenance_agent.cli evaluate-suite `
+  examples/evaluation/suite.json `
+  examples/evaluation/observations.json `
+  --json-report artifacts/evaluation/example.json `
+  --markdown-report artifacts/evaluation/example.md `
+  --candidate-label local-example
 ```
 
-## Local Development
+The command writes both reports before returning exit code `1` for a failed gate, which makes it
+usable as a CI release check.
 
-Python 3.12, Git, and Docker are required. Docker must be running for sandbox or image checks.
+## Quick Start
+
+Requirements:
+
+- Python 3.12
+- Git
+- Docker for sandbox and image execution
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev,postgres,observability]"
-.venv\Scripts\python.exe -m pytest --cov --cov-report=term-missing
-.venv\Scripts\ruff.exe check src tests
+.venv\Scripts\python.exe -m pytest --cov=repo_maintenance_agent --cov-report=term-missing
+.venv\Scripts\python.exe -m ruff check src tests
 .venv\Scripts\python.exe -m mypy src
 ```
 
-The API reads secrets only from the process environment. Do not create a repository `.env` containing real credentials.
+Start the local API with a development-only identity:
 
 ```powershell
 $env:REPO_AGENT_API_TOKENS='{"local-api-token":{"tenant_id":"tenant-local","subject":"local-reviewer"}}'
@@ -83,43 +126,62 @@ $env:REPO_AGENT_ENVIRONMENT='development'
 .venv\Scripts\python.exe -m uvicorn repo_maintenance_agent.main:build_application --factory
 ```
 
-Open `http://127.0.0.1:8000/docs` in development. Production mode disables OpenAPI and interactive docs.
+Open:
+
+- Operations console: `http://127.0.0.1:8000/console`
+- OpenAPI: `http://127.0.0.1:8000/docs`
+- Health check: `http://127.0.0.1:8000/health`
+
+The console requests the bearer identity after load and keeps it only in JavaScript memory. It does
+not use cookies, local storage, session storage, or URL parameters.
 
 ## CLI
 
-Set the control-plane token in the process environment. The CLI never prints it.
+Set the control-plane identity only in the current process:
 
 ```powershell
 $env:REPO_AGENT_API_TOKEN='local-api-token'
+
 repo-agent run owner/repository aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa "Fix empty config"
 repo-agent status TASK_ID
-repo-agent approve TASK_ID PLAN_HASH --reason "Reviewed scoped files and checks"
+repo-agent approve TASK_ID PLAN_HASH --reason "Reviewed scope and verification plan"
 repo-agent resume TASK_ID PLAN_HASH --reason "Approved for sandbox execution"
 repo-agent cancel TASK_ID
-repo-agent evaluate case.json result.json
 ```
 
-`approve --reject` records a rejection and terminates the task. Approval is bound to the exact SHA-256 plan hash, so stale plans cannot be authorized.
+`approve --reject` records a rejection. Positive approval applies only to the exact current plan
+hash; a changed plan requires a new decision.
 
-## Configuration
+## API Surface
 
-| Variable | Purpose | Secret |
-|---|---|---|
-| `OPENAI_API_KEY` | Live model calls | yes |
-| `OPENAI_MODEL` | Model selected by the model gateway | no |
-| `REPO_AGENT_API_TOKENS` | JSON map of API token to tenant/subject identity | yes |
-| `REPO_AGENT_API_TOKEN` | CLI bearer token | yes |
-| `REPO_AGENT_API_URL` | CLI control-plane URL | no |
-| `REPO_AGENT_DATABASE_URL` | SQLAlchemy database URL | usually |
-| `REPO_AGENT_ARTIFACT_ROOT` | File artifact root | no |
-| `REPO_AGENT_ALLOWED_HOSTS` | Trusted host allowlist | no |
-| `REPO_AGENT_MAX_ITERATIONS` | Coding/review retry budget | no |
+Authenticated task routes:
 
-`.env.example` contains names and blank placeholders only. Production credentials belong in a secret manager and should use short-lived GitHub App installation tokens.
+```text
+POST /v1/tasks
+GET  /v1/tasks
+GET  /v1/tasks/{task_id}
+POST /v1/tasks/{task_id}/approval
+POST /v1/tasks/{task_id}/cancel
+```
 
-## Local Services
+Authenticated evaluation routes:
 
-The Compose stack binds API and OpenSearch to loopback. OpenSearch security is intentionally disabled only for this local profile.
+```text
+POST /v1/evaluations/runs
+GET  /v1/evaluations/runs
+GET  /v1/evaluations/runs/{run_id}
+POST /v1/evaluations/runs/{run_id}/replay
+GET  /v1/evaluations/runs/{run_id}/report.json
+GET  /v1/evaluations/runs/{run_id}/report.md
+```
+
+Cross-tenant and unknown object IDs have the same 404 response. Public response models omit tenant
+identifiers and internal queue state.
+
+## Local Infrastructure
+
+The Compose profile starts the API, PostgreSQL, and OpenSearch. Exposed ports bind to loopback.
+OpenSearch security is disabled only in this local profile.
 
 ```powershell
 $env:POSTGRES_PASSWORD='choose-a-local-password'
@@ -128,31 +190,78 @@ docker compose config
 docker compose up --build
 ```
 
-Images and GitHub Actions are pinned by immutable digest/SHA. The application container runs as UID 10001 with a read-only filesystem, dropped capabilities, and `no-new-privileges`. Sandbox dependency setup is a separate auditable phase; test and lint phases run with networking disabled.
+Application and sandbox images run as UID 10001 with a read-only root filesystem, dropped
+capabilities, `no-new-privileges`, and immutable base-image digests. Sandbox dependency setup is a
+separate auditable phase; test and lint phases run without network access.
 
-## Evaluation
+## Configuration
 
-Evaluation separates executable correctness from model preference:
+| Variable | Purpose | Secret |
+|---|---|---|
+| `OPENAI_API_KEY` | Optional live OpenAI model calls | yes |
+| `OPENAI_MODEL` | Model recorded and selected by the model gateway | no |
+| `REPO_AGENT_API_TOKENS` | API bearer identities mapped to tenant and subject | yes |
+| `REPO_AGENT_API_TOKEN` | CLI bearer identity | yes |
+| `REPO_AGENT_API_URL` | CLI control-plane URL | no |
+| `REPO_AGENT_DATABASE_URL` | SQLAlchemy task and evaluation database | usually |
+| `REPO_AGENT_ARTIFACT_ROOT` | Artifact storage root | no |
+| `REPO_AGENT_ALLOWED_HOSTS` | Trusted Host allowlist | no |
+| `REPO_AGENT_MAX_ITERATIONS` | Bounded graph correction budget | no |
 
-- hidden tests and regression status determine issue resolution
-- Recall@10 and MRR measure relevant-file retrieval
-- denied/total tool calls measure policy safety
-- latency, model calls, and token usage measure efficiency
+The application never loads a repository `.env` file. `.env.example` contains names and blank
+placeholders only. Production credentials belong in a secret manager; GitHub access should use
+short-lived App installation tokens.
 
-Datasets are configured in [configs/evaluation.yaml](configs/evaluation.yaml). Release gates reject unauthorized tool calls and privacy findings.
+## Security Model
 
-## Security
+Issue text, repository files, model output, search results, test logs, and documentation are
+untrusted data. None can grant permissions. Every side effect crosses a typed adapter and the Tool
+Gateway.
 
-Repository text, issues, model output, and external documents are untrusted data. They cannot grant permissions. All side effects cross typed adapters and the Tool Gateway.
-
-Run the repository scanner before publication:
+Publication gate:
 
 ```powershell
 .venv\Scripts\python.exe -m repo_maintenance_agent.security.scanner
 ```
 
-See [security_best_practices_report.md](security_best_practices_report.md) for the audited controls and [docs/threat-model.md](docs/threat-model.md) for abuse paths.
+The scanner checks tracked and non-ignored files plus all reachable Git history for credential
+shapes, private keys, personal Windows paths, and private proxy configuration.
+
+See [the threat model](docs/threat-model.md) and
+[security review](security_best_practices_report.md) for deployment requirements and abuse paths.
+
+## Repository Layout
+
+```text
+src/repo_maintenance_agent/
+  agents/          typed specialist nodes and outputs
+  api/             authenticated control-plane and console routes
+  console/         zero-build operations workspace
+  domain/          framework-independent state and ports
+  evaluation/      harness, aggregation, gates, reports, and persistence
+  graph/           LangGraph construction and deterministic routing
+  models/          model-provider boundary
+  observability/   redacted traces and normalized metrics
+  policies/        tool authorization and recursive redaction
+  sandbox/         language profiles and Docker verification
+  search/          routing, adapters, and rank fusion
+  security/        privacy and credential scanner
+  storage/         task state, queue leases, and artifacts
+  tools/           Git, GitHub, Context7, patch, and process adapters
+configs/           versioned agent, tool, policy, and evaluation settings
+examples/          credential-free evaluation inputs
+sandbox/           immutable worker image and seccomp profile
+tests/             unit and integration contracts
+```
+
+## Documentation
+
+- [Authoritative system design](Repo_Maintenance_Agent_Design.md)
+- [Executable architecture map](docs/architecture.md)
+- [Evaluation Operations design](docs/superpowers/specs/2026-07-31-evaluation-operations-design.md)
+- [Threat model](docs/threat-model.md)
+- [Security best-practices report](security_best_practices_report.md)
 
 ## License
 
-Apache-2.0
+Apache License 2.0. See [LICENSE](LICENSE).

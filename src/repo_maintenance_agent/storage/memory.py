@@ -25,6 +25,19 @@ class InMemoryTaskRepository:
             raise ResourceNotFound("task not found")
         return state.model_copy(deep=True)
 
+    async def list(self, tenant_id: str, *, limit: int = 50) -> list[RepoTaskState]:
+        if not 1 <= limit <= 200:
+            raise ValueError("task list limit must be between 1 and 200")
+        states = [state for state in self._tasks.values() if state.tenant_id == tenant_id]
+        return [
+            state.model_copy(deep=True)
+            for state in sorted(
+                states,
+                key=lambda item: (item.updated_at, item.task_id),
+                reverse=True,
+            )[:limit]
+        ]
+
     async def save(self, state: RepoTaskState, expected_version: int) -> RepoTaskState:
         key = (state.tenant_id, state.task_id)
         async with self._lock:
@@ -35,4 +48,3 @@ class InMemoryTaskRepository:
                 raise ConcurrentUpdate("task version conflict")
             self._tasks[key] = state.model_copy(deep=True)
         return state
-

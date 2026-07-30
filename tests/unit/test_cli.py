@@ -47,7 +47,15 @@ def test_cli_exposes_documented_control_and_evaluation_commands() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for command in ("run", "status", "approve", "resume", "cancel", "evaluate"):
+    for command in (
+        "run",
+        "status",
+        "approve",
+        "resume",
+        "cancel",
+        "evaluate",
+        "evaluate-suite",
+    ):
         assert command in result.stdout
 
 
@@ -75,3 +83,103 @@ def test_evaluate_rejects_string_boolean_observations(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert result.exception is not None
+
+
+def test_evaluate_suite_writes_json_and_markdown_reports(tmp_path: Path) -> None:
+    suite_file, observations_file = _suite_files(tmp_path, hidden_tests_passed=True)
+    json_report = tmp_path / "report.json"
+    markdown_report = tmp_path / "report.md"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "evaluate-suite",
+            str(suite_file),
+            str(observations_file),
+            "--json-report",
+            str(json_report),
+            "--markdown-report",
+            str(markdown_report),
+            "--candidate-label",
+            "fixture-candidate",
+        ],
+    )
+
+    payload = json.loads(json_report.read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert payload["candidate_label"] == "fixture-candidate"
+    assert payload["gate_decision"]["passed"] is True
+    assert "tenant_id" not in payload
+    assert "# Evaluation Report" in markdown_report.read_text(encoding="utf-8")
+
+
+def test_evaluate_suite_returns_failure_exit_code_after_writing_evidence(
+    tmp_path: Path,
+) -> None:
+    suite_file, observations_file = _suite_files(tmp_path, hidden_tests_passed=False)
+    json_report = tmp_path / "report.json"
+    markdown_report = tmp_path / "report.md"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "evaluate-suite",
+            str(suite_file),
+            str(observations_file),
+            "--json-report",
+            str(json_report),
+            "--markdown-report",
+            str(markdown_report),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert json_report.exists()
+    assert markdown_report.exists()
+
+
+def _suite_files(
+    root: Path,
+    *,
+    hidden_tests_passed: bool,
+) -> tuple[Path, Path]:
+    suite_file = root / "suite.json"
+    observations_file = root / "observations.json"
+    suite_file.write_text(
+        json.dumps(
+            {
+                "suite_id": "fixture",
+                "name": "Fixture suite",
+                "version": "v1",
+                "cases": [
+                    {
+                        "case_id": "case-1",
+                        "repo_id": "owner/repo",
+                        "base_commit": "a" * 40,
+                        "gold_files": ["src/app.py"],
+                        "hidden_test_commands": [["pytest"]],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    observations_file.write_text(
+        json.dumps(
+            {
+                "case-1": {
+                    "retrieved_files": ["src/app.py"],
+                    "hidden_tests_passed": hidden_tests_passed,
+                    "regression": False,
+                    "total_tool_calls": 2,
+                    "denied_tool_calls": 0,
+                    "wall_clock_ms": 10,
+                    "model_calls": 1,
+                    "input_tokens": 20,
+                    "output_tokens": 5,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return suite_file, observations_file
