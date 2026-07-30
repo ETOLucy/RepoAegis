@@ -1,0 +1,17 @@
+tenancy:
+  server_enforced_filters: [tenant_id, repo_id, commit_sha, allowed_paths]
+remote_write:
+  default: deny
+  draft_pull_request_only: true
+  force_push: deny
+sandbox:
+  network_default: none
+  root_filesystem: read_only
+  run_as: "10001:10001"
+  docker_socket: deny
+  capability_policy: drop_all
+privacy:
+  log_prompts: false
+  log_model_output: false
+  redact_sensitive_fields: true
+  scan_before_push: true

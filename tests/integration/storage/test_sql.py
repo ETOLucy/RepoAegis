@@ -1,0 +1,129 @@
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
+
+from repo_maintenance_agent.domain.errors import (
+    ConcurrentUpdate,
+    LeaseConflict,
+    ResourceNotFound,
+)
+from repo_maintenance_agent.domain.models import ApprovalDecision, RepoTaskState, TaskStatus
+from repo_maintenance_agent.storage.sql import Base, SqlTaskQueue, SqlTaskRepository
+
+
+def task() -> RepoTaskState:
+    return RepoTaskState(
+        task_id="task-1",
+        tenant_id="tenant-a",
+        repo_id="owner/repo",
+        commit_sha="a" * 40,
+        base_branch="main",
+        issue={"title": "Fix", "body": "Details"},
+    )
+
+
+def sqlite_engine():
+    return create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+
+@pytest.mark.asyncio
+async def test_sql_repository_round_trip_and_optimistic_lock() -> None:
+    engine = sqlite_engine()
+    Base.metadata.create_all(engine)
+    repository = SqlTaskRepository(engine)
+
+    created = await repository.create(task())
+    loaded = await repository.get("tenant-a", created.task_id)
+    changed = loaded.model_copy(update={"version": 1})
+    saved = await repository.save(changed, expected_version=0)
+
+    assert saved.version == 1
+    with pytest.raises(ConcurrentUpdate):
+        await repository.save(changed, expected_version=0)
+    with pytest.raises(ResourceNotFound):
+        await repository.get("tenant-b", created.task_id)
+
+
+@pytest.mark.asyncio
+async def test_sql_queue_reclaims_expired_work_and_rejects_stale_ack() -> None:
+    engine = sqlite_engine()
+    Base.metadata.create_all(engine)
+    queue = SqlTaskQueue(engine, lease_duration=timedelta(seconds=30))
+    now = datetime(2026, 7, 31, tzinfo=UTC)
+    await queue.enqueue("tenant-a", "task-1", now=now)
+
+    first = await queue.claim("worker-1", frozenset({"tenant-a"}), now=now)
+    assert first is not None
+    second = await queue.claim(
+        "worker-2",
+        frozenset({"tenant-a"}),
+        now=now + timedelta(seconds=31),
+    )
+
+    assert second is not None
+    assert second.attempt == 2
+    with pytest.raises(LeaseConflict):
+        await queue.ack(first)
+    await queue.ack(second)
+
+
+@pytest.mark.asyncio
+async def test_sql_task_creation_enqueues_work_in_the_same_transaction() -> None:
+    engine = sqlite_engine()
+    Base.metadata.create_all(engine)
+    repository = SqlTaskRepository(engine)
+    queue = SqlTaskQueue(engine)
+    now = datetime.now(UTC) + timedelta(seconds=1)
+
+    created = await repository.create(task())
+    lease = await queue.claim("worker-1", frozenset({"tenant-a"}), now=now)
+
+    assert lease is not None
+    assert lease.task_id == created.task_id
+
+
+@pytest.mark.asyncio
+async def test_sql_approval_state_change_requeues_parked_task_atomically() -> None:
+    engine = sqlite_engine()
+    Base.metadata.create_all(engine)
+    repository = SqlTaskRepository(engine)
+    queue = SqlTaskQueue(engine)
+    now = datetime.now(UTC) + timedelta(seconds=1)
+    created = await repository.create(task())
+    lease = await queue.claim("worker-1", frozenset({"tenant-a"}), now=now)
+    assert lease is not None
+    waiting = (
+        created.transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .transition(TaskStatus.NEEDS_APPROVAL)
+        .model_copy(update={"plan_hash": "b" * 64})
+    )
+    await repository.save(waiting, expected_version=created.version)
+    await queue.ack(lease)
+    approved = waiting.model_copy(
+        update={
+            "approval": ApprovalDecision(
+                approved=True,
+                approver="tenant-a",
+                plan_hash="b" * 64,
+                reason="Reviewed and approved.",
+            )
+        }
+    ).transition(TaskStatus.CODING)
+
+    await repository.save(approved, expected_version=waiting.version)
+    resumed = await queue.claim(
+        "worker-2",
+        frozenset({"tenant-a"}),
+        now=now + timedelta(seconds=1),
+    )
+
+    assert resumed is not None
+    assert resumed.task_id == created.task_id

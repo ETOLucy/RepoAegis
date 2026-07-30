@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "repo-maintenance-agent"
+version = "0.1.0"
+description = "A policy-controlled agent system that resolves repository issues with evidence-backed patches."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Repo Maintenance Agent Contributors" }]
+dependencies = [
+  "fastapi>=0.128,<1",
+  "httpx>=0.27,<1",
+  "langgraph>=1,<2",
+  "openai>=2.41,<3",
+  "opensearch-py>=3,<4",
+  "pydantic>=2.12,<3",
+  "pydantic-settings>=2.7,<3",
+  "pyyaml>=6,<7",
+  "sqlalchemy>=2,<3",
+  "structlog>=24,<26",
+  "typer>=0.15,<1",
+  "uvicorn>=0.34,<1",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2,<4"]
+observability = [
+  "opentelemetry-api>=1.29,<2",
+  "opentelemetry-sdk>=1.29,<2",
+]
+dev = [
+  "mypy>=1.14,<2",
+  "pip-audit>=2.7,<3",
+  "pytest>=9.0.3,<10",
+  "pytest-asyncio>=1.4,<2",
+  "pytest-cov>=6,<8",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+repo-agent = "repo_maintenance_agent.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/repo_maintenance_agent"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "S", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S603", "S607"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["repo_maintenance_agent"]
+mypy_path = "src"
+
+[tool.coverage.run]
+branch = true
+source = ["repo_maintenance_agent"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80

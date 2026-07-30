@@ -1,0 +1,28 @@
+tools:
+  default_policy: deny
+  read:
+    - git_status
+    - git_log
+    - git_diff
+    - git_show
+    - get_issue
+    - get_pr_checks
+    - search_code
+    - context7_query
+  sandbox:
+    - apply_patch
+    - run_test
+    - run_lint
+    - run_build
+  approval_required:
+    - create_draft_pr
+limits:
+  command_timeout_seconds: 300
+  max_output_bytes: 1000000
+  max_changed_files: 100
+  max_patch_bytes: 500000
+sandbox:
+  lease_seconds: 300
+  max_attempts: 3
+  images:
+    python-3.12: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de

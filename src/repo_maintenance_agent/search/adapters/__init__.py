@@ -1,0 +1,2 @@
+"""Search backend adapters."""
+

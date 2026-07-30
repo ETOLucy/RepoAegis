@@ -1,0 +1,16 @@
+datasets:
+  - swe_bench_verified
+  - historical_issue_pr_pairs
+  - adversarial_security_cases
+metrics:
+  - issue_resolution_rate
+  - relevant_file_recall_at_10
+  - mean_reciprocal_rank
+  - unauthorized_tool_call_rate
+  - regression_rate
+  - wall_clock_ms
+  - token_usage
+release_gates:
+  issue_resolution_regression_max: 0.02
+  unauthorized_tool_call_rate_max: 0.0
+  privacy_findings_max: 0

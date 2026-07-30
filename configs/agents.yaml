@@ -1,0 +1,20 @@
+graph:
+  max_iterations: 3
+  nodes:
+    - intake
+    - research
+    - planning
+    - approval
+    - coding
+    - verification
+    - review
+    - pr
+model:
+  provider: openai
+  model_env: OPENAI_MODEL
+  api_key_env: OPENAI_API_KEY
+  store_responses: false
+human_approval:
+  risk_levels: [high, critical]
+  remote_writes: true
+  dependency_changes: true
