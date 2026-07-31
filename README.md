@@ -1,5 +1,10 @@
 # RepoAegis
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/repo-aegis-lockup-dark.svg">
+  <img src="docs/brand/repo-aegis-lockup.svg" width="560" alt="RepoAegis single-wing seed logo and wordmark">
+</picture>
+
 [![CI](https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg)](https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-245dcc.svg)](https://www.python.org/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-177245.svg)](LICENSE)
