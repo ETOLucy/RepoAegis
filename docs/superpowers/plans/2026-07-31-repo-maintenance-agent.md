@@ -1,4 +1,4 @@
-# Repo Maintenance Agent Implementation Plan
+# RepoAegis Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -194,6 +194,5 @@
 
 - [ ] Add configuration and deployment artifacts without credentials or personal paths.
 - [ ] Run test, lint, type, build, secret, dependency, and privacy scans.
-- [ ] Review the implementation against `Repo_Maintenance_Agent_Design.md`.
+- [ ] Review the implementation against `RepoAegis_Design.md`.
 - [ ] Commit the verified tree and push `main` to `origin` through the approved local proxy.
-

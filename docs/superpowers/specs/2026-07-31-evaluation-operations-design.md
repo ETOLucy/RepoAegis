@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Repo Maintenance Agent needs an evaluation system that proves behavior across repeatable
+RepoAegis needs an evaluation system that proves behavior across repeatable
 repository tasks, not only a function that grades one observation. The same evidence must be
 available to CI, operators, and interview reviewers through stable APIs and a lightweight
 operations console.

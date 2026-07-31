@@ -1,4 +1,4 @@
-# Repo Maintenance Agent 架构设计
+# RepoAegis 架构设计
 
 > 文档性质：生产级参考架构与工程实现
 > 项目阶段：实现、验证与持续演进
@@ -6,7 +6,7 @@
 
 ## 1. 项目定位
 
-Repo Maintenance Agent 是一个面向真实软件仓库维护任务的自主 Agent 系统。它接收 GitHub Issue 或人工输入的维护任务，读取仓库上下文，定位相关代码，制定计划，在受控沙箱中修改代码并执行验证，最后输出补丁、证据和 Pull Request 草稿。
+RepoAegis 是一个面向真实软件仓库维护任务的自主 Agent 系统。它接收 GitHub Issue 或人工输入的维护任务，读取仓库上下文，定位相关代码，制定计划，在受控沙箱中修改代码并执行验证，最后输出补丁、证据和 Pull Request 草稿。
 
 它不是普通的“代码问答 + RAG”，因为最终目标不是生成一段自然语言答案，而是完成一个可验证、可追踪、可回滚的软件工程闭环：
 
@@ -856,7 +856,7 @@ gold:
 ## 14. 项目目录结构
 
 ```text
-repo-maintenance-agent/
+repo-aegis/
 ├── README.md
 ├── pyproject.toml
 ├── .env.example
@@ -936,7 +936,7 @@ repo-maintenance-agent/
 
 ```yaml
 project:
-  name: Repo Maintenance Agent
+  name: RepoAegis
   objective: 将 GitHub Issue 转换为经过验证、可审查的代码补丁或 Draft PR
   stage: design
 
@@ -1151,7 +1151,7 @@ delivery:
 
 ### 17.1 30 秒版本
 
-> 我做的是一个 Repo Maintenance Agent。输入是真实 GitHub Issue，系统会先把需求结构化，再通过代码检索定位相关文件，制定修改计划，在 Docker 沙箱里改代码和跑测试，最后由独立 Review Agent 检查 Diff，并生成 Draft PR。编排使用 LangGraph，因为这个任务有明确的状态、循环、失败分支和人工审批点。项目的重点不是让模型“会写代码”，而是通过工具权限、可执行验证和 Benchmark，把一次模型回答变成可审计的软件工程闭环。
+> 我做的是 RepoAegis，一个受治理的仓库维护 Agent。输入是真实 GitHub Issue，系统会先把需求结构化，再通过代码检索定位相关文件，制定修改计划，在 Docker 沙箱里改代码和跑测试，最后由独立 Review Agent 检查 Diff，并生成 Draft PR。编排使用 LangGraph，因为这个任务有明确的状态、循环、失败分支和人工审批点。项目的重点不是让模型“会写代码”，而是通过工具权限、可执行验证和 Benchmark，把一次模型回答变成可审计的软件工程闭环。
 
 ### 17.2 2 分钟版本
 

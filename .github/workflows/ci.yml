@@ -31,5 +31,5 @@ jobs:
         env:
           POSTGRES_PASSWORD: ci-placeholder
           REPO_AGENT_API_TOKENS: '{"ci-token":"tenant-ci"}'
-      - run: docker build --tag repo-maintenance-agent:ci .
+      - run: docker build --tag repo-aegis:ci .
       - run: docker build --file sandbox/Dockerfile.python --tag repo-agent-python:ci .

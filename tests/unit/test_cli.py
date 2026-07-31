@@ -47,6 +47,7 @@ def test_cli_exposes_documented_control_and_evaluation_commands() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
+    assert "RepoAegis control plane" in result.stdout
     for command in (
         "run",
         "status",

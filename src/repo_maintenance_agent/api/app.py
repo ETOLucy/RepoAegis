@@ -59,7 +59,7 @@ def create_app(
         yield
 
     app = FastAPI(
-        title="Repo Maintenance Agent",
+        title="RepoAegis",
         version="0.1.0",
         debug=False,
         docs_url=None if production else "/docs",

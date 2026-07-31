@@ -143,7 +143,7 @@ pytest, Playwright.
 **Files:**
 - Modify: `README.md`
 - Modify: `docs/architecture.md`
-- Modify: `Repo_Maintenance_Agent_Design.md`
+- Modify: `RepoAegis_Design.md`
 - Create: `docs/images/evaluation-console.png`
 
 **Interfaces:**

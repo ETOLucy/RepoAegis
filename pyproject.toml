@@ -3,13 +3,13 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "repo-maintenance-agent"
+name = "repo-aegis"
 version = "0.1.0"
 description = "A policy-controlled agent system that resolves repository issues with evidence-backed patches."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
-authors = [{ name = "Repo Maintenance Agent Contributors" }]
+authors = [{ name = "RepoAegis Contributors" }]
 dependencies = [
   "fastapi>=0.128,<1",
   "httpx>=0.27,<1",

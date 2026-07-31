@@ -1,13 +1,13 @@
-# Repo Maintenance Agent
+# RepoAegis
 
-[![CI](https://github.com/ETOLucy/Repo_Maintenance_Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ETOLucy/Repo_Maintenance_Agent/actions/workflows/ci.yml)
+[![CI](https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg)](https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-245dcc.svg)](https://www.python.org/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-177245.svg)](LICENSE)
 
 A policy-controlled agent system that turns repository issues into evidence-backed patches,
 sandbox verification, and reviewable draft pull requests.
 
-Repo Maintenance Agent is built as an AI control plane rather than a chat wrapper. Typed state,
+RepoAegis is built as an AI control plane rather than a chat wrapper. Typed state,
 tenant isolation, deterministic routing, tool authorization, leased workers, hybrid retrieval,
 container isolation, and reproducible evaluation sit between a model decision and every side
 effect.
@@ -256,7 +256,7 @@ tests/             unit and integration contracts
 
 ## Documentation
 
-- [Authoritative system design](Repo_Maintenance_Agent_Design.md)
+- [Authoritative system design](RepoAegis_Design.md)
 - [Executable architecture map](docs/architecture.md)
 - [Evaluation Operations design](docs/superpowers/specs/2026-07-31-evaluation-operations-design.md)
 - [Threat model](docs/threat-model.md)

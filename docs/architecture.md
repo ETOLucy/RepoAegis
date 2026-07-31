@@ -1,6 +1,6 @@
 # System Architecture
 
-The authoritative product design is [Repo_Maintenance_Agent_Design.md](../Repo_Maintenance_Agent_Design.md). This document maps that design to executable code.
+The authoritative product design is [RepoAegis_Design.md](../RepoAegis_Design.md). This document maps that design to executable code.
 
 ## Control and Execution Planes
 

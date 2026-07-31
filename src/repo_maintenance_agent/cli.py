@@ -27,7 +27,7 @@ from repo_maintenance_agent.evaluation.runner import grade_case
 
 app = typer.Typer(
     name="repo-agent",
-    help="Operate and evaluate the Repo Maintenance Agent control plane.",
+    help="Operate and evaluate the RepoAegis control plane.",
     no_args_is_help=True,
 )
 

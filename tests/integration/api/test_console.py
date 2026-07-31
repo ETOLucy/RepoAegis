@@ -16,8 +16,9 @@ def _app(*, production: bool = False):
 
 
 async def test_console_shell_and_assets_are_available_in_production() -> None:
+    app = _app(production=True)
     async with AsyncClient(
-        transport=ASGITransport(app=_app(production=True)),
+        transport=ASGITransport(app=app),
         base_url="http://testserver",
     ) as client:
         page = await client.get("/console")
@@ -25,8 +26,9 @@ async def test_console_shell_and_assets_are_available_in_production() -> None:
         script = await client.get("/console/app.js")
 
     assert page.status_code == 200
+    assert app.title == "RepoAegis"
     assert page.headers["content-type"].startswith("text/html")
-    assert "Evaluation operations" in page.text
+    assert "<title>Evaluation operations | RepoAegis</title>" in page.text
     assert 'id="run-table-body"' in page.text
     assert styles.headers["content-type"].startswith("text/css")
     assert script.headers["content-type"].startswith("text/javascript")
