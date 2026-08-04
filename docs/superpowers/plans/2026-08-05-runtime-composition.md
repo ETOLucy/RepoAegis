@@ -1,0 +1,96 @@
+# Runtime Composition Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Make API-created tasks durably claimable and executable by a separately assembled RepoAegis worker.
+
+**Architecture:** A shared composition root constructs SQL repositories, queue, and executor. The API enqueues created tasks; a separate worker process consumes them. Observable integration behavior is implemented test-first, while recovery limitations stay explicit.
+
+**Tech Stack:** Python 3.12, FastAPI, SQLAlchemy, LangGraph, pytest, Docker Compose
+
+## Global Constraints
+
+- Preserve existing user work and current ports.
+- Write and observe each failing test before production code.
+- Update the detailed operations documentation and claim matrix with behavior changes.
+- Do not claim atomic save/ack recovery in this increment.
+- Do not expose credentials, API domains, proxy values, or connection metadata.
+
+---
+
+### Task 1: API Queue Boundary
+
+**Files:**
+- Modify: `src/repo_maintenance_agent/api/app.py`
+- Modify: `src/repo_maintenance_agent/domain/ports.py`
+- Test: `tests/integration/api/test_tasks.py`
+
+**Interfaces:**
+- Consumes: existing `TaskRepository.create` and queue task identity.
+- Produces: `TaskSubmissionQueue.enqueue(tenant_id: str, task_id: str) -> None` and a claimable row after `POST /v1/tasks`.
+
+- [ ] Write an integration test that posts a task and claims its exact ID from a real in-memory queue.
+- [ ] Run the focused test and confirm it fails because `create_app` has no submission queue.
+- [ ] Add the narrow queue port and enqueue immediately after repository creation.
+- [ ] Run the focused test and existing API task tests.
+
+### Task 2: Shared Runtime Composition
+
+**Files:**
+- Create: `src/repo_maintenance_agent/runtime.py`
+- Modify: `src/repo_maintenance_agent/main.py`
+- Test: `tests/unit/test_runtime.py`
+- Test: `tests/unit/test_main.py`
+
+**Interfaces:**
+- Consumes: `Settings`, SQL engine, `SqlTaskRepository`, `SqlTaskQueue`, `SqlEvaluationRepository`, `TaskExecutor`.
+- Produces: immutable `RuntimeComponents` and `build_runtime(settings, executor_factory=...)`.
+
+- [ ] Write a test that constructs SQLite components and proves API submission is claimable by the returned queue.
+- [ ] Run it and confirm the missing runtime module failure.
+- [ ] Implement the minimal immutable component factory and route `build_application` through it.
+- [ ] Run runtime and application factory tests.
+
+### Task 3: Worker Service Entry Point
+
+**Files:**
+- Create: `src/repo_maintenance_agent/worker_service.py`
+- Modify: `src/repo_maintenance_agent/config.py`
+- Modify: `pyproject.toml`
+- Test: `tests/unit/test_worker_service.py`
+
+**Interfaces:**
+- Consumes: `RuntimeComponents`, worker ID, tenant scope, bounded poll interval.
+- Produces: `run_worker_once(settings) -> WorkerOutcome` and a cancellable polling CLI.
+
+- [ ] Write a test that uses real queue/repository components and a deterministic executor to persist the next task state.
+- [ ] Run it and confirm the worker service entry point is missing.
+- [ ] Implement one-shot execution and the polling command with bounded delay.
+- [ ] Run worker service and existing worker tests.
+
+### Task 4: Compose And Documentation
+
+**Files:**
+- Modify: `docker-compose.yml`
+- Modify: `README.md`
+- Modify: `docs/architecture.md`
+- Modify: `docs/claim-to-evidence.md`
+- Create: `docs/operations/runtime.md`
+- Test: `tests/unit/test_compose_contract.py`
+
+**Interfaces:**
+- Consumes: the worker CLI and shared environment contract.
+- Produces: a separately runnable worker service and detailed operator tutorial.
+
+- [ ] Write a behavior-oriented Compose contract test that parses YAML and requires a portless worker using the worker command.
+- [ ] Run it and confirm the service is absent.
+- [ ] Add the worker service with the same database/artifact dependencies and hardened container settings.
+- [ ] Document startup, task submission, state inspection, shutdown, failure behavior, and current recovery limitation.
+- [ ] Run Compose validation, documentation tests, full pytest, Ruff, and strict MyPy.
+- [ ] Update the claim matrix with exact implementation, tests, runtime evidence, and remaining gaps.
+- [ ] Commit the verified increment without unrelated files.
+
+## Self-Review
+
+The plan covers the approved composition increment only. Interfaces use existing task and queue
+identities consistently. No placeholder implementation or unsupported completion claim is present.
