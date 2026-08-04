@@ -5,6 +5,7 @@ from pydantic import SecretStr
 from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.domain.models import RepoTaskState
 from repo_maintenance_agent.runtime import build_runtime
+from repo_maintenance_agent.storage.sql import SqlOperationLog
 
 
 class DeterministicExecutor:
@@ -26,3 +27,4 @@ def test_runtime_exposes_the_injected_worker_executor(tmp_path: Path) -> None:
     )
 
     assert runtime.executor is executor
+    assert isinstance(runtime.operations, SqlOperationLog)

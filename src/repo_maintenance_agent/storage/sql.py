@@ -27,7 +27,7 @@ from repo_maintenance_agent.domain.errors import (
     LeaseConflict,
     ResourceNotFound,
 )
-from repo_maintenance_agent.domain.models import RepoTaskState, TaskStatus
+from repo_maintenance_agent.domain.models import RepoTaskState, TaskStatus, ToolResult
 from repo_maintenance_agent.storage.queue import QueueLease
 
 
@@ -60,6 +60,14 @@ class QueueRow(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     dead_lettered: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+
+class OperationRow(Base):
+    __tablename__ = "repo_agent_operations"
+
+    operation_key: Mapped[str] = mapped_column(String(512), primary_key=True)
+    result_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class SqlTaskRepository:
@@ -333,6 +341,40 @@ class SqlTaskQueue:
                 raise LeaseConflict("queue lease is stale")
             session.commit()
         return should_retry
+
+
+class SqlOperationLog:
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+
+    async def get(self, key: str) -> ToolResult | None:
+        return await asyncio.to_thread(self._get, key)
+
+    def _get(self, key: str) -> ToolResult | None:
+        with Session(self._engine) as session:
+            row = session.get(OperationRow, key)
+            if row is None:
+                return None
+            return ToolResult.model_validate_json(row.result_json).model_copy(
+                update={"replayed": True}
+            )
+
+    async def put(self, key: str, result: ToolResult) -> None:
+        await asyncio.to_thread(self._put, key, result)
+
+    def _put(self, key: str, result: ToolResult) -> None:
+        try:
+            with Session(self._engine) as session:
+                session.add(
+                    OperationRow(
+                        operation_key=key,
+                        result_json=result.model_dump_json(),
+                        created_at=datetime.now(UTC),
+                    )
+                )
+                session.commit()
+        except IntegrityError:
+            return
 
 
 def _row_lease(row: QueueRow) -> QueueLease:

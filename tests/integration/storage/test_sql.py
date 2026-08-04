@@ -9,8 +9,18 @@ from repo_maintenance_agent.domain.errors import (
     LeaseConflict,
     ResourceNotFound,
 )
-from repo_maintenance_agent.domain.models import ApprovalDecision, RepoTaskState, TaskStatus
-from repo_maintenance_agent.storage.sql import Base, SqlTaskQueue, SqlTaskRepository
+from repo_maintenance_agent.domain.models import (
+    ApprovalDecision,
+    RepoTaskState,
+    TaskStatus,
+    ToolResult,
+)
+from repo_maintenance_agent.storage.sql import (
+    Base,
+    SqlOperationLog,
+    SqlTaskQueue,
+    SqlTaskRepository,
+)
 
 
 def task() -> RepoTaskState:
@@ -127,3 +137,33 @@ async def test_sql_approval_state_change_requeues_parked_task_atomically() -> No
 
     assert resumed is not None
     assert resumed.task_id == created.task_id
+
+
+@pytest.mark.asyncio
+async def test_sql_operation_log_survives_reconstruction_and_keeps_first_result() -> None:
+    engine = sqlite_engine()
+    Base.metadata.create_all(engine)
+    first = SqlOperationLog(engine)
+    key = "tenant-a:task-1:apply_patch:patch-1"
+    original = ToolResult(
+        call_id="call-1",
+        success=True,
+        output={"changed_files": ["src/app.py"]},
+    )
+    replacement = ToolResult(
+        call_id="call-2",
+        success=True,
+        output={"changed_files": ["src/other.py"]},
+    )
+
+    await first.put(key, original)
+    reconstructed = SqlOperationLog(engine)
+    replay = await reconstructed.get(key)
+    await reconstructed.put(key, replacement)
+    replay_after_duplicate = await SqlOperationLog(engine).get(key)
+
+    assert replay is not None
+    assert replay.replayed
+    assert replay.call_id == "call-1"
+    assert replay_after_duplicate is not None
+    assert replay_after_duplicate.call_id == "call-1"

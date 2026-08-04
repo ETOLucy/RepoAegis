@@ -43,9 +43,10 @@ state completion. It is not model-quality evidence and does not yet establish pr
 assembly.
 
 Within agent nodes, research, patch application, and verification are expressed as scoped gateway
-calls. Patch content moves by artifact identifier rather than as a tool argument. This is a verified
-authorization boundary, but the file artifact metadata and operation log are still process-local and
-must become durable before recovery claims are valid.
+calls. Patch content moves by artifact identifier rather than as a tool argument. Successful tool
+results now use an append-once SQL operation log and can replay after process reconstruction. File
+artifact metadata and remote delivery are still incomplete, so exactly-once end-to-end recovery is
+not yet claimed.
 
 ## Current Failure Boundary
 

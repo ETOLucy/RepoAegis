@@ -8,7 +8,12 @@ from sqlalchemy.engine import make_url
 
 from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.evaluation.storage import SqlEvaluationRepository
-from repo_maintenance_agent.storage.sql import Base, SqlTaskQueue, SqlTaskRepository
+from repo_maintenance_agent.storage.sql import (
+    Base,
+    SqlOperationLog,
+    SqlTaskQueue,
+    SqlTaskRepository,
+)
 from repo_maintenance_agent.worker import TaskExecutor
 
 
@@ -18,6 +23,7 @@ class RuntimeComponents:
     tasks: SqlTaskRepository
     queue: SqlTaskQueue
     evaluations: SqlEvaluationRepository
+    operations: SqlOperationLog
     executor: TaskExecutor | None
 
 
@@ -36,6 +42,7 @@ def build_runtime(
         tasks=SqlTaskRepository(engine),
         queue=SqlTaskQueue(engine),
         evaluations=SqlEvaluationRepository(engine),
+        operations=SqlOperationLog(engine),
         executor=executor,
     )
 

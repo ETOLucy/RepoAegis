@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 from time import monotonic
+from typing import Protocol
 
 from repo_maintenance_agent.domain.errors import ToolExecutionError
 from repo_maintenance_agent.domain.models import RepoTaskState, ToolCall, ToolResult
@@ -23,13 +24,19 @@ class InMemoryOperationLog:
         self._results.setdefault(key, result)
 
 
+class OperationLog(Protocol):
+    async def get(self, key: str) -> ToolResult | None: ...
+
+    async def put(self, key: str, result: ToolResult) -> None: ...
+
+
 class ToolGateway:
     def __init__(
         self,
         *,
         policy: PermissionPolicy,
         adapters: Mapping[str, ToolAdapter],
-        operation_log: InMemoryOperationLog,
+        operation_log: OperationLog,
         workspace_root: Path,
         redactor: Redactor | None = None,
     ) -> None:
