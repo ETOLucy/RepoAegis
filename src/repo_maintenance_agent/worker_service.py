@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+
 from repo_maintenance_agent.config import Settings
-from repo_maintenance_agent.runtime import RuntimeComponents
+from repo_maintenance_agent.runtime import RuntimeComponents, build_worker_runtime
 from repo_maintenance_agent.worker import Worker, WorkerOutcome
 
 
@@ -23,3 +25,34 @@ async def run_worker_once(
         executor=runtime.executor,
     )
     return await worker.run_once()
+
+
+async def run_worker_forever(
+    settings: Settings,
+    *,
+    runtime: RuntimeComponents,
+    stop: asyncio.Event,
+) -> None:
+    while not stop.is_set():
+        outcome = await run_worker_once(settings, runtime=runtime)
+        if outcome is not WorkerOutcome.IDLE:
+            continue
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=settings.worker_poll_seconds)
+        except TimeoutError:
+            continue
+
+
+def main() -> None:
+    settings = Settings()
+    runtime = build_worker_runtime(settings)
+    try:
+        asyncio.run(
+            run_worker_forever(
+                settings,
+                runtime=runtime,
+                stop=asyncio.Event(),
+            )
+        )
+    except KeyboardInterrupt:
+        return

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr
@@ -32,6 +33,17 @@ class Settings(BaseSettings):
         repr=False,
     )
     artifact_root: str = "artifacts"
+    workspace_root: str = "workspaces"
+    repository_locators: dict[str, str] = Field(default_factory=dict, repr=False)
+    sandbox_image_digests: dict[str, str] = Field(
+        default_factory=lambda: {
+            "python-3.12": (
+                "python@sha256:"
+                "57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de"
+            )
+        }
+    )
+    sandbox_seccomp_profile: Path = Path("sandbox/seccomp.json")
     allowed_hosts: tuple[str, ...] = ("localhost", "127.0.0.1")
     max_iterations: int = Field(default=3, ge=1, le=10)
     worker_id: str = Field(default="repoaegis-worker", min_length=1, max_length=128)

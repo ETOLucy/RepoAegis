@@ -42,6 +42,7 @@ dev = [
 
 [project.scripts]
 repo-agent = "repo_maintenance_agent.cli:app"
+repo-agent-worker = "repo_maintenance_agent.worker_service:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/repo_maintenance_agent"]

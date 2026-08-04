@@ -48,6 +48,11 @@ results now use an append-once SQL operation log and can replay after process re
 artifact metadata and remote delivery are still incomplete, so exactly-once end-to-end recovery is
 not yet claimed.
 
+The production worker entry point is `repo-agent-worker`. It requires an explicit tenant scope and
+operator-owned repository locator registry. Model and graph components initialize only after a task
+workspace exists. Compose deployment remains under validation until the worker can reach a
+restricted container execution service without receiving the host Docker socket.
+
 ## Current Failure Boundary
 
 Initial creation and queue insertion are atomic. Worker completion is not yet atomic: the existing

@@ -47,6 +47,11 @@ is reconstructed from the call's bound tenant/repository/commit, patch bytes are
 artifact ID inside the adapter, and verification returns a validated structured result. Agent nodes
 no longer hold direct search, patch-applier, verifier, or workspace references.
 
+`build_worker_runtime()` assembles the durable stores, registry-scoped materialization gateway,
+workspace graph executor, and lazy production graph factory. The factory creates the model gateway,
+workspace lexical search, artifact-backed patch adapter, and Docker verifier only after a task has a
+workspace. `repo-agent-worker` provides a cancellable long-running queue loop.
+
 ## Agent Graph
 
 ```text
