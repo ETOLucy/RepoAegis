@@ -1,0 +1,15 @@
+.venv
+.git
+.worktrees
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.pytest-tmp
+output
+artifacts
+data
+private
+dist
+*.egg-info
