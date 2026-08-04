@@ -106,3 +106,37 @@ class SearchAdapter:
             success=True,
             output={"hits": [hit.model_dump(mode="json") for hit in hits]},
         )
+
+
+class WorkspaceReadAdapter:
+    def __init__(self, *, max_total_bytes: int = 200_000) -> None:
+        if max_total_bytes < 1:
+            raise ValueError("workspace read limit must be positive")
+        self._max_total_bytes = max_total_bytes
+
+    async def execute(self, call: ToolCall, workspace: Path) -> ToolResult:
+        if call.name != "read_files":
+            raise ValueError(f"unsupported workspace read tool: {call.name}")
+        raw_files = call.arguments.get("files")
+        if (
+            not isinstance(raw_files, list)
+            or not raw_files
+            or len(raw_files) > 100
+            or any(not isinstance(path, str) or not path for path in raw_files)
+        ):
+            raise ValueError("workspace read files are required")
+        root = workspace.resolve()
+        remaining = self._max_total_bytes
+        contents: dict[str, str] = {}
+        for relative in raw_files:
+            candidate = (root / relative).resolve()
+            if not candidate.is_relative_to(root):
+                raise ValueError("workspace read path resolves outside workspace")
+            if not candidate.is_file():
+                raise ValueError("workspace read path must be a file")
+            data = candidate.read_bytes()
+            if len(data) > remaining:
+                raise ValueError("workspace read exceeds total byte limit")
+            remaining -= len(data)
+            contents[relative] = data.decode("utf-8", errors="replace")
+        return ToolResult(call_id=call.call_id, success=True, output={"files": contents})

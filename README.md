@@ -71,6 +71,7 @@ executes only in assigned workspaces or language-specific Docker sandboxes.
 | Tool use | Tenant/repository/commit scope plus role and stage authorization |
 | Remote writes | Human decision bound to the plan, target commit, declared files, verification commands, and exact tool scope |
 | Patch safety | Declared-file enforcement and `git apply --check` preflight |
+| Independent review | Gateway-collected Git diff, post-change source, acceptance criteria, and verification evidence |
 | Commands | Argument arrays, executable allowlist, timeout, output limit, sanitized environment |
 | Sandbox | Digest-pinned image, non-root user, read-only root, dropped capabilities, offline checks |
 | Model output | Structured Responses parsing with `store=False` |

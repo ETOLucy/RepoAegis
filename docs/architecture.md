@@ -84,6 +84,12 @@ coding -> verifying -> reviewing -> delivering -> completed
 
 Each node consumes and returns `RepoTaskState`; it does not pass an unbounded chat transcript. Routing is deterministic and iteration-limited. Planning constructs a canonical `ApprovalEnvelope` from the ordered plan, pinned target commit, sorted declared files, verification commands, and sorted tool scope. Its SHA-256 digest is the plan hash. Dependency manifests, CI configuration, authentication/security paths, migrations, sensitive configuration, and remote-write permissions deterministically raise risk; model risk can raise the result further but cannot lower it. A task approved through the API re-enters the graph at `coding`, which fixes the human-in-the-loop resume boundary without replaying intake or planning.
 
+Review does not trust the patch proposal as evidence of what was applied. It requests `git_diff`
+against the pinned commit and `read_files` for the actual changed paths through the Tool Gateway.
+The independent review input contains that diff, bounded post-change source, acceptance criteria, and
+structured verification results. Workspace reads reject escapes and symlink escapes and enforce a
+total byte limit before model invocation.
+
 ## Persistence and Queue Semantics
 
 `SqlTaskRepository` uses `(tenant_id, task_id)` as the primary identity and optimistic versions for compare-and-swap updates. Creation writes the task and queue row in one transaction. Approval writes the decision and restores a runnable queue row in one transaction.

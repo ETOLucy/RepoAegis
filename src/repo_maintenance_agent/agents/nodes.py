@@ -260,6 +260,38 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
 
     async def review(state: GraphState) -> dict[str, Any]:
         task = state["task"]
+        diff_result = await runtime.gateway.execute(
+            ToolCall(
+                task_id=task.task_id,
+                tenant_id=task.tenant_id,
+                repo_id=task.repo_id,
+                commit_sha=task.commit_sha,
+                agent="review",
+                name="git_diff",
+                permission=ToolPermission.REPO_READ,
+                arguments={"ref": task.commit_sha},
+            ),
+            task,
+        )
+        source_result = await runtime.gateway.execute(
+            ToolCall(
+                task_id=task.task_id,
+                tenant_id=task.tenant_id,
+                repo_id=task.repo_id,
+                commit_sha=task.commit_sha,
+                agent="review",
+                name="read_files",
+                permission=ToolPermission.REPO_READ,
+                arguments={"files": list(task.changed_files)},
+            ),
+            task,
+        )
+        diff = diff_result.output.get("diff")
+        changed_source = source_result.output.get("files")
+        if not diff_result.success or not isinstance(diff, str):
+            raise ToolExecutionError("review diff collection failed")
+        if not source_result.success or not isinstance(changed_source, dict):
+            raise ToolExecutionError("review source collection failed")
         output = await runtime.model.structured(
             system=(
                 "Independently review the change against acceptance criteria and verification "
@@ -269,7 +301,10 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             input_text=json.dumps(
                 {
                     "task_spec": task.task_spec,
+                    "acceptance_criteria": task.task_spec.get("acceptance_criteria", []),
                     "changed_files": task.changed_files,
+                    "diff": diff,
+                    "changed_source": changed_source,
                     "verification": (
                         task.verification.model_dump(mode="json") if task.verification else None
                     ),

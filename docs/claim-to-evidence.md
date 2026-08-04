@@ -42,7 +42,7 @@ point, not product completion.
 | Task state save and queue consumption are atomic and fenced | `SqlTaskCompletion` updates by expected version and deletes by live lease ID/expiry in one transaction | SQL completion, stale lease, worker delegation, and queue tests | successful completion consumes work; expired completion rolls back state | **Verified** SQL completion boundary |
 | Approval binds a reviewable plan and permissions | canonical `ApprovalEnvelope`, API commit/tool comparison, gateway digest recomputation | domain, API, CLI, node, and gateway tests | local regression suite rejects stale commit, stale tools, and post-approval scope mutation | **Verified** local approval boundary |
 | Deterministic rules raise risk for sensitive changes | `policies/risk.py` combines server rules with model risk using the higher level | dependency, CI, auth/security, migration, sensitive-config, and remote-write tests | local regression suite | **Verified** deterministic classification boundary |
-| Review sees actual diff and changed source | review receives changed file names and verification summary | node tests | none | **Target invariant** actual diff/source evidence |
+| Review sees actual diff and changed source | review collects `git_diff` and bounded `read_files` through the gateway before model review | adapter, node, policy, and production-factory tests | local tests prove diff/source/criteria input and block workspace escape | **Verified** local review evidence boundary |
 | Agent correction loop is bounded | graph routes and `max_iterations` model field | route/workflow tests | graph test evidence | **Under validation**: coding is one-shot patch generation and has no controlled read/tool loop |
 
 ## Retrieval, Sandbox, and Evaluation

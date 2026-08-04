@@ -18,6 +18,7 @@ from repo_maintenance_agent.tools.agent_actions import (
     PatchArtifactAdapter,
     SearchAdapter,
     VerificationAdapter,
+    WorkspaceReadAdapter,
 )
 from repo_maintenance_agent.tools.gateway import OperationLog, ToolGateway
 from repo_maintenance_agent.tools.git import GitToolAdapter
@@ -78,6 +79,8 @@ class ProductionGraphFactory:
                 applier=GitPatchApplier(patch_runner),
             ),
             "run_verification": VerificationAdapter(verifier),
+            "read_files": WorkspaceReadAdapter(),
+            "git_diff": git_adapter,
             "git_commit": git_adapter,
             "git_push": git_adapter,
             "create_draft_pr": draft_adapter,

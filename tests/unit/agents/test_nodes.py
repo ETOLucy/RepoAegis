@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,7 @@ from repo_maintenance_agent.agents.schemas import (
     PatchProposal,
     PlanOutput,
     PullRequestDraft,
+    ReviewOutput,
     TaskSpecOutput,
 )
 from repo_maintenance_agent.domain.models import (
@@ -77,6 +79,17 @@ class LowRiskDependencyModel(FakeModel):
         return await super().structured(system=system, input_text=input_text, schema=schema)
 
 
+class RecordingReviewModel(FakeModel):
+    def __init__(self) -> None:
+        self.review_input: dict[str, object] = {}
+
+    async def structured(self, *, system, input_text, schema):
+        if schema is ReviewOutput:
+            self.review_input = json.loads(input_text)
+            return ReviewOutput(decision="approve", findings=[], summary="Scope and tests pass.")
+        return await super().structured(system=system, input_text=input_text, schema=schema)
+
+
 class RecordingGateway:
     def __init__(self) -> None:
         self.calls = []
@@ -115,6 +128,18 @@ class RecordingGateway:
                         summary="checks passed",
                     ).model_dump(mode="json")
                 },
+            )
+        if call.name == "git_diff":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={"diff": "diff --git a/src/config.py b/src/config.py\n+return default"},
+            )
+        if call.name == "read_files":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={"files": {"src/config.py": "def load(): return default"}},
             )
         if call.name == "git_commit":
             return ToolResult(
@@ -259,6 +284,42 @@ async def test_verification_runs_through_gateway(tmp_path: Path) -> None:
     call = gateway.calls[0][0]
     assert call.name == "run_verification"
     assert call.idempotency_key == "verification:1"
+
+
+@pytest.mark.asyncio
+async def test_review_receives_real_diff_changed_source_and_acceptance_criteria(
+    tmp_path: Path,
+) -> None:
+    model = RecordingReviewModel()
+    gateway = RecordingGateway()
+    nodes = build_agent_nodes(
+        AgentRuntime(model=model, artifacts=FileArtifactStore(tmp_path), gateway=gateway)
+    )
+    reviewing = (
+        task()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .transition(TaskStatus.CODING)
+        .transition(TaskStatus.VERIFYING)
+        .model_copy(
+            update={
+                "task_spec": {"acceptance_criteria": ["uses defaults"]},
+                "changed_files": ("src/config.py",),
+                "verification": VerificationResult(passed=True, commands=("pytest",)),
+            }
+        )
+    )
+
+    result = await nodes.review({"task": reviewing, "trace": []})
+
+    assert result["task"].review["decision"] == "approve"
+    assert [call.name for call, _ in gateway.calls] == ["git_diff", "read_files"]
+    assert model.review_input["diff"].startswith("diff --git")
+    assert model.review_input["changed_source"] == {
+        "src/config.py": "def load(): return default"
+    }
+    assert model.review_input["acceptance_criteria"] == ["uses defaults"]
 
 
 @pytest.mark.asyncio

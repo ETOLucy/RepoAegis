@@ -13,6 +13,7 @@ from repo_maintenance_agent.tools.agent_actions import (
     PatchArtifactAdapter,
     SearchAdapter,
     VerificationAdapter,
+    WorkspaceReadAdapter,
 )
 
 
@@ -112,6 +113,36 @@ async def test_search_adapter_returns_structured_hits(tmp_path: Path) -> None:
     assert result.output["hits"][0]["path"] == "src/app.py"
 
 
+@pytest.mark.asyncio
+async def test_workspace_reader_returns_bounded_changed_source(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "app.py"
+    source.parent.mkdir()
+    source.write_bytes(b"def app():\n    return 1\n")
+    adapter = WorkspaceReadAdapter(max_total_bytes=1_000)
+    call = _call(
+        name="read_files",
+        permission=ToolPermission.REPO_READ,
+        arguments={"files": ["src/app.py"]},
+    )
+
+    result = await adapter.execute(call, tmp_path)
+
+    assert result.output == {"files": {"src/app.py": "def app():\n    return 1\n"}}
+
+
+@pytest.mark.asyncio
+async def test_workspace_reader_rejects_symlink_or_path_escape(tmp_path: Path) -> None:
+    adapter = WorkspaceReadAdapter(max_total_bytes=1_000)
+    call = _call(
+        name="read_files",
+        permission=ToolPermission.REPO_READ,
+        arguments={"files": ["../outside.py"]},
+    )
+
+    with pytest.raises(ValueError, match="outside"):
+        await adapter.execute(call, tmp_path)
+
+
 def _call(
     *,
     name: str,
@@ -127,6 +158,7 @@ def _call(
             "apply_patch": "coding",
             "run_verification": "verification",
             "search_code": "research",
+            "read_files": "review",
         }[name],
         name=name,
         permission=permission,
