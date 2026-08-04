@@ -9,6 +9,7 @@ from sqlalchemy.engine import make_url
 from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.evaluation.storage import SqlEvaluationRepository
 from repo_maintenance_agent.storage.sql import Base, SqlTaskQueue, SqlTaskRepository
+from repo_maintenance_agent.worker import TaskExecutor
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,9 +18,14 @@ class RuntimeComponents:
     tasks: SqlTaskRepository
     queue: SqlTaskQueue
     evaluations: SqlEvaluationRepository
+    executor: TaskExecutor | None
 
 
-def build_runtime(settings: Settings) -> RuntimeComponents:
+def build_runtime(
+    settings: Settings,
+    *,
+    executor: TaskExecutor | None = None,
+) -> RuntimeComponents:
     database_url = settings.database_url.get_secret_value()
     _prepare_sqlite_directory(database_url)
     engine = create_engine(database_url, pool_pre_ping=True)
@@ -30,6 +36,7 @@ def build_runtime(settings: Settings) -> RuntimeComponents:
         tasks=SqlTaskRepository(engine),
         queue=SqlTaskQueue(engine),
         evaluations=SqlEvaluationRepository(engine),
+        executor=executor,
     )
 
 

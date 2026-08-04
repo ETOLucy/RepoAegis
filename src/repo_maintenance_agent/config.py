@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     artifact_root: str = "artifacts"
     allowed_hosts: tuple[str, ...] = ("localhost", "127.0.0.1")
     max_iterations: int = Field(default=3, ge=1, le=10)
+    worker_id: str = Field(default="repoaegis-worker", min_length=1, max_length=128)
+    worker_tenant_ids: tuple[str, ...] = ()
+    worker_poll_seconds: float = Field(default=1.0, gt=0, le=60)
 
     @property
     def has_openai_credentials(self) -> bool:

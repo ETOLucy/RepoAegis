@@ -4,7 +4,7 @@
 
 **Goal:** Make API-created tasks durably claimable and executable by a separately assembled RepoAegis worker.
 
-**Architecture:** A shared composition root constructs SQL repositories, queue, and executor. The API enqueues created tasks; a separate worker process consumes them. Observable integration behavior is implemented test-first, while recovery limitations stay explicit.
+**Architecture:** A shared composition root constructs SQL repositories, queue, and an explicit executor boundary. SQL task creation atomically creates queue work; a separate worker process consumes it. Observable integration behavior is implemented test-first, while recovery limitations stay explicit.
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy, LangGraph, pytest, Docker Compose
 
@@ -30,10 +30,10 @@
 - Consumes: `Settings`, SQL engine, `SqlTaskRepository`, `SqlTaskQueue`, and `SqlEvaluationRepository`.
 - Produces: immutable `RuntimeComponents` whose repository and queue share one engine.
 
-- [ ] Write an integration test that posts a task through the runtime API and claims its exact ID from the runtime SQL queue.
-- [ ] Run the focused test and confirm it fails because the shared runtime factory is missing.
-- [ ] Implement the immutable component factory and route `build_application` through it.
-- [ ] Run the focused integration test and application factory tests.
+- [x] Write an integration test that posts a task through the runtime API and claims its exact ID from the runtime SQL queue.
+- [x] Run the focused test and confirm it fails because the shared runtime factory is missing.
+- [x] Implement the immutable component factory and route `build_application` through it.
+- [x] Run the focused integration test and application factory tests.
 
 ### Task 2: Graph Executor Assembly
 
@@ -45,10 +45,10 @@
 - Consumes: existing agent nodes, graph builder, and `LangGraphExecutor`.
 - Produces: a validated executor factory boundary used by the worker service.
 
-- [ ] Write a test that injects a deterministic executor and proves the runtime exposes it unchanged.
-- [ ] Run it and confirm the factory has no executor boundary.
-- [ ] Add the minimal executor factory dependency without constructing model infrastructure at import time.
-- [ ] Run runtime tests.
+- [x] Write a test that injects a deterministic executor and proves the runtime exposes it unchanged.
+- [x] Run it and confirm the factory has no executor boundary.
+- [x] Add the minimal executor dependency without constructing model infrastructure at import time.
+- [x] Run runtime tests.
 
 ### Task 3: Worker Service Entry Point
 
@@ -60,12 +60,14 @@
 
 **Interfaces:**
 - Consumes: `RuntimeComponents`, worker ID, tenant scope, bounded poll interval.
-- Produces: `run_worker_once(settings) -> WorkerOutcome` and a cancellable polling CLI.
+- Produces: `run_worker_once(settings, runtime=...) -> WorkerOutcome`; the polling CLI follows the
+  per-task workspace and production graph factory so Compose never starts with a fake executor.
 
-- [ ] Write a test that uses real queue/repository components and a deterministic executor to persist the next task state.
-- [ ] Run it and confirm the worker service entry point is missing.
-- [ ] Implement one-shot execution and the polling command with bounded delay.
-- [ ] Run worker service and existing worker tests.
+- [x] Write a test that uses real queue/repository components and a deterministic executor to persist the next task state.
+- [x] Run it and confirm the worker service entry point is missing.
+- [x] Implement one-shot execution with required executor and tenant-scope validation.
+- [x] Run worker service and existing worker tests.
+- [ ] Implement the polling command only after the production graph factory owns a per-task workspace.
 
 ### Task 4: Compose And Documentation
 

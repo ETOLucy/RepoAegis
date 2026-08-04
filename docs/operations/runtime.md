@@ -26,9 +26,15 @@ $env:PYTHONPATH = "$PWD/src"
 The test creates a temporary SQLite database, submits through the real FastAPI route, then claims
 the returned task identity through `SqlTaskQueue`. It uses no model credential or network request.
 
+`worker_service.run_worker_once()` now composes the existing fenced `Worker` with these shared SQL
+adapters and an explicitly injected `TaskExecutor`. Its focused test proves a claimed task is
+executed and its advanced state is persisted. The service refuses an empty tenant scope or a runtime
+without an executor. A long-running CLI is intentionally not exposed until the production graph
+factory can allocate an isolated workspace for each task.
+
 ## Current Failure Boundary
 
 Initial creation and queue insertion are atomic. Worker completion is not yet atomic: the existing
 worker saves task state and acknowledges its lease separately. Until the recovery increment lands,
-RepoAegis makes no exactly-once completion claim. Remote Git and GitHub effects are also outside
-this checkpoint.
+RepoAegis makes no exactly-once completion claim. The injected executor test is composition evidence,
+not proof of model execution. Remote Git and GitHub effects are also outside this checkpoint.
