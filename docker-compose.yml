@@ -24,6 +24,7 @@ services:
       - artifacts:/artifacts
     networks:
       - control
+      - egress
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -108,6 +109,7 @@ services:
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR: ""
+      DOCKER_HOST: tcp://127.0.0.1:2375
     command: ["--host=tcp://0.0.0.0:2375"]
     healthcheck:
       test: ["CMD", "docker", "info"]
@@ -143,6 +145,7 @@ services:
     environment:
       discovery.type: single-node
       plugins.security.disabled: "true"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:?set OPENSEARCH_INITIAL_ADMIN_PASSWORD}
       OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
     ports:
       - "127.0.0.1:9200:9200"

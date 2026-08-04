@@ -21,6 +21,8 @@ WORKDIR /app
 COPY configs ./configs
 COPY sandbox ./sandbox
 
+RUN mkdir -p /workspaces && chmod 1777 /workspaces
+
 USER 10001:10001
 EXPOSE 8000
 CMD ["uvicorn", "repo_maintenance_agent.main:build_application", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
