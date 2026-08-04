@@ -32,6 +32,11 @@ executed and its advanced state is persisted. The service refuses an empty tenan
 without an executor. A long-running CLI is intentionally not exposed until the production graph
 factory can allocate an isolated workspace for each task.
 
+The workspace control adapter is verified against a credential-free local bare remote. It accepts a
+repository only when its `repo_id` is in the operator registry, materializes the exact task commit
+under a hashed tenant/task directory, and creates a deterministic task branch. The integration test
+executes these Git operations through `ToolGateway`; it does not contact an external service.
+
 ## Current Failure Boundary
 
 Initial creation and queue insertion are atomic. Worker completion is not yet atomic: the existing

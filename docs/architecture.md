@@ -32,6 +32,11 @@ queue, and evaluation repository to one engine. The API application reuses this 
 creation atomically inserts the initial queue row. The dedicated worker service and graph/runtime
 adapter remain the next assembly increment; `docs/operations/runtime.md` records the exact boundary.
 
+Repository materialization is a control-plane tool call. `WorkspaceAdapter` resolves `repo_id` only
+through an administrator-owned locator registry, clones into tenant/task hashed storage, verifies the
+declared immutable commit, and creates a task-specific branch. Its result contains only a relative
+workspace identifier and branch; repository locator details do not cross the tool boundary.
+
 ## Agent Graph
 
 ```text
