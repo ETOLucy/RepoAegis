@@ -1,0 +1,34 @@
+# Runtime Operations
+
+This tutorial tracks the production assembly as it is implemented. At this checkpoint RepoAegis
+has a shared SQL composition root and atomic initial task submission. A separately deployable worker
+and the complete repository-maintenance graph are not wired yet, so this is not end-to-end evidence.
+
+## Build The Shared Runtime
+
+`repo_maintenance_agent.runtime.build_runtime(Settings(...))` creates one SQL engine and binds the
+task repository, task queue, and evaluation repository to it. For file-backed SQLite it creates the
+database parent directory. It also creates the artifact directory and SQL schema.
+
+The application factory calls this composition root. `SqlTaskRepository.create()` writes the task
+row and its initial queue row in one transaction, so a successful `POST /v1/tasks` is immediately
+claimable from the queue built by the same runtime.
+
+## Verify The Submission Boundary
+
+From the isolated worktree, use its source tree with the repository virtual environment:
+
+```powershell
+$env:PYTHONPATH = "$PWD/src"
+& 'D:\Repos\Agents\RepoAegis\.venv\Scripts\python.exe' -m pytest tests/integration/test_runtime.py -q
+```
+
+The test creates a temporary SQLite database, submits through the real FastAPI route, then claims
+the returned task identity through `SqlTaskQueue`. It uses no model credential or network request.
+
+## Current Failure Boundary
+
+Initial creation and queue insertion are atomic. Worker completion is not yet atomic: the existing
+worker saves task state and acknowledges its lease separately. Until the recovery increment lands,
+RepoAegis makes no exactly-once completion claim. Remote Git and GitHub effects are also outside
+this checkpoint.

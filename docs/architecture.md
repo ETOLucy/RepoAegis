@@ -27,6 +27,11 @@ FastAPI API -----> PostgreSQL task state + queue rows
 
 The control plane owns identity, state, policy, orchestration, evidence, and evaluation. Repository processes run only in assigned workspaces or hardened sandbox containers. The model never receives a raw shell.
 
+`build_runtime()` is the explicit SQL composition root. It binds the task repository, fenced task
+queue, and evaluation repository to one engine. The API application reuses this root, and SQL task
+creation atomically inserts the initial queue row. The dedicated worker service and graph/runtime
+adapter remain the next assembly increment; `docs/operations/runtime.md` records the exact boundary.
+
 ## Agent Graph
 
 ```text
