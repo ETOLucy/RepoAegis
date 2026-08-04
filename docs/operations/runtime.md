@@ -55,7 +55,8 @@ restricted container execution service without receiving the host Docker socket.
 
 ## Current Failure Boundary
 
-Initial creation and queue insertion are atomic. Worker completion is not yet atomic: the existing
-worker saves task state and acknowledges its lease separately. Until the recovery increment lands,
-RepoAegis makes no exactly-once completion claim. The injected executor test is composition evidence,
-not proof of model execution. Remote Git and GitHub effects are also outside this checkpoint.
+Initial creation and queue insertion are atomic. Worker state persistence and lease consumption are
+also one SQL transaction, fenced by task version, lease ID, and lease expiry. This removes the
+save-before-ack crash window. RepoAegis still makes no end-to-end exactly-once claim because artifact
+metadata and commit/push/PR delivery are incomplete. The injected executor test is composition
+evidence, not proof of model execution.

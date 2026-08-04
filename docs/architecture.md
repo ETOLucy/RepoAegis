@@ -52,6 +52,10 @@ workspace graph executor, and lazy production graph factory. The factory creates
 workspace lexical search, artifact-backed patch adapter, and Docker verifier only after a task has a
 workspace. `repo-agent-worker` provides a cancellable long-running queue loop.
 
+Worker completion uses `SqlTaskCompletion`: task state advances under optimistic version fencing and
+the active queue lease is consumed in the same transaction. The lease ID and expiry are both checked,
+so a stale or expired worker rolls back the state update instead of completing late.
+
 ## Agent Graph
 
 ```text

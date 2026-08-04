@@ -23,6 +23,7 @@ async def run_worker_once(
         queue=runtime.queue,
         repository=runtime.tasks,
         executor=runtime.executor,
+        completion=runtime.completion,
     )
     return await worker.run_once()
 

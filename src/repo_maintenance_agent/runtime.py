@@ -16,6 +16,7 @@ from repo_maintenance_agent.storage.artifacts import FileArtifactStore
 from repo_maintenance_agent.storage.sql import (
     Base,
     SqlOperationLog,
+    SqlTaskCompletion,
     SqlTaskQueue,
     SqlTaskRepository,
 )
@@ -32,6 +33,7 @@ class RuntimeComponents:
     queue: SqlTaskQueue
     evaluations: SqlEvaluationRepository
     operations: SqlOperationLog
+    completion: SqlTaskCompletion
     artifacts: FileArtifactStore
     executor: TaskExecutor | None
 
@@ -53,6 +55,7 @@ def build_runtime(
         queue=SqlTaskQueue(engine),
         evaluations=SqlEvaluationRepository(engine),
         operations=SqlOperationLog(engine),
+        completion=SqlTaskCompletion(engine),
         artifacts=artifacts,
         executor=executor,
     )

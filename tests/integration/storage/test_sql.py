@@ -18,6 +18,7 @@ from repo_maintenance_agent.domain.models import (
 from repo_maintenance_agent.storage.sql import (
     Base,
     SqlOperationLog,
+    SqlTaskCompletion,
     SqlTaskQueue,
     SqlTaskRepository,
 )
@@ -167,3 +168,65 @@ async def test_sql_operation_log_survives_reconstruction_and_keeps_first_result(
     assert replay.call_id == "call-1"
     assert replay_after_duplicate is not None
     assert replay_after_duplicate.call_id == "call-1"
+
+
+@pytest.mark.asyncio
+async def test_sql_completion_persists_state_and_consumes_lease_atomically() -> None:
+    engine = sqlite_engine()
+    Base.metadata.create_all(engine)
+    repository = SqlTaskRepository(engine)
+    queue = SqlTaskQueue(engine)
+    completion = SqlTaskCompletion(engine)
+    created = await repository.create(task())
+    now = datetime.now(UTC) + timedelta(seconds=1)
+    lease = await queue.claim("worker-1", frozenset({"tenant-a"}), now=now)
+    assert lease is not None
+    completed = created.transition(TaskStatus.INTAKE)
+
+    await completion.complete(
+        lease,
+        completed,
+        expected_version=created.version,
+    )
+
+    persisted = await repository.get("tenant-a", created.task_id)
+    assert persisted.status is TaskStatus.INTAKE
+    assert await queue.claim(
+        "worker-2",
+        frozenset({"tenant-a"}),
+        now=now + timedelta(minutes=10),
+    ) is None
+
+
+@pytest.mark.asyncio
+async def test_sql_completion_rejects_expired_lease_and_rolls_back_state() -> None:
+    engine = sqlite_engine()
+    Base.metadata.create_all(engine)
+    repository = SqlTaskRepository(engine)
+    queue = SqlTaskQueue(engine, lease_duration=timedelta(seconds=1))
+    completion = SqlTaskCompletion(engine)
+    expired_claim_time = datetime.now(UTC) - timedelta(seconds=10)
+    created = await repository.create(
+        task().model_copy(
+            update={
+                "created_at": expired_claim_time - timedelta(seconds=1),
+                "updated_at": expired_claim_time - timedelta(seconds=1),
+            }
+        )
+    )
+    lease = await queue.claim(
+        "worker-1",
+        frozenset({"tenant-a"}),
+        now=expired_claim_time,
+    )
+    assert lease is not None
+
+    with pytest.raises(LeaseConflict):
+        await completion.complete(
+            lease,
+            created.transition(TaskStatus.INTAKE),
+            expected_version=created.version,
+        )
+
+    persisted = await repository.get("tenant-a", created.task_id)
+    assert persisted.status is TaskStatus.PENDING

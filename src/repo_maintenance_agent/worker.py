@@ -42,6 +42,16 @@ class TaskExecutor(Protocol):
     async def execute(self, state: RepoTaskState) -> RepoTaskState: ...
 
 
+class TaskCompletion(Protocol):
+    async def complete(
+        self,
+        lease: QueueLease,
+        state: RepoTaskState,
+        *,
+        expected_version: int,
+    ) -> None: ...
+
+
 @dataclass(slots=True)
 class _LeaseState:
     lease: QueueLease
@@ -57,6 +67,7 @@ class Worker:
         queue: TaskQueue,
         repository: TaskRepository,
         executor: TaskExecutor,
+        completion: TaskCompletion,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         retry_base: timedelta = timedelta(seconds=5),
         retry_cap: timedelta = timedelta(minutes=5),
@@ -73,6 +84,7 @@ class Worker:
         self._queue = queue
         self._repository = repository
         self._executor = executor
+        self._completion = completion
         self._clock = clock
         self._retry_base = retry_base
         self._retry_cap = retry_cap
@@ -99,8 +111,11 @@ class Worker:
             await heartbeat
             if lease_state.error is not None:
                 raise lease_state.error
-            await self._repository.save(result, expected_version=task.version)
-            await self._queue.ack(lease_state.lease)
+            await self._completion.complete(
+                lease_state.lease,
+                result,
+                expected_version=task.version,
+            )
         except Exception:
             stop_heartbeat.set()
             await heartbeat

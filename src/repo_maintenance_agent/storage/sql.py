@@ -377,6 +377,63 @@ class SqlOperationLog:
             return
 
 
+class SqlTaskCompletion:
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+
+    async def complete(
+        self,
+        lease: QueueLease,
+        state: RepoTaskState,
+        *,
+        expected_version: int,
+    ) -> None:
+        await asyncio.to_thread(self._complete, lease, state, expected_version)
+
+    def _complete(
+        self,
+        lease: QueueLease,
+        state: RepoTaskState,
+        expected_version: int,
+    ) -> None:
+        if state.version <= expected_version:
+            raise ConcurrentUpdate("new state version must advance")
+        if state.tenant_id != lease.tenant_id or state.task_id != lease.task_id:
+            raise LeaseConflict("completion scope does not match queue lease")
+        completion_time = datetime.now(UTC)
+        with Session(self._engine) as session:
+            updated = session.execute(
+                update(TaskRow)
+                .where(
+                    TaskRow.tenant_id == state.tenant_id,
+                    TaskRow.task_id == state.task_id,
+                    TaskRow.version == expected_version,
+                )
+                .values(
+                    repo_id=state.repo_id,
+                    status=state.status.value,
+                    version=state.version,
+                    state_json=state.model_dump_json(),
+                    updated_at=datetime.now(UTC),
+                )
+            )
+            if not isinstance(updated, CursorResult) or updated.rowcount != 1:
+                session.rollback()
+                raise ConcurrentUpdate("task version conflict")
+            consumed = session.execute(
+                delete(QueueRow).where(
+                    QueueRow.tenant_id == lease.tenant_id,
+                    QueueRow.task_id == lease.task_id,
+                    QueueRow.lease_id == lease.lease_id,
+                    QueueRow.lease_expires_at > completion_time,
+                )
+            )
+            if not isinstance(consumed, CursorResult) or consumed.rowcount != 1:
+                session.rollback()
+                raise LeaseConflict("queue lease is stale")
+            session.commit()
+
+
 def _row_lease(row: QueueRow) -> QueueLease:
     if row.lease_id is None or row.worker_id is None or row.lease_expires_at is None:
         raise LeaseConflict("queue row does not contain an active lease")

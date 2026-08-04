@@ -49,6 +49,50 @@ class CountingQueue(InMemoryTaskQueue):
         return await super().heartbeat(lease, now=now)
 
 
+class RecordingCompletion:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def complete(self, lease, state, *, expected_version):
+        self.calls.append((lease, state, expected_version))
+
+
+class InMemoryCompletion:
+    def __init__(self, repository, queue) -> None:
+        self._repository = repository
+        self._queue = queue
+
+    async def complete(self, lease, state, *, expected_version):
+        await self._repository.save(state, expected_version=expected_version)
+        await self._queue.ack(lease)
+
+
+@pytest.mark.asyncio
+async def test_worker_delegates_success_to_completion_coordinator() -> None:
+    repository = InMemoryTaskRepository()
+    queue = InMemoryTaskQueue()
+    completion = RecordingCompletion()
+    now = datetime(2026, 7, 31, tzinfo=UTC)
+    created = await repository.create(task())
+    await queue.enqueue("tenant-a", created.task_id, now=now)
+    worker = Worker(
+        worker_id="worker-1",
+        tenant_ids=frozenset({"tenant-a"}),
+        queue=queue,
+        repository=repository,
+        executor=TransitionExecutor(TaskStatus.INTAKE),
+        completion=completion,
+        clock=lambda: now,
+    )
+
+    outcome = await worker.run_once()
+
+    assert outcome is WorkerOutcome.COMPLETED
+    assert len(completion.calls) == 1
+    assert completion.calls[0][1].status is TaskStatus.INTAKE
+    assert completion.calls[0][2] == created.version
+
+
 @pytest.mark.asyncio
 async def test_worker_persists_result_and_acknowledges_successful_work() -> None:
     repository = InMemoryTaskRepository()
@@ -62,6 +106,7 @@ async def test_worker_persists_result_and_acknowledges_successful_work() -> None
         queue=queue,
         repository=repository,
         executor=TransitionExecutor(TaskStatus.INTAKE),
+        completion=InMemoryCompletion(repository, queue),
         clock=lambda: now,
     )
 
@@ -91,6 +136,7 @@ async def test_worker_parks_task_that_requires_human_approval() -> None:
         queue=queue,
         repository=repository,
         executor=TransitionExecutor(TaskStatus.NEEDS_APPROVAL),
+        completion=InMemoryCompletion(repository, queue),
         clock=lambda: now,
     )
 
@@ -115,6 +161,7 @@ async def test_worker_retries_failure_with_bounded_exponential_backoff() -> None
         queue=queue,
         repository=repository,
         executor=FailingExecutor(),
+        completion=InMemoryCompletion(repository, queue),
         clock=lambda: now,
         retry_base=timedelta(seconds=5),
         retry_cap=timedelta(seconds=30),
@@ -151,6 +198,7 @@ async def test_worker_renews_lease_during_long_execution_and_acks_latest_token()
         queue=queue,
         repository=repository,
         executor=SlowExecutor(),
+        completion=InMemoryCompletion(repository, queue),
         clock=lambda: now,
         heartbeat_interval=0.005,
     )
