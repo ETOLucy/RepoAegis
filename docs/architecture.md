@@ -90,6 +90,13 @@ The independent review input contains that diff, bounded post-change source, acc
 structured verification results. Workspace reads reject escapes and symlink escapes and enforce a
 total byte limit before model invocation.
 
+Before proposing a patch, coding uses a bounded `ContextRequest` protocol. A request can declare
+readiness or ask for at most five searches and twenty files. Production defaults to one context
+round and eight context tool calls; `AgentRuntime` rejects configurations above five rounds or
+twenty calls. Every search and read uses the same task-scoped gateway, and the resulting structured
+context is supplied to `PatchProposal`. Verification and review can route code failures back to
+coding only while `iteration < max_iterations`.
+
 ## Persistence and Queue Semantics
 
 `SqlTaskRepository` uses `(tenant_id, task_id)` as the primary identity and optimistic versions for compare-and-swap updates. Creation writes the task and queue row in one transaction. Approval writes the decision and restores a runnable queue row in one transaction.

@@ -5,6 +5,7 @@ import pytest
 
 from repo_maintenance_agent.agents.nodes import AgentRuntime, build_agent_nodes
 from repo_maintenance_agent.agents.schemas import (
+    ContextRequest,
     PatchProposal,
     PlanOutput,
     PullRequestDraft,
@@ -46,6 +47,8 @@ class FakeModel:
                 risk=RiskLevel.HIGH,
                 risk_reasons=["configuration behavior"],
             )
+        if schema is ContextRequest:
+            return ContextRequest(ready_to_patch=True, reason="Evidence is sufficient.")
         if schema is PatchProposal:
             return PatchProposal(
                 summary="Use the safe default.",
@@ -87,6 +90,43 @@ class RecordingReviewModel(FakeModel):
         if schema is ReviewOutput:
             self.review_input = json.loads(input_text)
             return ReviewOutput(decision="approve", findings=[], summary="Scope and tests pass.")
+        return await super().structured(system=system, input_text=input_text, schema=schema)
+
+
+class ContextSeekingModel(FakeModel):
+    def __init__(self) -> None:
+        self.context_requests = 0
+        self.patch_input: dict[str, object] = {}
+
+    async def structured(self, *, system, input_text, schema):
+        if schema is ContextRequest:
+            self.context_requests += 1
+            if self.context_requests == 1:
+                return ContextRequest(
+                    ready_to_patch=False,
+                    search_queries=["load_config default"],
+                    files=["src/config.py"],
+                    reason="Need implementation and call sites.",
+                )
+            return ContextRequest(ready_to_patch=True, reason="Context is sufficient.")
+        if schema is PatchProposal:
+            self.patch_input = json.loads(input_text)
+        return await super().structured(system=system, input_text=input_text, schema=schema)
+
+
+class AlwaysSeekingModel(FakeModel):
+    def __init__(self) -> None:
+        self.context_requests = 0
+
+    async def structured(self, *, system, input_text, schema):
+        if schema is ContextRequest:
+            self.context_requests += 1
+            return ContextRequest(
+                ready_to_patch=False,
+                search_queries=["more context"],
+                files=["src/config.py"],
+                reason="Keep searching.",
+            )
         return await super().structured(system=system, input_text=input_text, schema=schema)
 
 
@@ -256,6 +296,62 @@ async def test_coding_resumes_from_api_approved_state(tmp_path: Path) -> None:
     assert call.arguments["files"] == ["src/config.py"]
     assert call.arguments["artifact_id"] == result["task"].patch_artifact_id
     assert call.idempotency_key is not None
+
+
+@pytest.mark.asyncio
+async def test_coding_collects_bounded_context_through_gateway_before_patch(
+    tmp_path: Path,
+) -> None:
+    model = ContextSeekingModel()
+    gateway = RecordingGateway()
+    nodes = build_agent_nodes(
+        AgentRuntime(
+            model=model,
+            artifacts=FileArtifactStore(tmp_path),
+            gateway=gateway,
+            max_context_rounds=2,
+            max_context_tool_calls=4,
+        )
+    )
+    coding = task().transition(TaskStatus.INTAKE).transition(TaskStatus.RESEARCH).transition(
+        TaskStatus.PLANNING
+    )
+
+    result = await nodes.coding({"task": coding, "trace": []})
+
+    assert [call.name for call, _ in gateway.calls] == [
+        "search_code",
+        "read_files",
+        "apply_patch",
+    ]
+    assert model.context_requests == 2
+    context = model.patch_input["controlled_context"]
+    assert context["searches"][0]["hits"][0]["path"] == "src/config.py"
+    assert context["files"]["src/config.py"] == "def load(): return default"
+    assert result["task"].iteration == 1
+
+
+@pytest.mark.asyncio
+async def test_coding_stops_context_collection_at_tool_budget(tmp_path: Path) -> None:
+    model = AlwaysSeekingModel()
+    gateway = RecordingGateway()
+    nodes = build_agent_nodes(
+        AgentRuntime(
+            model=model,
+            artifacts=FileArtifactStore(tmp_path),
+            gateway=gateway,
+            max_context_rounds=5,
+            max_context_tool_calls=1,
+        )
+    )
+    coding = task().transition(TaskStatus.INTAKE).transition(TaskStatus.RESEARCH).transition(
+        TaskStatus.PLANNING
+    )
+
+    await nodes.coding({"task": coding, "trace": []})
+
+    assert model.context_requests == 1
+    assert [call.name for call, _ in gateway.calls] == ["search_code", "apply_patch"]
 
 
 @pytest.mark.asyncio

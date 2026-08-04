@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from repo_maintenance_agent.domain.models import RiskLevel
 
@@ -29,6 +29,19 @@ class PlanOutput(AgentOutput):
     steps: list[PlanStep] = Field(min_length=1, max_length=30)
     risk: RiskLevel
     risk_reasons: list[str] = Field(default_factory=list, max_length=20)
+
+
+class ContextRequest(AgentOutput):
+    ready_to_patch: bool
+    search_queries: list[str] = Field(default_factory=list, max_length=5)
+    files: list[str] = Field(default_factory=list, max_length=20)
+    reason: str = Field(min_length=1, max_length=2_000)
+
+    @model_validator(mode="after")
+    def request_has_an_action(self) -> ContextRequest:
+        if not self.ready_to_patch and not self.search_queries and not self.files:
+            raise ValueError("context request must search, read, or be ready to patch")
+        return self
 
 
 class PatchProposal(AgentOutput):

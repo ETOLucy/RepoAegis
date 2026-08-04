@@ -75,6 +75,7 @@ executes only in assigned workspaces or language-specific Docker sandboxes.
 | Commands | Argument arrays, executable allowlist, timeout, output limit, sanitized environment |
 | Sandbox | Digest-pinned image, non-root user, read-only root, dropped capabilities, offline checks |
 | Model output | Structured Responses parsing with `store=False` |
+| Coding context | Gateway-only search/read requests with fixed round and tool-call ceilings |
 | Evaluation | Concurrent suites, retries, provenance, baseline deltas, hard gates, deterministic replay |
 | Privacy | Recursive redaction plus current-tree and reachable-history publication scanning |
 | Browser surface | Same-origin console with CSP and in-memory-only bearer identity |
