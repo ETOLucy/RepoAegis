@@ -1,8 +1,9 @@
 # Runtime Operations
 
-This tutorial tracks the production assembly as it is implemented. At this checkpoint RepoAegis
-has a shared SQL composition root and atomic initial task submission. A separately deployable worker
-and the complete repository-maintenance graph are not wired yet, so this is not end-to-end evidence.
+This operations reference tracks the production assembly as it is implemented. RepoAegis has a
+shared SQL composition root, atomic task submission, a separately deployable worker, production
+graph factory, and a restricted remote sandbox contract. Live Compose execution is still under
+validation, so static topology evidence is not presented as end-to-end evidence.
 
 ## Build The Shared Runtime
 
@@ -50,8 +51,12 @@ not yet claimed.
 
 The production worker entry point is `repo-agent-worker`. It requires an explicit tenant scope and
 operator-owned repository locator registry. Model and graph components initialize only after a task
-workspace exists. Compose deployment remains under validation until the worker can reach a
-restricted container execution service without receiving the host Docker socket.
+workspace exists. Compose connects it to `sandbox-runner`, not to Docker. The authenticated runner
+accepts only strict resource-bounded requests with a relative workspace below the shared root. A
+separate project-owned rootless daemon runs the nested task containers. Worker and daemon networks
+are disjoint, neither a daemon port nor a host socket is published, and topology tests enforce these
+properties. The current machine's Docker engine did not become ready during verification, so image
+build, service health, and a submitted live task remain open evidence items.
 
 ## Current Failure Boundary
 

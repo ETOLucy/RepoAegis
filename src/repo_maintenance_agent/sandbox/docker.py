@@ -28,11 +28,13 @@ class DockerSandbox:
         runner: ProcessRunner | None = None,
         *,
         seccomp_profile: Path | None = None,
+        docker_host: str | None = None,
     ) -> None:
         self._runner = runner
         if seccomp_profile is not None and not seccomp_profile.resolve().is_file():
             raise ValueError("seccomp profile must be an existing file")
         self._seccomp_profile = seccomp_profile.resolve() if seccomp_profile else None
+        self._docker_host = docker_host
 
     def build_command(self, spec: SandboxSpec) -> list[str]:
         if not _DIGEST_IMAGE.fullmatch(spec.image):
@@ -75,7 +77,9 @@ class DockerSandbox:
         return await self._runner.run(
             self.build_command(spec),
             cwd=spec.workspace,
+            extra_env={"DOCKER_HOST": self._docker_host} if self._docker_host else None,
             check=False,
+            timeout_seconds=spec.timeout_seconds,
         )
 
 

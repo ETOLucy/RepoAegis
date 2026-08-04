@@ -1,4 +1,5 @@
-from pydantic import SecretStr
+import pytest
+from pydantic import SecretStr, ValidationError
 
 from repo_maintenance_agent.config import Settings
 
@@ -32,3 +33,8 @@ def test_settings_accepts_standard_openai_model_variable(monkeypatch) -> None:
     settings = Settings()
 
     assert settings.openai_model == "gpt-test-model"
+
+
+def test_settings_rejects_partial_sandbox_runner_configuration() -> None:
+    with pytest.raises(ValidationError, match="sandbox runner URL and token"):
+        Settings(sandbox_runner_url="http://sandbox-runner:8080")

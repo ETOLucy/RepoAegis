@@ -132,6 +132,15 @@ The Tool Gateway checks:
 
 `DockerSandbox` requires digest-pinned images and enforces non-root UID, read-only root filesystem, dropped capabilities, `no-new-privileges`, PID/CPU/memory limits, a bounded tmpfs, and no network by default. A trusted custom seccomp profile can be supplied explicitly; otherwise Docker's default seccomp policy remains active. `SandboxVerifier` derives setup/test/lint commands from repository profiles. Dependency setup is isolated and auditable; test and lint containers are offline. Failures are classified as code, environment, or infrastructure.
 
+In Compose, the worker uses an authenticated `RemoteSandbox` contract and never receives a Docker
+socket or daemon address. `sandbox-runner` validates a safe relative workspace, immutable image,
+command bounds, and resource limits before constructing `SandboxSpec`. It is connected to the worker
+on an internal control network and to a project-owned rootless DinD service on a separate internal
+daemon network. Worker and daemon network sets are disjoint; the daemon publishes no host port. A
+third daemon-only egress network permits the explicitly identified dependency-setup phase. Request
+timeouts reach the subprocess runner, and transport failures are surfaced without raw endpoint or
+response details.
+
 ## Model Boundary
 
 Agent outputs are strict Pydantic schemas. The OpenAI gateway uses structured Responses parsing and sets `store=False`. API keys remain `SecretStr` values and enter only the provider client. Repository content and issue text are explicitly framed as untrusted data in system instructions.

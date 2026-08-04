@@ -12,6 +12,7 @@ from repo_maintenance_agent.models.openai_gateway import OpenAIModelGateway
 from repo_maintenance_agent.policies.permissions import PermissionPolicy
 from repo_maintenance_agent.sandbox.docker import DockerSandbox
 from repo_maintenance_agent.sandbox.profiles import EnvironmentProfiler
+from repo_maintenance_agent.sandbox.remote import RemoteSandbox
 from repo_maintenance_agent.sandbox.verifier import SandboxVerifier
 from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
 from repo_maintenance_agent.tools.agent_actions import (
@@ -53,9 +54,18 @@ class ProductionGraphFactory:
 
     def build_adapters(self, workspace: Path) -> dict[str, ToolAdapter]:
         patch_runner = ProcessRunner(allowed_executables={"git"})
-        sandbox = DockerSandbox(
-            ProcessRunner(allowed_executables={"docker"}),
-            seccomp_profile=self.settings.sandbox_seccomp_profile,
+        sandbox = (
+            RemoteSandbox(
+                base_url=self.settings.sandbox_runner_url,
+                token=self.settings.sandbox_runner_token,
+                workspace_root=Path(self.settings.workspace_root),
+            )
+            if self.settings.sandbox_runner_url is not None
+            and self.settings.sandbox_runner_token is not None
+            else DockerSandbox(
+                ProcessRunner(allowed_executables={"docker"}),
+                seccomp_profile=self.settings.sandbox_seccomp_profile,
+            )
         )
         verifier = SandboxVerifier(
             workspace=workspace,

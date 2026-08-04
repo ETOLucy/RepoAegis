@@ -192,19 +192,26 @@ identifiers and internal queue state.
 
 ## Local Infrastructure
 
-The Compose profile starts the API, PostgreSQL, and OpenSearch. Exposed ports bind to loopback.
-OpenSearch security is disabled only in this local profile.
+The Compose profile defines the API, worker, PostgreSQL, OpenSearch, authenticated sandbox runner,
+and a project-owned rootless Docker daemon. The worker and daemon share no network; the runner is
+the only bridge, and no Docker socket or daemon port is exposed to the host. Exposed application
+ports bind to loopback. OpenSearch security is disabled only in this local profile.
 
 ```powershell
 $env:POSTGRES_PASSWORD='choose-a-local-password'
 $env:REPO_AGENT_API_TOKENS='{"local-api-token":{"tenant_id":"tenant-local","subject":"local-reviewer"}}'
+$env:SANDBOX_RUNNER_TOKEN='choose-a-separate-runner-token'
+$env:REPO_AGENT_REPOSITORY_LOCATORS='{"owner/repository":"/operator/pinned/repository.git"}'
+$env:REPO_AGENT_WORKER_TENANT_IDS='["tenant-local"]'
 docker compose config
 docker compose up --build
 ```
 
-Application and sandbox images run as UID 10001 with a read-only root filesystem, dropped
-capabilities, `no-new-privileges`, and immutable base-image digests. Sandbox dependency setup is a
-separate auditable phase; test and lint phases run without network access.
+Application and task sandbox containers run as UID 10001 with a read-only root filesystem, dropped
+capabilities, `no-new-privileges`, and immutable base-image digests. The dedicated rootless daemon
+is isolated from worker and host sockets. Sandbox dependency setup is a separate auditable phase;
+test and lint phases run without network access. Compose syntax and isolation topology are tested;
+a live Docker startup remains under validation on the current development machine.
 
 ## Configuration
 
@@ -217,6 +224,10 @@ separate auditable phase; test and lint phases run without network access.
 | `REPO_AGENT_API_URL` | CLI control-plane URL | no |
 | `REPO_AGENT_DATABASE_URL` | SQLAlchemy task and evaluation database | usually |
 | `REPO_AGENT_ARTIFACT_ROOT` | Artifact storage root | no |
+| `REPO_AGENT_WORKSPACE_ROOT` | Operator-owned task workspace root | no |
+| `REPO_AGENT_REPOSITORY_LOCATORS` | Allowlisted repository source registry | usually |
+| `REPO_AGENT_WORKER_TENANT_IDS` | Explicit worker tenant scope | no |
+| `REPO_AGENT_SANDBOX_RUNNER_TOKEN` | Worker-to-runner bearer credential | yes |
 | `REPO_AGENT_ALLOWED_HOSTS` | Trusted Host allowlist | no |
 | `REPO_AGENT_MAX_ITERATIONS` | Bounded graph correction budget | no |
 

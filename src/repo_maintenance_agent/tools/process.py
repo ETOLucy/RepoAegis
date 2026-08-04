@@ -54,6 +54,7 @@ class ProcessRunner:
         extra_env: dict[str, str] | None = None,
         secret_env: Mapping[str, str] | None = None,
         check: bool = True,
+        timeout_seconds: float | None = None,
     ) -> ProcessResult:
         if not arguments:
             raise ToolExecutionError("process argument list cannot be empty")
@@ -84,12 +85,13 @@ class ProcessRunner:
         try:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 process.communicate(),
-                timeout=self._timeout_seconds,
+                timeout=timeout_seconds or self._timeout_seconds,
             )
         except TimeoutError:
             process.kill()
             await process.wait()
-            raise TimeoutError(f"process exceeded {self._timeout_seconds} seconds") from None
+            effective_timeout = timeout_seconds or self._timeout_seconds
+            raise TimeoutError(f"process exceeded {effective_timeout} seconds") from None
 
         if len(stdout_bytes) + len(stderr_bytes) > self._max_output_bytes:
             raise ToolExecutionError("process output exceeded configured limit")

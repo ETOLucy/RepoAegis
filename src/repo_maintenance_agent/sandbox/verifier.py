@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Protocol
 
 from repo_maintenance_agent.domain.errors import ToolExecutionError
 from repo_maintenance_agent.domain.models import (
@@ -10,8 +11,13 @@ from repo_maintenance_agent.domain.models import (
     VerificationResult,
 )
 from repo_maintenance_agent.policies.redaction import Redactor
-from repo_maintenance_agent.sandbox.docker import DockerSandbox, SandboxSpec
+from repo_maintenance_agent.sandbox.docker import SandboxSpec
 from repo_maintenance_agent.sandbox.profiles import EnvironmentProfiler, Language
+from repo_maintenance_agent.tools.process import ProcessResult
+
+
+class SandboxExecutor(Protocol):
+    async def execute(self, spec: SandboxSpec) -> ProcessResult: ...
 
 
 class SandboxVerifier:
@@ -20,7 +26,7 @@ class SandboxVerifier:
         *,
         workspace: Path,
         profiler: EnvironmentProfiler,
-        sandbox: DockerSandbox,
+        sandbox: SandboxExecutor,
         image_digests: dict[str, str],
         redactor: Redactor | None = None,
     ) -> None:

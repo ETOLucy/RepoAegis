@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,11 +45,20 @@ class Settings(BaseSettings):
     )
     github_token: SecretStr | None = Field(default=None, repr=False)
     sandbox_seccomp_profile: Path = Path("sandbox/seccomp.json")
+    sandbox_runner_url: str | None = None
+    sandbox_runner_token: SecretStr | None = Field(default=None, repr=False)
+    sandbox_docker_host: str = "unix:///run/repoaegis-docker/docker.sock"
     allowed_hosts: tuple[str, ...] = ("localhost", "127.0.0.1")
     max_iterations: int = Field(default=3, ge=1, le=10)
     worker_id: str = Field(default="repoaegis-worker", min_length=1, max_length=128)
     worker_tenant_ids: tuple[str, ...] = ()
     worker_poll_seconds: float = Field(default=1.0, gt=0, le=60)
+
+    @model_validator(mode="after")
+    def complete_sandbox_runner_configuration(self) -> Settings:
+        if (self.sandbox_runner_url is None) != (self.sandbox_runner_token is None):
+            raise ValueError("sandbox runner URL and token must be configured together")
+        return self
 
     @property
     def has_openai_credentials(self) -> bool:

@@ -1,6 +1,25 @@
 from pathlib import Path
 
+import pytest
+
 from repo_maintenance_agent.sandbox.docker import DockerSandbox, SandboxSpec
+from repo_maintenance_agent.tools.process import ProcessResult
+
+
+class RecordingRunner:
+    def __init__(self) -> None:
+        self.arguments = []
+        self.extra_env = None
+        self.timeout_seconds = None
+
+    async def run(
+        self, arguments, *, cwd, extra_env=None, check=True, timeout_seconds=None
+    ):
+        del cwd, check
+        self.arguments = arguments
+        self.extra_env = extra_env
+        self.timeout_seconds = timeout_seconds
+        return ProcessResult(returncode=0, stdout="", stderr="", duration_ms=1)
 
 
 def test_docker_command_applies_hardened_defaults(tmp_path: Path) -> None:
@@ -41,3 +60,25 @@ def test_docker_command_rejects_mutable_image_tag(tmp_path: Path) -> None:
         assert "digest" in str(error)
     else:
         raise AssertionError("mutable image tag was accepted")
+
+
+@pytest.mark.asyncio
+async def test_docker_execution_uses_request_timeout_and_private_daemon_env(
+    tmp_path: Path,
+) -> None:
+    runner = RecordingRunner()
+    sandbox = DockerSandbox(runner, docker_host="tcp://sandbox-daemon:2375")
+
+    await sandbox.execute(
+        SandboxSpec(
+            task_id="task-1",
+            workspace=tmp_path,
+            image="python@sha256:" + "a" * 64,
+            command=("pytest",),
+            timeout_seconds=47,
+        )
+    )
+
+    assert runner.timeout_seconds == 47
+    assert runner.extra_env == {"DOCKER_HOST": "tcp://sandbox-daemon:2375"}
+    assert "sandbox-daemon" not in " ".join(runner.arguments)
