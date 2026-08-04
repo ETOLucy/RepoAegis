@@ -5,6 +5,7 @@ from typing import Any
 
 from repo_maintenance_agent.domain.errors import AuthorizationDenied
 from repo_maintenance_agent.domain.models import (
+    ApprovalEnvelope,
     RepoTaskState,
     TaskStatus,
     ToolCall,
@@ -58,11 +59,22 @@ class PermissionPolicy:
 
         if call.permission in {ToolPermission.GIT_WRITE, ToolPermission.GITHUB_WRITE}:
             approval = state.approval
+            envelope = ApprovalEnvelope(
+                plan=state.plan,
+                target_commit=state.commit_sha,
+                allowed_tools=state.allowed_tools,
+                declared_files=state.declared_files,
+                verification_plan=state.verification_plan,
+            )
             if (
                 approval is None
                 or not approval.approved
                 or state.plan_hash is None
                 or approval.plan_hash != state.plan_hash
+                or envelope.digest() != state.plan_hash
+                or approval.target_commit != state.commit_sha
+                or approval.allowed_tools != state.allowed_tools
+                or call.permission not in state.allowed_tools
             ):
                 raise AuthorizationDenied("matching human approval is required")
 

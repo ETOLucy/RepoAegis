@@ -4,7 +4,13 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from repo_maintenance_agent.domain.models import IssueSpec, RepoTaskState, TaskStatus
+from repo_maintenance_agent.domain.models import (
+    IssueSpec,
+    RepoTaskState,
+    RiskLevel,
+    TaskStatus,
+    ToolPermission,
+)
 from repo_maintenance_agent.evaluation.models import (
     EvaluationAggregate,
     EvaluationCaseResult,
@@ -29,19 +35,53 @@ class TaskCreateRequest(ApiModel):
     issue: IssueSpec
 
 
+class EvidenceSummary(ApiModel):
+    source: str
+    locator: str
+    summary: str
+
+
 class TaskResponse(ApiModel):
     task_id: str
     repo_id: str
     commit_sha: str
     base_branch: str
     status: TaskStatus
+    plan: tuple[dict[str, object], ...]
+    risk: RiskLevel
+    risk_reasons: tuple[str, ...]
+    plan_hash: str | None
+    declared_files: tuple[str, ...]
+    allowed_tools: tuple[ToolPermission, ...]
+    verification_plan: tuple[str, ...]
+    evidence_summary: tuple[EvidenceSummary, ...]
     iteration: int
     created_at: datetime
     updated_at: datetime
 
     @classmethod
     def from_state(cls, state: RepoTaskState) -> TaskResponse:
-        return cls.model_validate(state, from_attributes=True)
+        return cls(
+            task_id=state.task_id,
+            repo_id=state.repo_id,
+            commit_sha=state.commit_sha,
+            base_branch=state.base_branch,
+            status=state.status,
+            plan=state.plan,
+            risk=state.risk,
+            risk_reasons=state.risk_reasons,
+            plan_hash=state.plan_hash,
+            declared_files=state.declared_files,
+            allowed_tools=state.allowed_tools,
+            verification_plan=state.verification_plan,
+            evidence_summary=tuple(
+                EvidenceSummary(source=item.source, locator=item.locator, summary=item.summary)
+                for item in state.evidence
+            ),
+            iteration=state.iteration,
+            created_at=state.created_at,
+            updated_at=state.updated_at,
+        )
 
 
 class TaskListResponse(ApiModel):
@@ -51,6 +91,8 @@ class TaskListResponse(ApiModel):
 class ApprovalRequest(ApiModel):
     approved: bool
     plan_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    target_commit: str = Field(pattern=r"^[a-f0-9]{40,64}$")
+    allowed_tools: tuple[ToolPermission, ...]
     reason: str = Field(min_length=1, max_length=2_000)
 
 

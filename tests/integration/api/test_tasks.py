@@ -6,7 +6,7 @@ from httpx import ASGITransport, AsyncClient
 
 from repo_maintenance_agent.api.app import create_app
 from repo_maintenance_agent.api.auth import Principal, StaticTokenAuthenticator
-from repo_maintenance_agent.domain.models import TaskStatus
+from repo_maintenance_agent.domain.models import Evidence, RiskLevel, TaskStatus, ToolPermission
 from repo_maintenance_agent.storage.memory import InMemoryTaskRepository
 
 
@@ -149,6 +149,8 @@ async def test_approval_decision_validates_plan_and_advances_state(
     body = {
         "approved": approved,
         "plan_hash": "b" * 64,
+        "target_commit": "a" * 40,
+        "allowed_tools": [],
         "reason": "Reviewed against the proposed change scope.",
     }
 
@@ -186,6 +188,8 @@ async def test_approval_rejects_stale_plan_hash() -> None:
             json={
                 "approved": True,
                 "plan_hash": "c" * 64,
+                "target_commit": "a" * 40,
+                "allowed_tools": [],
                 "reason": "This decision refers to an older plan.",
             },
             headers={"Authorization": "Bearer test-token"},
@@ -193,6 +197,93 @@ async def test_approval_rejects_stale_plan_hash() -> None:
 
     assert response.status_code == 409
     assert response.json() == {"detail": "task state conflict"}
+
+
+@pytest.mark.asyncio
+async def test_approval_rejects_mismatched_target_or_tool_scope() -> None:
+    repository = InMemoryTaskRepository()
+    waiting = (
+        _task_state()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .transition(TaskStatus.NEEDS_APPROVAL)
+        .model_copy(
+            update={
+                "plan_hash": "b" * 64,
+                "allowed_tools": (ToolPermission.REPO_READ, ToolPermission.GIT_WRITE),
+            }
+        )
+    )
+    await repository.create(waiting)
+    body = {
+        "approved": True,
+        "plan_hash": "b" * 64,
+        "target_commit": "c" * 40,
+        "allowed_tools": ["repo_read", "git_write"],
+        "reason": "Reviewed the complete envelope.",
+    }
+
+    async with client(repository) as api:
+        wrong_commit = await api.post(
+            f"/v1/tasks/{waiting.task_id}/approval",
+            json=body,
+            headers={"Authorization": "Bearer test-token"},
+        )
+        wrong_tools = await api.post(
+            f"/v1/tasks/{waiting.task_id}/approval",
+            json=body | {"target_commit": "a" * 40, "allowed_tools": ["repo_read"]},
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert wrong_commit.status_code == 409
+    assert wrong_tools.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_task_response_exposes_reviewable_approval_envelope() -> None:
+    repository = InMemoryTaskRepository()
+    waiting = (
+        _task_state()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .transition(TaskStatus.NEEDS_APPROVAL)
+        .model_copy(
+            update={
+                "plan": ({"description": "Update CI", "paths": [".github/workflows/ci.yml"]},),
+                "risk": RiskLevel.HIGH,
+                "risk_reasons": ("CI configuration: .github/workflows/ci.yml",),
+                "plan_hash": "b" * 64,
+                "declared_files": (".github/workflows/ci.yml",),
+                "allowed_tools": (ToolPermission.REPO_READ, ToolPermission.GIT_WRITE),
+                "verification_plan": ("pytest tests/test_ci.py",),
+                "evidence": (
+                    Evidence(source="bm25", locator="ci.py:1-8", summary="CI helper"),
+                ),
+            }
+        )
+    )
+    await repository.create(waiting)
+
+    async with client(repository) as api:
+        response = await api.get(
+            f"/v1/tasks/{waiting.task_id}",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["plan"] == [{"description": "Update CI", "paths": [".github/workflows/ci.yml"]}]
+    assert body["risk"] == "high"
+    assert body["risk_reasons"] == ["CI configuration: .github/workflows/ci.yml"]
+    assert body["plan_hash"] == "b" * 64
+    assert body["declared_files"] == [".github/workflows/ci.yml"]
+    assert body["allowed_tools"] == ["repo_read", "git_write"]
+    assert body["verification_plan"] == ["pytest tests/test_ci.py"]
+    assert body["evidence_summary"] == [
+        {"source": "bm25", "locator": "ci.py:1-8", "summary": "CI helper"}
+    ]
 
 
 def _task_state():

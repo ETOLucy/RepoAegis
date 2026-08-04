@@ -15,6 +15,7 @@ from repo_maintenance_agent.domain.models import (
     RiskLevel,
     SearchHit,
     TaskStatus,
+    ToolPermission,
     ToolResult,
     VerificationResult,
 )
@@ -57,6 +58,23 @@ class FakeModel:
                 base="main",
             )
         raise AssertionError(f"unexpected schema: {schema}")
+
+
+class LowRiskDependencyModel(FakeModel):
+    async def structured(self, *, system, input_text, schema):
+        if schema is PlanOutput:
+            return PlanOutput(
+                steps=[
+                    {
+                        "description": "Update dependency constraint",
+                        "paths": ["pyproject.toml"],
+                        "verification": "python -m pip check",
+                    }
+                ],
+                risk=RiskLevel.LOW,
+                risk_reasons=[],
+            )
+        return await super().structured(system=system, input_text=input_text, schema=schema)
 
 
 class RecordingGateway:
@@ -150,6 +168,28 @@ async def test_intake_research_and_planning_produce_evidence_backed_approval(
 
 
 @pytest.mark.asyncio
+async def test_planning_deterministically_elevates_dependency_changes(tmp_path: Path) -> None:
+    nodes = build_agent_nodes(
+        AgentRuntime(
+            model=LowRiskDependencyModel(),
+            artifacts=FileArtifactStore(tmp_path),
+            gateway=RecordingGateway(),
+        )
+    )
+    planning = task().transition(TaskStatus.INTAKE).transition(TaskStatus.RESEARCH)
+
+    result = await nodes.planning({"task": planning, "trace": []})
+    planned = result["task"]
+
+    assert planned.status is TaskStatus.NEEDS_APPROVAL
+    assert planned.risk is RiskLevel.HIGH
+    assert "dependency manifest: pyproject.toml" in planned.risk_reasons
+    assert planned.declared_files == ("pyproject.toml",)
+    assert planned.verification_plan == ("python -m pip check",)
+    assert ToolPermission.GIT_WRITE in planned.allowed_tools
+
+
+@pytest.mark.asyncio
 async def test_coding_resumes_from_api_approved_state(tmp_path: Path) -> None:
     gateway = RecordingGateway()
     nodes = build_agent_nodes(
@@ -172,6 +212,8 @@ async def test_coding_resumes_from_api_approved_state(tmp_path: Path) -> None:
                     approved=True,
                     approver="tenant-a",
                     plan_hash="b" * 64,
+                    target_commit="a" * 40,
+                    allowed_tools=(),
                     reason="Approved after reviewing the scoped plan.",
                 ),
             }
@@ -248,8 +290,11 @@ async def test_pr_node_commits_pushes_and_creates_draft_through_gateway(
                     approved=True,
                     approver="reviewer@example.invalid",
                     plan_hash="b" * 64,
+                    target_commit="a" * 40,
+                    allowed_tools=(ToolPermission.GIT_WRITE, ToolPermission.GITHUB_WRITE),
                     reason="Approved delivery scope.",
                 ),
+                "allowed_tools": (ToolPermission.GIT_WRITE, ToolPermission.GITHUB_WRITE),
             }
         )
     )

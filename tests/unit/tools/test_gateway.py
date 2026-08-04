@@ -5,6 +5,7 @@ import pytest
 from repo_maintenance_agent.domain.errors import AuthorizationDenied
 from repo_maintenance_agent.domain.models import (
     ApprovalDecision,
+    ApprovalEnvelope,
     RepoTaskState,
     TaskStatus,
     ToolCall,
@@ -25,6 +26,13 @@ class RecordingAdapter:
 
 
 def make_state(*, approved: bool = False) -> RepoTaskState:
+    envelope = ApprovalEnvelope(
+        plan=({"description": "Fix", "paths": ["src/app.py"]},),
+        target_commit="a" * 40,
+        allowed_tools=(ToolPermission.GITHUB_WRITE,),
+        declared_files=("src/app.py",),
+        verification_plan=("pytest",),
+    )
     state = RepoTaskState(
         task_id="task-1",
         tenant_id="tenant-a",
@@ -33,7 +41,11 @@ def make_state(*, approved: bool = False) -> RepoTaskState:
         base_branch="main",
         issue={"title": "Fix", "body": "Details"},
         status=TaskStatus.CODING,
-        plan_hash="b" * 64,
+        plan=envelope.plan,
+        plan_hash=envelope.digest(),
+        allowed_tools=envelope.allowed_tools,
+        declared_files=envelope.declared_files,
+        verification_plan=envelope.verification_plan,
     )
     if approved:
         state = state.model_copy(
@@ -41,7 +53,9 @@ def make_state(*, approved: bool = False) -> RepoTaskState:
                 "approval": ApprovalDecision(
                     approved=True,
                     approver="reviewer@example.invalid",
-                    plan_hash="b" * 64,
+                    plan_hash=envelope.digest(),
+                    target_commit="a" * 40,
+                    allowed_tools=envelope.allowed_tools,
                     reason="Approved",
                 )
             }
@@ -115,6 +129,31 @@ async def test_github_write_requires_matching_approval(tmp_path: Path) -> None:
     result = await gateway.execute(call, make_state(approved=True))
     assert result.success
     assert adapter.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_github_write_rejects_state_changed_after_approval(tmp_path: Path) -> None:
+    adapter = RecordingAdapter()
+    gateway = ToolGateway(
+        policy=PermissionPolicy(),
+        adapters={"create_draft_pr": adapter},
+        operation_log=InMemoryOperationLog(),
+        workspace_root=tmp_path,
+    )
+    call = make_call(
+        agent="pr",
+        name="create_draft_pr",
+        permission=ToolPermission.GITHUB_WRITE,
+        arguments={},
+    )
+    tampered = make_state(approved=True).model_copy(
+        update={"declared_files": ("src/app.py", "src/unreviewed.py")}
+    )
+
+    with pytest.raises(AuthorizationDenied, match="approval"):
+        await gateway.execute(call, tampered)
+
+    assert adapter.calls == 0
 
 
 @pytest.mark.asyncio

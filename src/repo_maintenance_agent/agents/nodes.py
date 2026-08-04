@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -17,6 +16,7 @@ from repo_maintenance_agent.agents.schemas import (
 from repo_maintenance_agent.domain.errors import ToolExecutionError
 from repo_maintenance_agent.domain.models import (
     ApprovalDecision,
+    ApprovalEnvelope,
     Evidence,
     RepoTaskState,
     SearchHit,
@@ -29,6 +29,7 @@ from repo_maintenance_agent.domain.models import (
 from repo_maintenance_agent.domain.ports import ArtifactStore
 from repo_maintenance_agent.graph.builder import AgentNodes
 from repo_maintenance_agent.graph.state import GraphState
+from repo_maintenance_agent.policies.risk import deterministic_risk, higher_risk
 
 
 class Gateway(Protocol):
@@ -116,13 +117,38 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             schema=PlanOutput,
         )
         plan = tuple(step.model_dump(mode="json") for step in output.steps)
-        plan_hash = hashlib.sha256(
-            json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
-        updated = task.transition(TaskStatus.PLANNING).model_copy(
-            update={"plan": plan, "plan_hash": plan_hash, "risk": output.risk}
+        declared_files = tuple(sorted({path for step in output.steps for path in step.paths}))
+        verification_plan = tuple(step.verification for step in output.steps)
+        allowed_tools = (
+            ToolPermission.REPO_READ,
+            ToolPermission.SANDBOX_WRITE,
+            ToolPermission.SANDBOX_EXECUTE,
+            ToolPermission.GIT_WRITE,
+            ToolPermission.GITHUB_READ,
+            ToolPermission.GITHUB_WRITE,
         )
-        if output.risk.value in {"high", "critical"}:
+        rule_risk, rule_reasons = deterministic_risk(declared_files, allowed_tools)
+        risk = higher_risk(output.risk, rule_risk)
+        risk_reasons = tuple(sorted(set(output.risk_reasons) | set(rule_reasons)))
+        envelope = ApprovalEnvelope(
+            plan=plan,
+            target_commit=task.commit_sha,
+            allowed_tools=allowed_tools,
+            declared_files=declared_files,
+            verification_plan=verification_plan,
+        )
+        updated = task.transition(TaskStatus.PLANNING).model_copy(
+            update={
+                "plan": plan,
+                "plan_hash": envelope.digest(),
+                "risk": risk,
+                "risk_reasons": risk_reasons,
+                "declared_files": envelope.declared_files,
+                "allowed_tools": envelope.allowed_tools,
+                "verification_plan": envelope.verification_plan,
+            }
+        )
+        if risk.value in {"high", "critical"}:
             updated = updated.transition(TaskStatus.NEEDS_APPROVAL)
         return {"task": updated, "trace": ["planning"]}
 
@@ -134,11 +160,20 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 "plan_hash": task.plan_hash,
                 "risk": task.risk.value,
                 "plan": task.plan,
+                "target_commit": task.commit_sha,
+                "allowed_tools": task.allowed_tools,
             }
         )
         if not isinstance(payload, dict):
             raise ValueError("approval response must be an object")
-        decision = ApprovalDecision.model_validate(payload | {"plan_hash": task.plan_hash})
+        decision = ApprovalDecision.model_validate(
+            payload
+            | {
+                "plan_hash": task.plan_hash,
+                "target_commit": task.commit_sha,
+                "allowed_tools": task.allowed_tools,
+            }
+        )
         target = TaskStatus.CODING if decision.approved else TaskStatus.FAILED
         updated = task.model_copy(update={"approval": decision}).transition(target)
         return {"task": updated, "trace": ["approval"]}

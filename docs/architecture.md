@@ -74,7 +74,7 @@ pending -> intake -> research -> planning
                                   v
                            needs_approval
                                   |
-                     plan-hash-bound decision
+                   approval-envelope decision
                                   v
 coding -> verifying -> reviewing -> delivering -> completed
    ^          |            |
@@ -82,7 +82,7 @@ coding -> verifying -> reviewing -> delivering -> completed
       bounded correction loop
 ```
 
-Each node consumes and returns `RepoTaskState`; it does not pass an unbounded chat transcript. Routing is deterministic and iteration-limited. A task approved through the API re-enters the graph at `coding`, which fixes the human-in-the-loop resume boundary without replaying intake or planning.
+Each node consumes and returns `RepoTaskState`; it does not pass an unbounded chat transcript. Routing is deterministic and iteration-limited. Planning constructs a canonical `ApprovalEnvelope` from the ordered plan, pinned target commit, sorted declared files, verification commands, and sorted tool scope. Its SHA-256 digest is the plan hash. Dependency manifests, CI configuration, authentication/security paths, migrations, sensitive configuration, and remote-write permissions deterministically raise risk; model risk can raise the result further but cannot lower it. A task approved through the API re-enters the graph at `coding`, which fixes the human-in-the-loop resume boundary without replaying intake or planning.
 
 ## Persistence and Queue Semantics
 
@@ -110,7 +110,7 @@ The Tool Gateway checks:
 
 1. task, tenant, repository, and commit identity
 2. agent role and requested permission
-3. plan-bound approval for GitHub writes
+3. a matching approval envelope for Git and GitHub writes; the gateway recomputes its digest before every remote side effect
 4. workspace containment for all path-like arguments
 5. idempotency replay before a write
 6. recursive output redaction before persistence
@@ -125,7 +125,7 @@ Agent outputs are strict Pydantic schemas. The OpenAI gateway uses structured Re
 
 ## API Boundary
 
-FastAPI provides create, read, cancel, and approval operations. Bearer authentication maps tokens to tenants, and repository lookup always includes the authenticated tenant. Cross-tenant IDs produce the same 404 as unknown IDs. Write schemas reject extra fields. Production disables docs and OpenAPI, validates Host headers, and returns generic conflict errors.
+FastAPI provides create, read, cancel, and approval operations. Task reads expose the plan, risk reasons, plan hash, evidence summaries, declared files, verification plan, and allowed tools. Approval requests echo the target commit and tool scope so optimistic validation rejects a decision made against stale review data. Bearer authentication maps tokens to tenants, and repository lookup always includes the authenticated tenant. Cross-tenant IDs produce the same 404 as unknown IDs. Write schemas reject extra fields. Production disables docs and OpenAPI, validates Host headers, and returns generic conflict errors.
 
 ## Observability and Evaluation
 

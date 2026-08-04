@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Self
@@ -67,10 +69,35 @@ class Evidence(StrictModel):
     content_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
+class ApprovalEnvelope(StrictModel):
+    plan: tuple[dict[str, Any], ...] = ()
+    target_commit: str = Field(pattern=r"^[a-f0-9]{40,64}$")
+    allowed_tools: tuple[ToolPermission, ...] = ()
+    declared_files: tuple[str, ...] = ()
+    verification_plan: tuple[str, ...] = ()
+
+    @field_validator("allowed_tools")
+    @classmethod
+    def normalize_tools(cls, value: tuple[ToolPermission, ...]) -> tuple[ToolPermission, ...]:
+        return tuple(sorted(set(value), key=str))
+
+    @field_validator("declared_files")
+    @classmethod
+    def normalize_files(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(sorted(set(value)))
+
+    def digest(self) -> str:
+        payload = self.model_dump(mode="json")
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(encoded).hexdigest()
+
+
 class ApprovalDecision(StrictModel):
     approved: bool
     approver: str = Field(min_length=3, max_length=320)
     plan_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    target_commit: str = Field(pattern=r"^[a-f0-9]{40,64}$")
+    allowed_tools: tuple[ToolPermission, ...]
     reason: str = Field(min_length=1, max_length=2_000)
     decided_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -160,6 +187,7 @@ class RepoTaskState(StrictModel):
     issue: IssueSpec
     status: TaskStatus = TaskStatus.PENDING
     risk: RiskLevel = RiskLevel.LOW
+    risk_reasons: tuple[str, ...] = ()
     iteration: int = Field(default=0, ge=0)
     max_iterations: int = Field(default=3, ge=1, le=10)
     version: int = Field(default=0, ge=0)
@@ -168,6 +196,9 @@ class RepoTaskState(StrictModel):
     evidence: tuple[Evidence, ...] = ()
     plan: tuple[dict[str, Any], ...] = ()
     plan_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    declared_files: tuple[str, ...] = ()
+    allowed_tools: tuple[ToolPermission, ...] = ()
+    verification_plan: tuple[str, ...] = ()
     approval: ApprovalDecision | None = None
     changed_files: tuple[str, ...] = ()
     patch_artifact_id: str | None = None

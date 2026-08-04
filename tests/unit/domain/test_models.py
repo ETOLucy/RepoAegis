@@ -6,9 +6,11 @@ from pydantic import ValidationError
 from repo_maintenance_agent.domain.errors import InvalidStateTransition
 from repo_maintenance_agent.domain.models import (
     ApprovalDecision,
+    ApprovalEnvelope,
     RepoTaskState,
     RiskLevel,
     TaskStatus,
+    ToolPermission,
 )
 
 
@@ -55,6 +57,8 @@ def test_approval_is_bound_to_plan_hash() -> None:
         approved=True,
         approver="reviewer@example.invalid",
         plan_hash="c" * 64,
+        target_commit="a" * 40,
+        allowed_tools=(ToolPermission.REPO_READ,),
         reason="Reviewed",
     )
 
@@ -64,5 +68,27 @@ def test_approval_is_bound_to_plan_hash() -> None:
             approved=True,
             approver="reviewer@example.invalid",
             plan_hash="short",
+            target_commit="a" * 40,
+            allowed_tools=(ToolPermission.REPO_READ,),
             reason="Reviewed",
         )
+
+
+def test_approval_envelope_hash_binds_every_reviewed_scope() -> None:
+    envelope = ApprovalEnvelope(
+        plan=({"description": "Update workflow", "paths": [".github/workflows/ci.yml"]},),
+        target_commit="a" * 40,
+        allowed_tools=(ToolPermission.REPO_READ, ToolPermission.SANDBOX_WRITE),
+        declared_files=(".github/workflows/ci.yml",),
+        verification_plan=("pytest tests/test_ci.py",),
+    )
+
+    digest = envelope.digest()
+
+    assert len(digest) == 64
+    assert envelope.model_copy(update={"target_commit": "b" * 40}).digest() != digest
+    assert envelope.model_copy(
+        update={"allowed_tools": (*envelope.allowed_tools, ToolPermission.GIT_WRITE)}
+    ).digest() != digest
+    assert envelope.model_copy(update={"declared_files": ("pyproject.toml",)}).digest() != digest
+    assert envelope.model_copy(update={"verification_plan": ("ruff check .",)}).digest() != digest

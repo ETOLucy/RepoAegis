@@ -124,6 +124,8 @@ async def test_sql_approval_state_change_requeues_parked_task_atomically() -> No
                 approved=True,
                 approver="tenant-a",
                 plan_hash="b" * 64,
+                target_commit="a" * 40,
+                allowed_tools=(),
                 reason="Reviewed and approved.",
             )
         }

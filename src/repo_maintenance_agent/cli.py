@@ -75,6 +75,8 @@ class ControlPlaneClient:
         *,
         approved: bool,
         plan_hash: str,
+        target_commit: str,
+        allowed_tools: list[str],
         reason: str,
     ) -> dict[str, Any]:
         return self._request(
@@ -83,6 +85,8 @@ class ControlPlaneClient:
             json={
                 "approved": approved,
                 "plan_hash": plan_hash,
+                "target_commit": target_commit,
+                "allowed_tools": allowed_tools,
                 "reason": reason,
             },
         )
@@ -180,11 +184,15 @@ def approve(
     reject: bool = typer.Option(False, help="Reject instead of approving."),
 ) -> None:
     """Approve or reject the active immutable plan."""
+    client = _control_plane_client()
+    task = client.status(task_id)
     _emit(
-        _control_plane_client().decide(
+        client.decide(
             task_id,
             approved=not reject,
             plan_hash=plan_hash,
+            target_commit=str(task["commit_sha"]),
+            allowed_tools=list(task["allowed_tools"]),
             reason=reason,
         )
     )
@@ -197,11 +205,15 @@ def resume(
     reason: str = typer.Option(..., help="Auditable resume reason."),
 ) -> None:
     """Approve the active plan and resume queued execution."""
+    client = _control_plane_client()
+    task = client.status(task_id)
     _emit(
-        _control_plane_client().decide(
+        client.decide(
             task_id,
             approved=True,
             plan_hash=plan_hash,
+            target_commit=str(task["commit_sha"]),
+            allowed_tools=list(task["allowed_tools"]),
             reason=reason,
         )
     )

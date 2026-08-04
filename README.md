@@ -30,7 +30,7 @@ can affect production repositories. A useful system therefore needs more than an
 
 - immutable task scope: tenant, repository, and commit
 - deny-by-default tools with stage-aware permissions
-- plan-bound human approval for remote writes
+- approval-envelope-bound human approval for remote writes
 - isolated execution with bounded resources and network policy
 - durable concurrency control and replay-safe side effects
 - evaluation that distinguishes correctness, safety, retrieval, and cost
@@ -69,7 +69,7 @@ executes only in assigned workspaces or language-specific Docker sandboxes.
 | Concurrency | Atomic enqueue, optimistic versions, leased claims, rotating fencing IDs |
 | Retrieval | Lexical and semantic adapters with deterministic reciprocal-rank fusion |
 | Tool use | Tenant/repository/commit scope plus role and stage authorization |
-| Remote writes | Human decision bound to the current SHA-256 plan hash |
+| Remote writes | Human decision bound to the plan, target commit, declared files, verification commands, and exact tool scope |
 | Patch safety | Declared-file enforcement and `git apply --check` preflight |
 | Commands | Argument arrays, executable allowlist, timeout, output limit, sanitized environment |
 | Sandbox | Digest-pinned image, non-root user, read-only root, dropped capabilities, offline checks |
@@ -154,8 +154,10 @@ repo-agent resume TASK_ID PLAN_HASH --reason "Approved for sandbox execution"
 repo-agent cancel TASK_ID
 ```
 
-`approve --reject` records a rejection. Positive approval applies only to the exact current plan
-hash; a changed plan requires a new decision.
+`status` returns the reviewable plan, deterministic risk and reasons, plan hash, evidence summaries,
+declared files, verification plan, and allowed tools. `approve` reads that envelope and submits its
+target commit and tool scope with the decision. The API rejects stale hashes, commits, or tool sets;
+any changed envelope requires a new decision. `approve --reject` records a rejection.
 
 ## API Surface
 
@@ -168,6 +170,9 @@ GET  /v1/tasks/{task_id}
 POST /v1/tasks/{task_id}/approval
 POST /v1/tasks/{task_id}/cancel
 ```
+
+Task responses deliberately omit tenant identity and full retrieved content. Evidence summaries
+contain only source, locator, and bounded summary fields needed for review.
 
 Authenticated evaluation routes:
 

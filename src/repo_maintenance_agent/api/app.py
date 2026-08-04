@@ -167,12 +167,19 @@ def create_app(
         principal: Principal = principal_marker,
     ) -> TaskResponse:
         task = await repository.get(principal.tenant_id, task_id)
-        if task.status is not TaskStatus.NEEDS_APPROVAL or task.plan_hash != body.plan_hash:
+        if (
+            task.status is not TaskStatus.NEEDS_APPROVAL
+            or task.plan_hash != body.plan_hash
+            or task.commit_sha != body.target_commit
+            or task.allowed_tools != body.allowed_tools
+        ):
             raise ConcurrentUpdate("approval does not match the active plan")
         decision = ApprovalDecision(
             approved=body.approved,
             approver=principal.subject,
             plan_hash=body.plan_hash,
+            target_commit=body.target_commit,
+            allowed_tools=body.allowed_tools,
             reason=body.reason,
         )
         target = TaskStatus.CODING if body.approved else TaskStatus.FAILED
