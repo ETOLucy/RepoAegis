@@ -14,22 +14,22 @@ SQL engine, task repository, task queue, evaluation repository, and task executo
 side-effect free until the factory is called; the factory creates required storage and validates
 that model-backed graph execution has the dependencies it needs.
 
-The API receives the task repository and queue as separate ports. `POST /v1/tasks` persists the task
-and enqueues the same task identity idempotently. The worker process receives the same repository
-and queue plus a `TaskExecutor`, so it can claim work and advance the real graph without sharing an
-in-process lifecycle with FastAPI.
+The API receives the task repository. The SQL repository keeps its existing atomic task-plus-queue
+insert, while the composition root guarantees that the worker queue uses the same engine. The
+worker process receives that repository and queue plus a `TaskExecutor`, so it can claim work and
+advance the real graph without sharing an in-process lifecycle with FastAPI.
 
 ## Data Flow And Recovery
 
-1. The API creates a version-zero task in the repository.
-2. The API enqueues its tenant and task identity. Duplicate enqueue requests remain idempotent.
+1. The API asks the SQL repository to create a version-zero task.
+2. The repository inserts the task and queue row in one transaction.
 3. A worker claims the row using the existing fenced lease contract.
 4. The executor invokes the graph and the worker persists the returned state.
 5. The current save-then-ack boundary remains explicitly partial until the following transaction
    increment adds atomic completion or replay-safe reconciliation.
 
-If enqueue fails after task creation, the request fails and a reconciliation test in the recovery
-increment will guarantee repair. This increment does not claim atomic creation plus enqueue.
+Task creation and initial enqueue are atomic. The later recovery increment still owns atomic or
+replay-safe worker completion because state save and queue acknowledgement are currently separate.
 
 ## Deployment
 
@@ -42,7 +42,7 @@ container termination.
 
 TDD proceeds from observable boundaries:
 
-- an API integration test must fail until task creation also produces a claimable queue row;
+- an API/runtime integration test must fail until the API repository and worker queue share storage;
 - a runtime-factory test must fail until API and worker share compatible SQL components;
 - a worker-service test must fail until one claimed task reaches the executor and persists its next
   graph state;

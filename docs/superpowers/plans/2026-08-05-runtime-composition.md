@@ -18,38 +18,37 @@
 
 ---
 
-### Task 1: API Queue Boundary
-
-**Files:**
-- Modify: `src/repo_maintenance_agent/api/app.py`
-- Modify: `src/repo_maintenance_agent/domain/ports.py`
-- Test: `tests/integration/api/test_tasks.py`
-
-**Interfaces:**
-- Consumes: existing `TaskRepository.create` and queue task identity.
-- Produces: `TaskSubmissionQueue.enqueue(tenant_id: str, task_id: str) -> None` and a claimable row after `POST /v1/tasks`.
-
-- [ ] Write an integration test that posts a task and claims its exact ID from a real in-memory queue.
-- [ ] Run the focused test and confirm it fails because `create_app` has no submission queue.
-- [ ] Add the narrow queue port and enqueue immediately after repository creation.
-- [ ] Run the focused test and existing API task tests.
-
-### Task 2: Shared Runtime Composition
+### Task 1: Shared Runtime Composition
 
 **Files:**
 - Create: `src/repo_maintenance_agent/runtime.py`
 - Modify: `src/repo_maintenance_agent/main.py`
-- Test: `tests/unit/test_runtime.py`
+- Test: `tests/integration/test_runtime.py`
 - Test: `tests/unit/test_main.py`
 
 **Interfaces:**
-- Consumes: `Settings`, SQL engine, `SqlTaskRepository`, `SqlTaskQueue`, `SqlEvaluationRepository`, `TaskExecutor`.
-- Produces: immutable `RuntimeComponents` and `build_runtime(settings, executor_factory=...)`.
+- Consumes: `Settings`, SQL engine, `SqlTaskRepository`, `SqlTaskQueue`, and `SqlEvaluationRepository`.
+- Produces: immutable `RuntimeComponents` whose repository and queue share one engine.
 
-- [ ] Write a test that constructs SQLite components and proves API submission is claimable by the returned queue.
-- [ ] Run it and confirm the missing runtime module failure.
-- [ ] Implement the minimal immutable component factory and route `build_application` through it.
-- [ ] Run runtime and application factory tests.
+- [ ] Write an integration test that posts a task through the runtime API and claims its exact ID from the runtime SQL queue.
+- [ ] Run the focused test and confirm it fails because the shared runtime factory is missing.
+- [ ] Implement the immutable component factory and route `build_application` through it.
+- [ ] Run the focused integration test and application factory tests.
+
+### Task 2: Graph Executor Assembly
+
+**Files:**
+- Modify: `src/repo_maintenance_agent/runtime.py`
+- Test: `tests/unit/test_runtime.py`
+
+**Interfaces:**
+- Consumes: existing agent nodes, graph builder, and `LangGraphExecutor`.
+- Produces: a validated executor factory boundary used by the worker service.
+
+- [ ] Write a test that injects a deterministic executor and proves the runtime exposes it unchanged.
+- [ ] Run it and confirm the factory has no executor boundary.
+- [ ] Add the minimal executor factory dependency without constructing model infrastructure at import time.
+- [ ] Run runtime tests.
 
 ### Task 3: Worker Service Entry Point
 
