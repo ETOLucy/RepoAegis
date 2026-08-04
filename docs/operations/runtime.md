@@ -37,6 +37,11 @@ repository only when its `repo_id` is in the operator registry, materializes the
 under a hashed tenant/task directory, and creates a deterministic task branch. The integration test
 executes these Git operations through `ToolGateway`; it does not contact an external service.
 
+`WorkspaceGraphExecutor` connects this control tool to the existing LangGraph executor. Current
+runtime evidence uses deterministic graph nodes to prove materialize-before-execute ordering and
+state completion. It is not model-quality evidence and does not yet establish production node
+assembly.
+
 ## Current Failure Boundary
 
 Initial creation and queue insertion are atomic. Worker completion is not yet atomic: the existing

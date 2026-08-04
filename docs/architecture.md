@@ -37,6 +37,11 @@ through an administrator-owned locator registry, clones into tenant/task hashed 
 declared immutable commit, and creates a task-specific branch. Its result contains only a relative
 workspace identifier and branch; repository locator details do not cross the tool boundary.
 
+`WorkspaceGraphExecutor` is the queue-to-graph adapter. It materializes through `ToolGateway`,
+validates the returned relative path against the configured root, constructs a graph scoped to that
+workspace, and delegates state execution to `LangGraphExecutor`. Production agent-node assembly
+remains gated on removing direct patch and verifier calls from `AgentRuntime`.
+
 ## Agent Graph
 
 ```text
