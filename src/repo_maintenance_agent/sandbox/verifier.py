@@ -31,6 +31,9 @@ class SandboxVerifier:
         self._redactor = redactor or Redactor()
 
     async def verify(self, task: RepoTaskState) -> VerificationResult:
+        return await self.verify_task(task.task_id)
+
+    async def verify_task(self, task_id: str) -> VerificationResult:
         profile = self._profiler.inspect(self._workspace)
         image = self._image_digests.get(profile.image_key)
         if image is None:
@@ -45,7 +48,7 @@ class SandboxVerifier:
             try:
                 result = await self._sandbox.execute(
                     SandboxSpec(
-                        task_id=task.task_id,
+                        task_id=task_id,
                         workspace=self._workspace,
                         image=image,
                         command=command,
@@ -73,7 +76,7 @@ class SandboxVerifier:
             try:
                 result = await self._sandbox.execute(
                     SandboxSpec(
-                        task_id=task.task_id,
+                        task_id=task_id,
                         workspace=self._workspace,
                         image=image,
                         command=command,

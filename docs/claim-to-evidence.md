@@ -35,7 +35,7 @@ point, not product completion.
 
 | Claim | Implementation | Automated test | Runtime evidence | Status / gap |
 |---|---|---|---|---|
-| Every side effect crosses one ToolGateway | `ToolGateway` and permission policy exist | gateway/policy tests | none | **Missing** in AgentRuntime: coding calls patch applier directly and verification calls verifier directly |
+| Search, patch application, and verification cross ToolGateway | `AgentRuntime` holds one gateway; `SearchAdapter`, `PatchArtifactAdapter`, and `VerificationAdapter` implement scoped tools | `tests/unit/agents/test_nodes.py`, `tests/unit/tools/test_agent_actions.py`, gateway/policy tests | focused adapter and node evidence | **Partial**: these node paths are proven; artifact persistence, Git delivery, production assembly, and durable operation log remain |
 | Idempotency survives process restart | `InMemoryOperationLog` caches successful writes | gateway replay tests | none | **Missing** durable operation log |
 | Queue leases fence stale workers | SQL queue rotates lease IDs and fences ack/nack | queue and SQL tests | database integration evidence | **Proven** at queue boundary |
 | Crash between repository save and queue ack recovers safely | worker saves, then separately acks | worker tests cover retry basics | none | **Missing** atomic completion/outbox or resumable terminal-state semantics |

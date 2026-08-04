@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Protocol
 
 from langgraph.types import interrupt
@@ -15,41 +14,32 @@ from repo_maintenance_agent.agents.schemas import (
     ReviewOutput,
     TaskSpecOutput,
 )
+from repo_maintenance_agent.domain.errors import ToolExecutionError
 from repo_maintenance_agent.domain.models import (
     ApprovalDecision,
     Evidence,
     RepoTaskState,
-    SearchQuery,
+    SearchHit,
     TaskStatus,
+    ToolCall,
+    ToolPermission,
+    ToolResult,
     VerificationResult,
 )
-from repo_maintenance_agent.domain.ports import ArtifactStore, SearchPort
+from repo_maintenance_agent.domain.ports import ArtifactStore
 from repo_maintenance_agent.graph.builder import AgentNodes
 from repo_maintenance_agent.graph.state import GraphState
 
 
-class Verifier(Protocol):
-    async def verify(self, task: RepoTaskState) -> VerificationResult: ...
-
-
-class PatchApplier(Protocol):
-    async def apply(
-        self,
-        *,
-        workspace: Path,
-        patch: bytes,
-        declared_files: tuple[str, ...],
-    ) -> tuple[str, ...]: ...
+class Gateway(Protocol):
+    async def execute(self, call: ToolCall, state: RepoTaskState) -> ToolResult: ...
 
 
 @dataclass(frozen=True, slots=True)
 class AgentRuntime:
     model: Any
-    search: SearchPort
     artifacts: ArtifactStore
-    verifier: Verifier
-    workspace: Path
-    patch_applier: PatchApplier
+    gateway: Gateway
 
 
 def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
@@ -70,13 +60,24 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
 
     async def research(state: GraphState) -> dict[str, Any]:
         task = state["task"]
-        query = SearchQuery(
-            tenant_id=task.tenant_id,
-            repo_id=task.repo_id,
-            commit_sha=task.commit_sha,
-            text=f"{task.issue.title}\n{task.issue.body}",
+        result = await runtime.gateway.execute(
+            ToolCall(
+                task_id=task.task_id,
+                tenant_id=task.tenant_id,
+                repo_id=task.repo_id,
+                commit_sha=task.commit_sha,
+                agent="research",
+                name="search_code",
+                permission=ToolPermission.REPO_READ,
+                arguments={
+                    "text": f"{task.issue.title}\n{task.issue.body}",
+                    "allowed_paths": [],
+                    "top_k": 15,
+                },
+            ),
+            task,
         )
-        hits = await runtime.search.search(query)
+        hits = _search_hits(result)
         evidence = tuple(
             Evidence(
                 source=hit.source,
@@ -169,11 +170,24 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             patch,
             "text/x-diff",
         )
-        changed_files = await runtime.patch_applier.apply(
-            workspace=runtime.workspace,
-            patch=patch,
-            declared_files=tuple(output.changed_files),
+        tool_result = await runtime.gateway.execute(
+            ToolCall(
+                task_id=task.task_id,
+                tenant_id=task.tenant_id,
+                repo_id=task.repo_id,
+                commit_sha=task.commit_sha,
+                agent="coding",
+                name="apply_patch",
+                permission=ToolPermission.SANDBOX_WRITE,
+                arguments={
+                    "artifact_id": artifact_id,
+                    "files": list(output.changed_files),
+                },
+                idempotency_key=f"patch:{task.iteration + 1}:{artifact_id}",
+            ),
+            task,
         )
+        changed_files = _changed_files(tool_result)
         coding_task = (
             task if task.status is TaskStatus.CODING else task.transition(TaskStatus.CODING)
         )
@@ -188,7 +202,22 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
 
     async def verification(state: GraphState) -> dict[str, Any]:
         task = state["task"]
-        result = await runtime.verifier.verify(task)
+        tool_result = await runtime.gateway.execute(
+            ToolCall(
+                task_id=task.task_id,
+                tenant_id=task.tenant_id,
+                repo_id=task.repo_id,
+                commit_sha=task.commit_sha,
+                agent="verification",
+                name="run_verification",
+                permission=ToolPermission.SANDBOX_EXECUTE,
+                idempotency_key=f"verification:{task.iteration}",
+            ),
+            task,
+        )
+        if not tool_result.success:
+            raise ToolExecutionError("verification tool failed")
+        result = VerificationResult.model_validate(tool_result.output.get("verification"))
         updated = task.transition(TaskStatus.VERIFYING).model_copy(
             update={"verification": result}
         )
@@ -262,3 +291,21 @@ def _hit_locator(path: str, line_start: int | None, line_end: int | None) -> str
     if line_start is None:
         return path
     return f"{path}:{line_start}-{line_end or line_start}"
+
+
+def _changed_files(result: ToolResult) -> tuple[str, ...]:
+    if not result.success:
+        raise ToolExecutionError("patch tool failed")
+    raw = result.output.get("changed_files")
+    if not isinstance(raw, list) or not raw or any(not isinstance(path, str) for path in raw):
+        raise ToolExecutionError("patch tool returned invalid changed files")
+    return tuple(raw)
+
+
+def _search_hits(result: ToolResult) -> list[SearchHit]:
+    if not result.success:
+        raise ToolExecutionError("search tool failed")
+    raw = result.output.get("hits")
+    if not isinstance(raw, list):
+        raise ToolExecutionError("search tool returned invalid hits")
+    return [SearchHit.model_validate(hit) for hit in raw]

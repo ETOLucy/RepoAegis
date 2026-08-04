@@ -42,6 +42,11 @@ runtime evidence uses deterministic graph nodes to prove materialize-before-exec
 state completion. It is not model-quality evidence and does not yet establish production node
 assembly.
 
+Within agent nodes, research, patch application, and verification are expressed as scoped gateway
+calls. Patch content moves by artifact identifier rather than as a tool argument. This is a verified
+authorization boundary, but the file artifact metadata and operation log are still process-local and
+must become durable before recovery claims are valid.
+
 ## Current Failure Boundary
 
 Initial creation and queue insertion are atomic. Worker completion is not yet atomic: the existing

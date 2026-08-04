@@ -42,6 +42,11 @@ validates the returned relative path against the configured root, constructs a g
 workspace, and delegates state execution to `LangGraphExecutor`. Production agent-node assembly
 remains gated on removing direct patch and verifier calls from `AgentRuntime`.
 
+Agent research, patch application, and verification now use scoped `ToolCall` records. Search scope
+is reconstructed from the call's bound tenant/repository/commit, patch bytes are retrieved by
+artifact ID inside the adapter, and verification returns a validated structured result. Agent nodes
+no longer hold direct search, patch-applier, verifier, or workspace references.
+
 ## Agent Graph
 
 ```text

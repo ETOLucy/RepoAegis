@@ -10,6 +10,8 @@ from repo_maintenance_agent.domain.models import (
     RiskLevel,
     SearchHit,
     TaskStatus,
+    ToolResult,
+    VerificationResult,
 )
 from repo_maintenance_agent.storage.artifacts import FileArtifactStore
 
@@ -45,10 +47,14 @@ class FakeModel:
         raise AssertionError(f"unexpected schema: {schema}")
 
 
-class FakeSearch:
-    async def search(self, query):
-        return [
-            SearchHit(
+class RecordingGateway:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def execute(self, call, state):
+        self.calls.append((call, state))
+        if call.name == "search_code":
+            hit = SearchHit(
                 hit_id="hit-1",
                 path="src/config.py",
                 content="def load_config(): ...",
@@ -57,21 +63,30 @@ class FakeSearch:
                 line_start=10,
                 line_end=20,
             )
-        ]
-
-
-class UnusedVerifier:
-    async def verify(self, task):
-        raise AssertionError("verification was not expected")
-
-
-class FakePatchApplier:
-    def __init__(self) -> None:
-        self.calls: list[tuple[Path, bytes, tuple[str, ...]]] = []
-
-    async def apply(self, *, workspace, patch, declared_files):
-        self.calls.append((workspace, patch, declared_files))
-        return declared_files
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={"hits": [hit.model_dump(mode="json")]},
+            )
+        if call.name == "apply_patch":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={"changed_files": call.arguments["files"]},
+            )
+        if call.name == "run_verification":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={
+                    "verification": VerificationResult(
+                        passed=True,
+                        commands=("pytest",),
+                        summary="checks passed",
+                    ).model_dump(mode="json")
+                },
+            )
+        raise AssertionError(f"unexpected tool call: {call.name}")
 
 
 def task() -> RepoTaskState:
@@ -91,11 +106,8 @@ async def test_intake_research_and_planning_produce_evidence_backed_approval(
     nodes = build_agent_nodes(
         AgentRuntime(
             model=FakeModel(),
-            search=FakeSearch(),
             artifacts=FileArtifactStore(tmp_path),
-            verifier=UnusedVerifier(),
-            workspace=tmp_path,
-            patch_applier=FakePatchApplier(),
+            gateway=RecordingGateway(),
         )
     )
     after_intake = await nodes.intake({"task": task(), "trace": []})
@@ -113,15 +125,12 @@ async def test_intake_research_and_planning_produce_evidence_backed_approval(
 
 @pytest.mark.asyncio
 async def test_coding_resumes_from_api_approved_state(tmp_path: Path) -> None:
-    patch_applier = FakePatchApplier()
+    gateway = RecordingGateway()
     nodes = build_agent_nodes(
         AgentRuntime(
             model=FakeModel(),
-            search=FakeSearch(),
             artifacts=FileArtifactStore(tmp_path),
-            verifier=UnusedVerifier(),
-            workspace=tmp_path,
-            patch_applier=patch_applier,
+            gateway=gateway,
         )
     )
     approved = (
@@ -149,5 +158,36 @@ async def test_coding_resumes_from_api_approved_state(tmp_path: Path) -> None:
     assert result["task"].status is TaskStatus.CODING
     assert result["task"].iteration == 1
     assert result["task"].patch_artifact_id is not None
-    assert patch_applier.calls[0][0] == tmp_path
-    assert patch_applier.calls[0][2] == ("src/config.py",)
+    call = gateway.calls[0][0]
+    assert call.name == "apply_patch"
+    assert call.arguments["files"] == ["src/config.py"]
+    assert call.arguments["artifact_id"] == result["task"].patch_artifact_id
+    assert call.idempotency_key is not None
+
+
+@pytest.mark.asyncio
+async def test_verification_runs_through_gateway(tmp_path: Path) -> None:
+    gateway = RecordingGateway()
+    nodes = build_agent_nodes(
+        AgentRuntime(
+            model=FakeModel(),
+            artifacts=FileArtifactStore(tmp_path),
+            gateway=gateway,
+        )
+    )
+    coding = (
+        task()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .transition(TaskStatus.CODING)
+        .model_copy(update={"iteration": 1})
+    )
+
+    result = await nodes.verification({"task": coding, "trace": []})
+
+    assert result["task"].verification is not None
+    assert result["task"].verification.passed
+    call = gateway.calls[0][0]
+    assert call.name == "run_verification"
+    assert call.idempotency_key == "verification:1"
