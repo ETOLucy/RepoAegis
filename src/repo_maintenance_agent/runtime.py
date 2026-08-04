@@ -12,7 +12,7 @@ from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.evaluation.storage import SqlEvaluationRepository
 from repo_maintenance_agent.policies.permissions import PermissionPolicy
 from repo_maintenance_agent.runtime_executor import WorkspaceGraphExecutor
-from repo_maintenance_agent.storage.artifacts import FileArtifactStore
+from repo_maintenance_agent.storage.artifacts import SqlFileArtifactStore
 from repo_maintenance_agent.storage.sql import (
     Base,
     SqlOperationLog,
@@ -34,7 +34,7 @@ class RuntimeComponents:
     evaluations: SqlEvaluationRepository
     operations: SqlOperationLog
     completion: SqlTaskCompletion
-    artifacts: FileArtifactStore
+    artifacts: SqlFileArtifactStore
     executor: TaskExecutor | None
 
 
@@ -48,7 +48,7 @@ def build_runtime(
     engine = create_engine(database_url, pool_pre_ping=True)
     Base.metadata.create_all(engine)
     Path(settings.artifact_root).mkdir(parents=True, exist_ok=True)
-    artifacts = FileArtifactStore(Path(settings.artifact_root))
+    artifacts = SqlFileArtifactStore(engine, Path(settings.artifact_root))
     return RuntimeComponents(
         engine=engine,
         tasks=SqlTaskRepository(engine),

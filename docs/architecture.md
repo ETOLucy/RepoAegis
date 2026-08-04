@@ -56,6 +56,10 @@ Worker completion uses `SqlTaskCompletion`: task state advances under optimistic
 the active queue lease is consumed in the same transaction. The lease ID and expiry are both checked,
 so a stale or expired worker rolls back the state update instead of completing late.
 
+Artifacts use content-addressed filesystem paths with SQL metadata. Tenant and task identifiers are
+hashed for storage paths; reads re-check tenant scope and content SHA-256. Reconstructing the store
+against the same database and artifact volume preserves artifact lookup across worker restarts.
+
 ## Agent Graph
 
 ```text

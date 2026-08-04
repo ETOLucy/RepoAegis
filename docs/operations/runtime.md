@@ -57,6 +57,7 @@ restricted container execution service without receiving the host Docker socket.
 
 Initial creation and queue insertion are atomic. Worker state persistence and lease consumption are
 also one SQL transaction, fenced by task version, lease ID, and lease expiry. This removes the
-save-before-ack crash window. RepoAegis still makes no end-to-end exactly-once claim because artifact
-metadata and commit/push/PR delivery are incomplete. The injected executor test is composition
-evidence, not proof of model execution.
+save-before-ack crash window. Artifact bytes and metadata survive store reconstruction and are
+content-hash checked. RepoAegis still makes no end-to-end exactly-once claim because commit/push/PR
+delivery is incomplete. The injected executor test is composition evidence, not proof of model
+execution.

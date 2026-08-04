@@ -67,7 +67,23 @@ class OperationRow(Base):
 
     operation_key: Mapped[str] = mapped_column(String(512), primary_key=True)
     result_json: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class ArtifactRow(Base):
+    __tablename__ = "repo_agent_artifacts"
+
+    artifact_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
+    task_id: Mapped[str] = mapped_column(String(64), index=True)
+    relative_path: Mapped[str] = mapped_column(String(512))
+    media_type: Mapped[str] = mapped_column(String(255))
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 class SqlTaskRepository:

@@ -6,7 +6,7 @@ from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.domain.models import RepoTaskState
 from repo_maintenance_agent.runtime import build_runtime, build_worker_runtime
 from repo_maintenance_agent.runtime_executor import WorkspaceGraphExecutor
-from repo_maintenance_agent.storage.artifacts import FileArtifactStore
+from repo_maintenance_agent.storage.artifacts import SqlFileArtifactStore
 from repo_maintenance_agent.storage.sql import SqlOperationLog
 
 
@@ -49,4 +49,4 @@ def test_worker_runtime_assembles_workspace_executor_without_model_call(
     runtime = build_worker_runtime(settings, graph_factory=lambda workspace: object())
 
     assert isinstance(runtime.executor, WorkspaceGraphExecutor)
-    assert isinstance(runtime.artifacts, FileArtifactStore)
+    assert isinstance(runtime.artifacts, SqlFileArtifactStore)

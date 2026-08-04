@@ -54,7 +54,7 @@ point, not product completion.
 | Search enforces tenant/repository/commit/path scope | OpenSearch query injects filters; local adapter constrains paths | adapter tests | query-construction evidence | **Partial**: no production ingestion/service assembly |
 | Untrusted verification runs in a hardened container | `DockerSandbox`, `SandboxVerifier`, Python profile | sandbox command/profile tests | no current Docker execution evidence | **Partial**: only Python image configured; setup network policy and production wiring need verification |
 | Compose starts the complete runtime | Compose currently starts API, PostgreSQL, and OpenSearch | compose syntax not yet gated | none | **Target invariant**: worker and restricted sandbox-runner services remain |
-| Artifact metadata survives restart | file bytes persist; metadata is an in-memory dictionary | storage tests | none | **Missing** durable artifact metadata |
+| Artifact bytes and metadata survive store reconstruction | `SqlFileArtifactStore` uses content-addressed files and tenant-scoped SQL metadata | `tests/integration/storage/test_artifacts_sql.py`, artifact adapter tests | reconstructed store retrieves and hash-checks original bytes | **Verified** storage boundary |
 | Evaluation executes the real Agent Graph against hidden tests | `EvaluationHarness` accepts a `CaseExecutor` | harness tests | deterministic example report | **Missing** live graph executor and hidden oracle integration |
 | Checked-in evaluation observations prove agent quality | `ObservationExecutor` and example observations | deterministic evaluation tests | example JSON/Markdown | **Fixture only**; never valid as model-quality evidence |
 

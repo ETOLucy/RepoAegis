@@ -6,6 +6,7 @@ from typing import Any
 
 from repo_maintenance_agent.agents.nodes import AgentRuntime, build_agent_nodes
 from repo_maintenance_agent.config import Settings
+from repo_maintenance_agent.domain.ports import ArtifactStore
 from repo_maintenance_agent.graph.builder import build_graph
 from repo_maintenance_agent.models.openai_gateway import OpenAIModelGateway
 from repo_maintenance_agent.policies.permissions import PermissionPolicy
@@ -13,7 +14,6 @@ from repo_maintenance_agent.sandbox.docker import DockerSandbox
 from repo_maintenance_agent.sandbox.profiles import EnvironmentProfiler
 from repo_maintenance_agent.sandbox.verifier import SandboxVerifier
 from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
-from repo_maintenance_agent.storage.artifacts import FileArtifactStore
 from repo_maintenance_agent.tools.agent_actions import (
     PatchArtifactAdapter,
     SearchAdapter,
@@ -27,7 +27,7 @@ from repo_maintenance_agent.tools.process import ProcessRunner
 @dataclass(frozen=True, slots=True)
 class ProductionGraphFactory:
     settings: Settings
-    artifacts: FileArtifactStore
+    artifacts: ArtifactStore
     operations: OperationLog
 
     def __call__(self, workspace: Path) -> Any:
