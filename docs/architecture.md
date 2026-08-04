@@ -60,6 +60,11 @@ Artifacts use content-addressed filesystem paths with SQL metadata. Tenant and t
 hashed for storage paths; reads re-check tenant scope and content SHA-256. Reconstructing the store
 against the same database and artifact volume preserves artifact lookup across worker restarts.
 
+Delivery is a three-receipt gateway sequence: allowlisted-file commit, non-force push of the current
+task branch, then Draft PR creation. Git writes use an approval-gated `GIT_WRITE` permission. Without
+GitHub credentials the final adapter stores a durable local draft record for fake-remote demos and
+does not return a URL; with credentials the production factory selects `GitHubCliAdapter`.
+
 ## Agent Graph
 
 ```text

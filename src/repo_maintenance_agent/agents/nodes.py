@@ -264,8 +264,69 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             ),
             schema=PullRequestDraft,
         )
+        branch = task.repo_profile.get("workspace_branch")
+        if (
+            not isinstance(branch, str)
+            or output.head != branch
+            or output.base != task.base_branch
+        ):
+            raise ToolExecutionError("pull request branches do not match the task workspace")
+        commit = await runtime.gateway.execute(
+            ToolCall(
+                task_id=task.task_id,
+                tenant_id=task.tenant_id,
+                repo_id=task.repo_id,
+                commit_sha=task.commit_sha,
+                agent="pr",
+                name="git_commit",
+                permission=ToolPermission.GIT_WRITE,
+                arguments={"files": list(task.changed_files), "message": output.title},
+                idempotency_key=f"commit:{task.plan_hash}:{task.iteration}",
+            ),
+            task,
+        )
+        commit_sha = _commit_sha(commit)
+        pushed = await runtime.gateway.execute(
+            ToolCall(
+                task_id=task.task_id,
+                tenant_id=task.tenant_id,
+                repo_id=task.repo_id,
+                commit_sha=task.commit_sha,
+                agent="pr",
+                name="git_push",
+                permission=ToolPermission.GIT_WRITE,
+                arguments={"branch": branch, "remote": "origin"},
+                idempotency_key=f"push:{commit_sha}:{branch}",
+            ),
+            task,
+        )
+        _require_success(pushed, "git push")
+        draft = await runtime.gateway.execute(
+            ToolCall(
+                task_id=task.task_id,
+                tenant_id=task.tenant_id,
+                repo_id=task.repo_id,
+                commit_sha=task.commit_sha,
+                agent="pr",
+                name="create_draft_pr",
+                permission=ToolPermission.GITHUB_WRITE,
+                arguments={
+                    "title": output.title,
+                    "body": output.body,
+                    "head": branch,
+                    "base": task.base_branch,
+                },
+                idempotency_key=f"draft-pr:{commit_sha}:{branch}:{task.base_branch}",
+            ),
+            task,
+        )
+        _require_success(draft, "draft pull request")
         updated = task.transition(TaskStatus.DELIVERING).model_copy(
-            update={"pr_draft": output.model_dump(mode="json")}
+            update={
+                "pr_draft": output.model_dump(mode="json")
+                | draft.output
+                | {"commit_sha": commit_sha}
+            }
         )
         return {"task": updated, "trace": ["pr"]}
 
@@ -309,3 +370,16 @@ def _search_hits(result: ToolResult) -> list[SearchHit]:
     if not isinstance(raw, list):
         raise ToolExecutionError("search tool returned invalid hits")
     return [SearchHit.model_validate(hit) for hit in raw]
+
+
+def _require_success(result: ToolResult, operation: str) -> None:
+    if not result.success:
+        raise ToolExecutionError(f"{operation} tool failed")
+
+
+def _commit_sha(result: ToolResult) -> str:
+    _require_success(result, "git commit")
+    value = result.output.get("commit_sha")
+    if not isinstance(value, str) or len(value) not in {40, 64}:
+        raise ToolExecutionError("git commit returned an invalid commit SHA")
+    return value

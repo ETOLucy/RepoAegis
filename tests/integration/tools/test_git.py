@@ -70,3 +70,70 @@ async def test_git_adapter_rejects_unregistered_subcommand(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="unsupported git tool"):
         await adapter.execute(call, tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_git_adapter_commits_allowlisted_files_and_pushes_branch(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    initial = initialize_repository(workspace)
+    remote = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "clone", "--bare", str(workspace), str(remote)],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "remote", "add", "origin", str(remote)],
+        cwd=workspace,
+        check=True,
+    )
+    branch = "repoaegis/task-key"
+    subprocess.run(
+        ["git", "switch", "--create", branch],
+        cwd=workspace,
+        check=True,
+        capture_output=True,
+    )
+    (workspace / "app.py").write_text("print('fixed')\n", encoding="utf-8")
+    adapter = GitToolAdapter(ProcessRunner(allowed_executables={"git"}))
+    base = {
+        "task_id": "task-1",
+        "tenant_id": "tenant-a",
+        "repo_id": "owner/repo",
+        "commit_sha": initial,
+        "agent": "pr",
+        "permission": ToolPermission.GIT_WRITE,
+    }
+
+    committed = await adapter.execute(
+        ToolCall(
+            name="git_commit",
+            arguments={"files": ["app.py"], "message": "Fix app"},
+            idempotency_key="commit:task-1:1",
+            **base,
+        ),
+        workspace,
+    )
+    pushed = await adapter.execute(
+        ToolCall(
+            name="git_push",
+            arguments={"remote": "origin", "branch": branch},
+            idempotency_key="push:task-1:1",
+            **base,
+        ),
+        workspace,
+    )
+
+    remote_sha = subprocess.run(
+        ["git", "rev-parse", f"refs/heads/{branch}"],
+        cwd=remote,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert committed.output["commit_sha"] == remote_sha
+    assert pushed.output == {"pushed": True, "branch": branch}

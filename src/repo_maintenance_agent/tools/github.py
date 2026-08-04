@@ -7,6 +7,7 @@ from typing import Protocol
 from pydantic import SecretStr
 
 from repo_maintenance_agent.domain.models import ToolCall, ToolResult
+from repo_maintenance_agent.domain.ports import ArtifactStore
 from repo_maintenance_agent.tools.process import ProcessResult
 
 
@@ -113,6 +114,37 @@ class GitHubCliAdapter:
             arguments,
             cwd=workspace,
             secret_env={"GH_TOKEN": self._token.get_secret_value()},
+        )
+
+
+class LocalDraftRecordAdapter:
+    def __init__(self, artifacts: ArtifactStore) -> None:
+        self._artifacts = artifacts
+
+    async def execute(self, call: ToolCall, workspace: Path) -> ToolResult:
+        del workspace
+        if call.name != "create_draft_pr":
+            raise ValueError(f"unsupported local draft tool: {call.name}")
+        record = {
+            "schema_version": "repoaegis-local-draft/v1",
+            "repo_id": call.repo_id,
+            "commit_sha": call.commit_sha,
+            "title": _required_text(call.arguments.get("title"), "title", 256),
+            "body": _required_text(call.arguments.get("body"), "body", 50_000),
+            "head": _safe_branch(call.arguments.get("head"), "head"),
+            "base": _safe_branch(call.arguments.get("base"), "base"),
+        }
+        artifact_id = await self._artifacts.put(
+            call.tenant_id,
+            call.task_id,
+            "draft-pr.json",
+            (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode(),
+            "application/json",
+        )
+        return ToolResult(
+            call_id=call.call_id,
+            success=True,
+            output={"draft": True, "local_record": True, "artifact_id": artifact_id},
         )
 
 

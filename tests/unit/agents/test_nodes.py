@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 
 from repo_maintenance_agent.agents.nodes import AgentRuntime, build_agent_nodes
-from repo_maintenance_agent.agents.schemas import PatchProposal, PlanOutput, TaskSpecOutput
+from repo_maintenance_agent.agents.schemas import (
+    PatchProposal,
+    PlanOutput,
+    PullRequestDraft,
+    TaskSpecOutput,
+)
 from repo_maintenance_agent.domain.models import (
     ApprovalDecision,
     RepoTaskState,
@@ -43,6 +48,13 @@ class FakeModel:
                 summary="Use the safe default.",
                 unified_diff="--- a/src/config.py\n+++ b/src/config.py\n",
                 changed_files=["src/config.py"],
+            )
+        if schema is PullRequestDraft:
+            return PullRequestDraft(
+                title="Fix empty configuration",
+                body="Applies the verified default behavior.",
+                head="repoaegis/task-key",
+                base="main",
             )
         raise AssertionError(f"unexpected schema: {schema}")
 
@@ -85,6 +97,20 @@ class RecordingGateway:
                         summary="checks passed",
                     ).model_dump(mode="json")
                 },
+            )
+        if call.name == "git_commit":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={"commit_sha": "c" * 40},
+            )
+        if call.name == "git_push":
+            return ToolResult(call_id=call.call_id, success=True, output={"pushed": True})
+        if call.name == "create_draft_pr":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={"url": "https://example.invalid/pr/1", "draft": True},
             )
         raise AssertionError(f"unexpected tool call: {call.name}")
 
@@ -191,3 +217,50 @@ async def test_verification_runs_through_gateway(tmp_path: Path) -> None:
     call = gateway.calls[0][0]
     assert call.name == "run_verification"
     assert call.idempotency_key == "verification:1"
+
+
+@pytest.mark.asyncio
+async def test_pr_node_commits_pushes_and_creates_draft_through_gateway(
+    tmp_path: Path,
+) -> None:
+    gateway = RecordingGateway()
+    nodes = build_agent_nodes(
+        AgentRuntime(
+            model=FakeModel(),
+            artifacts=FileArtifactStore(tmp_path),
+            gateway=gateway,
+        )
+    )
+    reviewed = (
+        task()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .transition(TaskStatus.CODING)
+        .transition(TaskStatus.VERIFYING)
+        .transition(TaskStatus.REVIEWING)
+        .model_copy(
+            update={
+                "plan_hash": "b" * 64,
+                "changed_files": ("src/config.py",),
+                "repo_profile": {"workspace_branch": "repoaegis/task-key"},
+                "approval": ApprovalDecision(
+                    approved=True,
+                    approver="reviewer@example.invalid",
+                    plan_hash="b" * 64,
+                    reason="Approved delivery scope.",
+                ),
+            }
+        )
+    )
+
+    result = await nodes.pr({"task": reviewed, "trace": []})
+
+    assert [call.name for call, _ in gateway.calls] == [
+        "git_commit",
+        "git_push",
+        "create_draft_pr",
+    ]
+    assert result["task"].status is TaskStatus.DELIVERING
+    assert result["task"].pr_draft["draft"] is True
+    assert result["task"].pr_draft["commit_sha"] == "c" * 40

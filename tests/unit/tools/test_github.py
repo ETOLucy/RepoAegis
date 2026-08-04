@@ -5,7 +5,8 @@ import pytest
 from pydantic import SecretStr
 
 from repo_maintenance_agent.domain.models import ToolCall, ToolPermission
-from repo_maintenance_agent.tools.github import GitHubCliAdapter
+from repo_maintenance_agent.storage.artifacts import FileArtifactStore
+from repo_maintenance_agent.tools.github import GitHubCliAdapter, LocalDraftRecordAdapter
 from repo_maintenance_agent.tools.process import ProcessResult
 
 
@@ -62,3 +63,36 @@ async def test_issue_reader_rejects_invalid_issue_number(tmp_path: Path) -> None
 
     with pytest.raises(ValueError, match="issue number"):
         await adapter.execute(call, tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_local_draft_adapter_persists_review_record_without_claiming_real_pr(
+    tmp_path: Path,
+) -> None:
+    artifacts = FileArtifactStore(tmp_path / "artifacts")
+    adapter = LocalDraftRecordAdapter(artifacts)
+    call = ToolCall(
+        task_id="task-1",
+        tenant_id="tenant-a",
+        repo_id="owner/repo",
+        commit_sha="a" * 40,
+        agent="pr",
+        name="create_draft_pr",
+        permission=ToolPermission.GITHUB_WRITE,
+        arguments={
+            "title": "Fix bug",
+            "body": "Verified change.",
+            "head": "repoaegis/task-key",
+            "base": "main",
+        },
+    )
+
+    result = await adapter.execute(call, tmp_path)
+
+    assert result.output["draft"] is True
+    assert result.output["local_record"] is True
+    assert "url" not in result.output
+    payload = json.loads(
+        (await artifacts.get("tenant-a", result.output["artifact_id"])).decode()
+    )
+    assert payload["head"] == "repoaegis/task-key"

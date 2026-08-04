@@ -43,6 +43,7 @@ class Settings(BaseSettings):
             )
         }
     )
+    github_token: SecretStr | None = Field(default=None, repr=False)
     sandbox_seccomp_profile: Path = Path("sandbox/seccomp.json")
     allowed_hosts: tuple[str, ...] = ("localhost", "127.0.0.1")
     max_iterations: int = Field(default=3, ge=1, le=10)

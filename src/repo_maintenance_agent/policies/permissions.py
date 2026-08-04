@@ -27,7 +27,12 @@ _AGENT_PERMISSIONS: dict[str, frozenset[ToolPermission]] = {
     ),
     "review": frozenset({ToolPermission.REPO_READ}),
     "pr": frozenset(
-        {ToolPermission.REPO_READ, ToolPermission.GITHUB_READ, ToolPermission.GITHUB_WRITE}
+        {
+            ToolPermission.REPO_READ,
+            ToolPermission.GIT_WRITE,
+            ToolPermission.GITHUB_READ,
+            ToolPermission.GITHUB_WRITE,
+        }
     ),
     "control": frozenset({ToolPermission.CONTROL}),
 }
@@ -51,7 +56,7 @@ class PermissionPolicy:
                 f"agent {call.agent!r} is not allowed permission {call.permission}"
             )
 
-        if call.permission is ToolPermission.GITHUB_WRITE:
+        if call.permission in {ToolPermission.GIT_WRITE, ToolPermission.GITHUB_WRITE}:
             approval = state.approval
             if (
                 approval is None

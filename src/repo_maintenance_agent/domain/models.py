@@ -49,6 +49,7 @@ class ToolPermission(StrEnum):
     SANDBOX_WRITE = "sandbox_write"
     SANDBOX_EXECUTE = "sandbox_execute"
     GITHUB_READ = "github_read"
+    GIT_WRITE = "git_write"
     GITHUB_WRITE = "github_write"
     CONTROL = "control"
 

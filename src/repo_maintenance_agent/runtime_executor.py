@@ -41,6 +41,12 @@ class WorkspaceGraphExecutor:
         if not result.success:
             raise ToolExecutionError("workspace materialization failed")
         workspace = self._resolve_workspace(result.output.get("workspace"))
+        branch = result.output.get("branch")
+        if not isinstance(branch, str) or not branch:
+            raise ToolExecutionError("workspace tool returned an invalid branch")
+        state = state.model_copy(
+            update={"repo_profile": state.repo_profile | {"workspace_branch": branch}}
+        )
         graph = self._graph_factory(workspace)
         return await LangGraphExecutor(graph).execute(state)
 
