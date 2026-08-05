@@ -52,6 +52,7 @@ class WorkspaceAdapter:
                 ["git", "switch", "--create", branch],
                 cwd=target,
             )
+            self._make_workspace_shared(target)
         return ToolResult(
             call_id=call.call_id,
             success=True,
@@ -74,3 +75,21 @@ class WorkspaceAdapter:
         )
         if result.stdout.strip() != commit_sha:
             raise ToolExecutionError("materialized workspace does not match pinned commit")
+
+    def _make_workspace_shared(self, target: Path) -> None:
+        """Make the task workspace writable by the nested sandbox daemon's uid
+        namespace. Rootless dind maps container uids to different host uids, so a
+        workspace owned by the worker uid is not writable inside nested containers.
+        The sandbox container itself remains non-root, capability-dropped, and
+        network-less; this only relaxes ownership on the disposable task volume.
+        """
+        for path in target.rglob("*"):
+            try:
+                path.chmod(path.stat().st_mode | 0o222)
+            except OSError:
+                continue
+        try:
+            target.chmod(target.stat().st_mode | 0o222)
+        except OSError:
+            pass
+

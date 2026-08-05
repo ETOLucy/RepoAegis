@@ -58,6 +58,8 @@ async def test_workspace_materializes_pinned_commit_through_gateway(
     assert replay.replayed
     relative = result.output["workspace"]
     assert isinstance(relative, str)
+    materialized = workspace_root / relative
+    assert materialized.is_dir()
     workspace = (workspace_root / relative).resolve()
     assert workspace.is_relative_to(workspace_root.resolve())
     assert _git(workspace, "rev-parse", "HEAD") == commit_sha
