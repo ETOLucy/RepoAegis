@@ -67,6 +67,8 @@ class DockerSandbox:
             "--tmpfs=/tmp:rw,noexec,nosuid,size=512m",
             f"--mount=type=bind,src={workspace},dst=/workspace",
             "--workdir=/workspace",
+            "-e",
+            "HOME=/tmp",
             spec.image,
             *spec.command,
         ]

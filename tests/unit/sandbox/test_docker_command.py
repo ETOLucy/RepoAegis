@@ -42,6 +42,8 @@ def test_docker_command_applies_hardened_defaults(tmp_path: Path) -> None:
     assert "--pids-limit=256" in command
     assert "--memory=4g" in command
     assert f"--security-opt=seccomp={seccomp.resolve()}" in command
+    assert "-e" in command
+    assert "HOME=/tmp" in command
     assert "/var/run/docker.sock" not in rendered
     assert str(tmp_path.resolve()) in rendered
 
