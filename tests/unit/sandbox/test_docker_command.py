@@ -44,6 +44,7 @@ def test_docker_command_applies_hardened_defaults(tmp_path: Path) -> None:
     assert f"--security-opt=seccomp={seccomp.resolve()}" in command
     assert "-e" in command
     assert "HOME=/tmp" in command
+    assert any("PIP_INDEX_URL" in item for item in command)
     assert "/var/run/docker.sock" not in rendered
     assert str(tmp_path.resolve()) in rendered
 

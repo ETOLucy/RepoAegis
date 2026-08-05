@@ -69,6 +69,8 @@ class DockerSandbox:
             "--workdir=/workspace",
             "-e",
             "HOME=/tmp",
+            "-e",
+            "PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple",
             spec.image,
             *spec.command,
         ]
