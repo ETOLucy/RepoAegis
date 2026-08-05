@@ -51,6 +51,40 @@ from repo_maintenance_agent.evaluation.storage import (
 )
 
 
+chat_router = APIRouter(prefix="/v1", tags=["chat"])
+
+_chat_engine: ChatEngine | None = None
+_chat_engine_lock = asyncio.Lock()
+
+
+async def _get_chat_engine() -> ChatEngine | None:
+    global _chat_engine
+    if _chat_engine is not None:
+        return _chat_engine
+    async with _chat_engine_lock:
+        if _chat_engine is not None:
+            return _chat_engine
+        repo_root = os.environ.get("REPO_AGENT_CHAT_REPO_ROOT")
+        if not repo_root:
+            return None
+        _chat_engine = ChatEngine(Settings(), repo_root=Path(repo_root))
+        return _chat_engine
+
+
+@chat_router.post("/chat", response_model=ChatResponse)
+async def chat(body: ChatRequest) -> ChatResponse:
+    engine = await _get_chat_engine()
+    if engine is None:
+        raise ConcurrentUpdate("chat is not configured (REPO_AGENT_CHAT_REPO_ROOT missing)")
+    result = await engine.answer(body.query, top_k=body.top_k)
+    return ChatResponse(
+        answer=result["answer"],
+        hits=tuple(ChatHit(**hit) for hit in result["hits"]),
+        repo_id=result["repo_id"],
+        commit_sha=result["commit_sha"],
+    )
+
+
 def create_app(
     *,
     repository: TaskRepository,
@@ -124,42 +158,6 @@ def create_app(
     principal_marker = Depends(principal_dependency)
     router = APIRouter(prefix="/v1", dependencies=[])
 
-_chat_engine: ChatEngine | None = None
-_chat_engine_lock = asyncio.Lock()
-
-
-async def _get_chat_engine() -> ChatEngine | None:
-    global _chat_engine
-    if _chat_engine is not None:
-        return _chat_engine
-    async with _chat_engine_lock:
-        if _chat_engine is not None:
-            return _chat_engine
-        repo_root = os.environ.get("REPO_AGENT_CHAT_REPO_ROOT")
-        if not repo_root:
-            return None
-        from repo_maintenance_agent.domain.models import SearchHit  # noqa: F401
-
-        _chat_engine = ChatEngine(Settings(), repo_root=Path(repo_root))
-        return _chat_engine
-
-
-@router.post("/chat", response_model=ChatResponse)
-async def chat(
-    body: ChatRequest,
-    principal: Principal = principal_marker,
-) -> ChatResponse:
-    del principal
-    engine = await _get_chat_engine()
-    if engine is None:
-        raise ConcurrentUpdate("chat is not configured (REPO_AGENT_CHAT_REPO_ROOT missing)")
-    result = await engine.answer(body.query, top_k=body.top_k)
-    return ChatResponse(
-        answer=result["answer"],
-        hits=tuple(ChatHit(**hit) for hit in result["hits"]),
-        repo_id=result["repo_id"],
-        commit_sha=result["commit_sha"],
-    )
 
 
     @router.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
@@ -334,6 +332,7 @@ async def chat(
         return PlainTextResponse(markdown, media_type="text/markdown")
 
     app.include_router(router)
+    app.include_router(chat_router)
 
     console_root = Path(__file__).resolve().parents[1] / "console"
 
