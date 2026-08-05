@@ -8,13 +8,13 @@ ROOT = Path(__file__).parents[3]
 
 
 def test_committed_brand_asset_set_is_complete_and_safe() -> None:
-    assert validate(ROOT / "docs" / "brand") == []
+    assert validate(ROOT / "docs") == []
 
 
 def test_validator_rejects_external_svg_reference(tmp_path: Path) -> None:
     brand = tmp_path / "brand"
     brand.mkdir()
-    source = ROOT / "docs" / "brand"
+    source = ROOT / "docs"
     for path in source.iterdir():
         if path.is_file():
             (brand / path.name).write_bytes(path.read_bytes())
@@ -31,7 +31,7 @@ def test_validator_rejects_external_svg_reference(tmp_path: Path) -> None:
 
 
 def test_builder_generates_rasters_without_an_external_renderer(tmp_path: Path) -> None:
-    source = ROOT / "docs" / "brand"
+    source = ROOT / "docs"
     brand = tmp_path / "brand"
     brand.mkdir()
     for path in source.glob("*.svg"):

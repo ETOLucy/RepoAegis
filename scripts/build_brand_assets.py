@@ -473,7 +473,7 @@ def build(root: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("asset_directory", type=Path, nargs="?", default=Path("docs/brand"))
+    parser.add_argument("asset_directory", type=Path, nargs="?", default=Path("docs"))
     args = parser.parse_args()
     build(args.asset_directory.resolve())
     return 0

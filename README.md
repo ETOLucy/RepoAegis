@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/repo-aegis-lockup-dark.svg">
-    <img src="docs/brand/repo-aegis-lockup.svg" width="480" alt="RepoAegis single-wing seed logo and wordmark">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/repo-aegis-lockup-dark.svg">
+    <img src="docs/repo-aegis-lockup.svg" width="480" alt="RepoAegis single-wing seed logo and wordmark">
   </picture>
 </p>
 

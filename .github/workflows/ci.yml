@@ -25,7 +25,7 @@ jobs:
       - run: mypy src scripts/build_brand_assets.py scripts/validate_logo_assets.py
       - run: node --check src/repo_maintenance_agent/console/app.js
       - run: python -m pytest --cov --cov-report=term-missing
-      - run: python scripts/validate_logo_assets.py docs/brand
+      - run: python scripts/validate_logo_assets.py docs
       - run: python -m repo_maintenance_agent.security.scanner
       - run: pip-audit
       - run: docker compose config --quiet

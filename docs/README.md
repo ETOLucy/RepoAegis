@@ -15,7 +15,7 @@ Palette:
 - White: `#FFFFFF`
 
 Regenerate raster exports with `python scripts/build_brand_assets.py` and validate the complete
-set with `python scripts/validate_logo_assets.py docs/brand`.
+set with `python scripts/validate_logo_assets.py docs`.
 
 These assets are original project artwork. They do not establish trademark registration or legal
 clearance.
