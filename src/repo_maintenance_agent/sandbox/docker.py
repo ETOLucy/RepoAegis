@@ -65,7 +65,7 @@ class DockerSandbox:
             f"--memory={spec.memory_limit}",
             f"--pids-limit={spec.pids_limit}",
             "--tmpfs=/tmp:rw,noexec,nosuid,size=512m",
-            f"--mount=type=bind,src={workspace},dst=/workspace,rw",
+            f"--mount=type=bind,src={workspace},dst=/workspace",
             "--workdir=/workspace",
             spec.image,
             *spec.command,

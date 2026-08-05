@@ -82,3 +82,19 @@ async def test_docker_execution_uses_request_timeout_and_private_daemon_env(
     assert runner.timeout_seconds == 47
     assert runner.extra_env == {"DOCKER_HOST": "tcp://sandbox-daemon:2375"}
     assert "sandbox-daemon" not in " ".join(runner.arguments)
+
+
+def test_docker_command_uses_valid_bind_mount_syntax(tmp_path: Path) -> None:
+    spec = SandboxSpec(
+        task_id="task-1",
+        workspace=tmp_path,
+        image="repo-agent-python@sha256:" + "a" * 64,
+        command=("python", "-m", "pytest"),
+    )
+
+    command = DockerSandbox().build_command(spec)
+    mount = next(arg for arg in command if arg.startswith("--mount="))
+
+    assert mount.startswith("--mount=type=bind,src=")
+    assert ",dst=/workspace" in mount
+    assert ",rw" not in mount  # --mount 不接受裸 rw 字段
