@@ -58,6 +58,7 @@ services:
     volumes:
       - artifacts:/artifacts
       - workspaces:/workspaces
+      - ./output/repoaegis.bundle:/repos/repoaegis.bundle:ro
     networks:
       - control
       - egress
