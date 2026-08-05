@@ -109,6 +109,27 @@ Run the included credential-free example:
 The command writes both reports before returning exit code `1` for a failed gate, which makes it
 usable as a CI release check.
 
+## Web Workbench (AI Full-Stack)
+
+A React + Vite workbench that talks to the control plane and a RAG chat endpoint:
+
+- **代码问答 (RAG)** `POST /v1/chat`: hybrid BM25 + symbol retrieval over the repo, cited
+  answers via an OpenAI-compatible model (deepseek), reference paths/line ranges returned.
+- **任务控制台** `/v1/tasks`: list/create/inspect repository maintenance tasks.
+- **评测看板** `/v1/evaluations/runs`: evaluation runs and release gates.
+
+Build the frontend and serve it:
+
+```powershell
+cd web
+npm --registry=https://registry.npmmirror.com install
+npm run build          # outputs web/dist
+```
+
+Set `REPO_AGENT_CHAT_REPO_ROOT` to a repo checkout to enable RAG chat. The chat engine is
+`repo_maintenance_agent/chat.py`; retrieval lives in `search/index.py` (BM25/symbol/vector)
+and `search/embeddings.py`.
+
 ## Quick Start
 
 Requirements:
