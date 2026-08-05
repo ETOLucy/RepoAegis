@@ -860,7 +860,6 @@ repo-aegis/
 ├── README.md
 ├── pyproject.toml
 ├── .env.example
-├── configs/
 │   ├── agents.yaml
 │   ├── tools.yaml
 │   ├── policies.yaml

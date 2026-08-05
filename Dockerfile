@@ -18,7 +18,6 @@ RUN apt-get update \
 COPY --from=builder /install /usr/local
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 WORKDIR /app
-COPY configs ./configs
 COPY sandbox ./sandbox
 
 RUN mkdir -p /workspaces && chmod 1777 /workspaces

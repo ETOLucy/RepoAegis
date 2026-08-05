@@ -271,7 +271,6 @@ src/repo_maintenance_agent/
   security/        privacy and credential scanner
   storage/         task state, queue leases, and artifacts
   tools/           Git, GitHub, Context7, patch, and process adapters
-configs/           versioned agent, tool, policy, and evaluation settings
 examples/          credential-free evaluation inputs
 sandbox/           immutable worker image and seccomp profile
 tests/             unit and integration contracts
