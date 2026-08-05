@@ -164,3 +164,23 @@ def _call(
         permission=permission,
         arguments=arguments or {},
     )
+
+
+@pytest.mark.asyncio
+async def test_workspace_reader_marks_missing_files_without_aborting(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "app.py"
+    source.parent.mkdir()
+    source.write_bytes(b"def app():\n    return 1\n")
+    adapter = WorkspaceReadAdapter(max_total_bytes=10_000)
+    call = _call(
+        name="read_files",
+        permission=ToolPermission.REPO_READ,
+        arguments={"files": ["src/app.py", "missing/release.yml", "README.md"]},
+    )
+
+    result = await adapter.execute(call, tmp_path)
+
+    assert result.success is True
+    assert result.output["files"]["src/app.py"] == "def app():\n    return 1\n"
+    assert result.output["files"]["missing/release.yml"] == {"error": "not_found"}
+    assert result.output["files"]["README.md"] == {"error": "not_found"}

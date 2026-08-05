@@ -133,7 +133,8 @@ class WorkspaceReadAdapter:
             if not candidate.is_relative_to(root):
                 raise ValueError("workspace read path resolves outside workspace")
             if not candidate.is_file():
-                raise ValueError("workspace read path must be a file")
+                contents[relative] = {"error": "not_found"}
+                continue
             data = candidate.read_bytes()
             if len(data) > remaining:
                 raise ValueError("workspace read exceeds total byte limit")
