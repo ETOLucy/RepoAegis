@@ -281,7 +281,6 @@ tests/             unit and integration contracts
 
 - [Authoritative system design](RepoAegis_Design.md)
 - [Executable architecture map](docs/architecture.md)
-- [Evaluation Operations design](docs/superpowers/specs/2026-07-31-evaluation-operations-design.md)
 - [Threat model](docs/threat-model.md)
 - [Security best-practices report](security_best_practices_report.md)
 

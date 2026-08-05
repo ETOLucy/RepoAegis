@@ -36,5 +36,10 @@ def test_settings_accepts_standard_openai_model_variable(monkeypatch) -> None:
 
 
 def test_settings_rejects_partial_sandbox_runner_configuration() -> None:
-    with pytest.raises(ValidationError, match="sandbox runner URL and token"):
+    with pytest.raises(ValidationError, match="sandbox runner URL requires a matching token"):
         Settings(sandbox_runner_url="http://sandbox-runner:8080")
+
+
+def test_settings_allows_runner_token_without_url() -> None:
+    settings = Settings(sandbox_runner_token="runner-secret")
+    assert settings.sandbox_runner_token is not None

@@ -57,8 +57,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def complete_sandbox_runner_configuration(self) -> Settings:
-        if (self.sandbox_runner_url is None) != (self.sandbox_runner_token is None):
-            raise ValueError("sandbox runner URL and token must be configured together")
+        if self.sandbox_runner_url is not None and self.sandbox_runner_token is None:
+            raise ValueError("sandbox runner URL requires a matching token")
         return self
 
     @property
