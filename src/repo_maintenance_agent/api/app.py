@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import os
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,6 +16,10 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from repo_maintenance_agent.api.auth import Principal, StaticTokenAuthenticator
 from repo_maintenance_agent.api.schemas import (
+    ChatHit,
+    ChatRequest,
+    ChatResponse,
+
     ApprovalRequest,
     EvaluationReplayRequest,
     EvaluationRunCreateRequest,
@@ -116,6 +123,44 @@ def create_app(
 
     principal_marker = Depends(principal_dependency)
     router = APIRouter(prefix="/v1", dependencies=[])
+
+_chat_engine: ChatEngine | None = None
+_chat_engine_lock = asyncio.Lock()
+
+
+async def _get_chat_engine() -> ChatEngine | None:
+    global _chat_engine
+    if _chat_engine is not None:
+        return _chat_engine
+    async with _chat_engine_lock:
+        if _chat_engine is not None:
+            return _chat_engine
+        repo_root = os.environ.get("REPO_AGENT_CHAT_REPO_ROOT")
+        if not repo_root:
+            return None
+        from repo_maintenance_agent.domain.models import SearchHit  # noqa: F401
+
+        _chat_engine = ChatEngine(Settings(), repo_root=Path(repo_root))
+        return _chat_engine
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(
+    body: ChatRequest,
+    principal: Principal = principal_marker,
+) -> ChatResponse:
+    del principal
+    engine = await _get_chat_engine()
+    if engine is None:
+        raise ConcurrentUpdate("chat is not configured (REPO_AGENT_CHAT_REPO_ROOT missing)")
+    result = await engine.answer(body.query, top_k=body.top_k)
+    return ChatResponse(
+        answer=result["answer"],
+        hits=tuple(ChatHit(**hit) for hit in result["hits"]),
+        repo_id=result["repo_id"],
+        commit_sha=result["commit_sha"],
+    )
+
 
     @router.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
     async def create_task(

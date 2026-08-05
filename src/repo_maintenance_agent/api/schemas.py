@@ -141,3 +141,23 @@ class EvaluationRunResponse(ApiModel):
 
 class EvaluationRunListResponse(ApiModel):
     items: list[EvaluationRunResponse]
+
+
+class ChatRequest(ApiModel):
+    query: str = Field(min_length=1, max_length=5_000)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class ChatHit(ApiModel):
+    path: str
+    line_start: int | None = None
+    line_end: int | None = None
+    symbol: str | None = None
+    content: str
+
+
+class ChatResponse(ApiModel):
+    answer: str
+    hits: tuple[ChatHit, ...]
+    repo_id: str
+    commit_sha: str

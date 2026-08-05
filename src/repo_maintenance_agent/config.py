@@ -48,6 +48,7 @@ class Settings(BaseSettings):
         }
     )
     openai_embedding_model: str = "text-embedding-3-small"
+        chat_repo_root: str | None = None
     github_token: SecretStr | None = Field(default=None, repr=False)
     sandbox_seccomp_profile: Path = Path("sandbox/seccomp.json")
     sandbox_runner_url: str | None = None
