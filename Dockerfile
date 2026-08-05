@@ -20,7 +20,7 @@ COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 WORKDIR /app
 COPY sandbox ./sandbox
 
-RUN mkdir -p /workspaces && chmod 1777 /workspaces
+RUN mkdir -p /workspaces /artifacts && chmod 1777 /workspaces /artifacts
 
 USER 10001:10001
 EXPOSE 8000
