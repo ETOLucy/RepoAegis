@@ -15,6 +15,8 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from repo_maintenance_agent.api.auth import Principal, StaticTokenAuthenticator
+from repo_maintenance_agent.chat import ChatEngine
+from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.api.schemas import (
     ChatHit,
     ChatRequest,

@@ -13,7 +13,7 @@ from typing import Protocol
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-_IGNORED_PARTS = frozenset({".git", ".venv", ".worktrees", "node_modules", "dist", "build", ".pytest_cache", ".mypy_cache", ".ruff_cache"})
+_IGNORED_PARTS = frozenset({".git", ".venv", ".worktrees", "node_modules", "dist", "build", ".pytest_cache", ".pytest-tmp", ".mypy_cache", ".ruff_cache"})
 _TEXT_SUFFIXES = frozenset(
     {".py", ".rs", ".go", ".java", ".js", ".jsx", ".ts", ".tsx", ".md", ".toml", ".yml", ".yaml"}
 )

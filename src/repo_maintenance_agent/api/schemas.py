@@ -149,11 +149,14 @@ class ChatRequest(ApiModel):
 
 
 class ChatHit(ApiModel):
+    hit_id: str
     path: str
     line_start: int | None = None
     line_end: int | None = None
     symbol: str | None = None
     content: str
+    score: float
+    source: str
 
 
 class ChatResponse(ApiModel):
