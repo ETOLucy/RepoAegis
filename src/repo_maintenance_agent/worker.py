@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -117,6 +118,7 @@ class Worker:
                 expected_version=task.version,
             )
         except Exception:
+            traceback.print_exc()  # noqa: T201 - worker observability
             stop_heartbeat.set()
             await heartbeat
             if isinstance(lease_state.error, LeaseConflict):
