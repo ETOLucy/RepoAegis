@@ -22,6 +22,8 @@ class GitPatchApplier:
         if not patch or len(patch) > self._max_patch_bytes:
             raise ToolExecutionError("patch size is outside the allowed range")
         allowed = {_safe_relative_path(path) for path in declared_files}
+        if not patch.endswith(b"\n"):
+            patch = patch + b"\n"
         with tempfile.TemporaryDirectory(prefix="repo-agent-patch-") as temp_dir:
             patch_path = Path(temp_dir) / "proposal.patch"
             patch_path.write_bytes(patch)

@@ -63,3 +63,32 @@ async def test_patch_applier_rejects_files_outside_model_declaration(tmp_path: P
         )
 
     assert not (tmp_path / "secret.txt").exists()
+
+
+
+@pytest.mark.asyncio
+async def test_patch_applier_tolerates_missing_trailing_newline(tmp_path: Path) -> None:
+    runner = ProcessRunner(allowed_executables={"git"})
+    await git(runner, tmp_path, "init")
+    await git(runner, tmp_path, "config", "user.email", "test@example.invalid")
+    await git(runner, tmp_path, "config", "user.name", "Test")
+    target = tmp_path / "app.py"
+    target.write_text("value = 1\n", encoding="utf-8")
+    await git(runner, tmp_path, "add", "app.py")
+    await git(runner, tmp_path, "commit", "-m", "base")
+    patch = (
+        b"diff --git a/app.py b/app.py\n"
+        b"--- a/app.py\n"
+        b"+++ b/app.py\n"
+        b"@@ -1 +1 @@\n"
+        b"-value = 1\n"
+        b"+value = 2"
+    )
+
+    changed = await GitPatchApplier(runner).apply(
+        workspace=tmp_path, patch=patch, declared_files=("app.py",)
+    )
+
+    assert changed == ("app.py",)
+    assert target.read_text(encoding="utf-8") == "value = 2\n"
+
