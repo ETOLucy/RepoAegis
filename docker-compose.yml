@@ -10,7 +10,7 @@ services:
       REPO_AGENT_API_TOKENS: ${REPO_AGENT_API_TOKENS:?set REPO_AGENT_API_TOKENS}
       REPO_AGENT_DATABASE_URL: postgresql+psycopg://repo_agent:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/repo_agent
       REPO_AGENT_ARTIFACT_ROOT: /artifacts
-      REPO_AGENT_ALLOWED_HOSTS: '["localhost","127.0.0.1"]'
+      REPO_AGENT_ALLOWED_HOSTS: '["localhost","127.0.0.1","host.docker.internal"]'
     depends_on:
       postgres:
         condition: service_healthy
