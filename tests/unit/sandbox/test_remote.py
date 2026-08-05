@@ -29,7 +29,7 @@ async def test_remote_sandbox_sends_relative_workspace_and_resource_policy(
             "cpu_limit": "2",
             "memory_limit": "4g",
             "pids_limit": 256,
-            "timeout_seconds": 300,
+            "timeout_seconds": 900,
             "network_enabled": False,
         }
         return httpx.Response(
