@@ -1,16 +1,22 @@
-# RepoAegis
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/repo-aegis-lockup-dark.svg">
+    <img src="docs/brand/repo-aegis-lockup.svg" width="480" alt="RepoAegis single-wing seed logo and wordmark">
+  </picture>
+</p>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/repo-aegis-lockup-dark.svg">
-  <img src="docs/brand/repo-aegis-lockup.svg" width="560" alt="RepoAegis single-wing seed logo and wordmark">
-</picture>
+<h1 align="center">RepoAegis</h1>
 
-[![CI](https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg)](https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-245dcc.svg)](https://www.python.org/)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-177245.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml"><img src="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-245dcc.svg" alt="Python 3.12"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-177245.svg" alt="License: Apache-2.0"></a>
+</p>
 
-A policy-controlled agent system that turns repository issues into evidence-backed patches,
-sandbox verification, and reviewable draft pull requests.
+<p align="center">
+  A policy-controlled agent system that turns repository issues into evidence-backed patches,
+  sandbox verification, and reviewable draft pull requests.
+</p>
 
 RepoAegis is built as an AI control plane rather than a chat wrapper. Typed state,
 tenant isolation, deterministic routing, tool authorization, leased workers, hybrid retrieval,

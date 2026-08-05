@@ -55,8 +55,10 @@ workspace exists. Compose connects it to `sandbox-runner`, not to Docker. The au
 accepts only strict resource-bounded requests with a relative workspace below the shared root. A
 separate project-owned rootless daemon runs the nested task containers. Worker and daemon networks
 are disjoint, neither a daemon port nor a host socket is published, and topology tests enforce these
-properties. The current machine's Docker engine did not become ready during verification, so image
-build, service health, and a submitted live task remain open evidence items.
+properties. Local Compose verification (2026-08-06) starts all six services healthy and completes a
+live repository task end to end. The sandbox daemon must have the digest-pinned `python` image
+available; load the locally built `repoaegis-sandbox-python` image into it and tag it as `python`
+before running container verification.
 
 ## Current Failure Boundary
 
