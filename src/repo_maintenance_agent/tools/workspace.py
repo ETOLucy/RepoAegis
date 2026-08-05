@@ -61,6 +61,8 @@ class WorkspaceAdapter:
 
     async def _verify_existing(self, target: Path, commit_sha: str, branch: str) -> None:
         await self._assert_head(target, commit_sha)
+        await self._runner.run(["git", "reset", "--hard", "HEAD"], cwd=target)
+        await self._runner.run(["git", "clean", "-fd"], cwd=target)
         current = await self._runner.run(
             ["git", "branch", "--show-current"],
             cwd=target,
