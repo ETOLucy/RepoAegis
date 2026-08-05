@@ -52,7 +52,7 @@ class WorkspaceAdapter:
                 ["git", "switch", "--create", branch],
                 cwd=target,
             )
-            self._make_workspace_shared(target)
+        self._make_workspace_shared(target)
         return ToolResult(
             call_id=call.call_id,
             success=True,
