@@ -32,5 +32,9 @@ jobs:
         env:
           POSTGRES_PASSWORD: ci-placeholder
           REPO_AGENT_API_TOKENS: '{"ci-token":"tenant-ci"}'
+          SANDBOX_RUNNER_TOKEN: ci-sandbox-runner-token
+          REPO_AGENT_REPOSITORY_LOCATORS: '{"ci-repo":{"type":"local","path":"/tmp/ci-repo"}}'
+          REPO_AGENT_WORKER_TENANT_IDS: '["ci"]'
+          OPENSEARCH_INITIAL_ADMIN_PASSWORD: ci-opensearch-password
       - run: docker build --tag repo-aegis:ci .
       - run: docker build --file sandbox/Dockerfile.python --tag repo-agent-python:ci .
