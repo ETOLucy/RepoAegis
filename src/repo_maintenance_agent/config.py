@@ -43,7 +43,7 @@ class Settings(BaseSettings):
         default_factory=lambda: {
             "python-3.12": (
                 "python@sha256:"
-                "57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de"
+                "496a05315a012e6f51a465cd89b8d1cae53d01b6c8cf098291a4094706f3e0d4"
             )
         }
     )
