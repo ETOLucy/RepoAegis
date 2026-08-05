@@ -18,7 +18,7 @@ class SandboxSpec:
     cpu_limit: str = "2"
     memory_limit: str = "4g"
     pids_limit: int = 256
-    timeout_seconds: int = 300
+    timeout_seconds: int = 900
     network_enabled: bool = False
 
 
