@@ -50,6 +50,8 @@ class EnvironmentProfiler:
                         "-e",
                         ".",
                         "pytest",
+                        "pytest-asyncio",
+                        "pytest-cov",
                         "ruff",
                         "mypy",
                     ),
