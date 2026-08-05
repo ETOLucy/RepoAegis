@@ -37,7 +37,7 @@ class OpenAIModelGateway:
         if max_attempts < 1 or max_attempts > 5:
             raise ValueError("structured attempts must be between 1 and 5")
         last_error: Exception | None = None
-        for _ in range(max_attempts):
+        for attempt in range(max_attempts):
             try:
                 response = await self._client.responses.parse(
                     model=self._model,
@@ -52,6 +52,16 @@ class OpenAIModelGateway:
                 return cast(SchemaT, parsed)
             except ValidationError as error:
                 last_error = error
+                if attempt == max_attempts - 1:
+                    break
+                input_text = (
+                    input_text
+                    + "\n\n[Your previous response was invalid and will not be used. "
+                    + "Correct it and return valid JSON matching the required schema. "
+                    + "Validation error: "
+                    + str(error).splitlines()[0]
+                    + "]"
+                )
                 continue
         assert last_error is not None
         raise last_error

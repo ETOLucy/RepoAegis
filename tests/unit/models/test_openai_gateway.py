@@ -108,3 +108,33 @@ async def test_gateway_retries_once_on_invalid_structured_output() -> None:
 
     assert result == Answer(summary="retried")
     assert gateway._client.responses.calls == 2
+
+@pytest.mark.asyncio
+async def test_gateway_retry_includes_validation_feedback() -> None:
+    from pydantic import ValidationError
+
+    class FlakyResponses:
+        def __init__(self) -> None:
+            self.inputs: list[str] = []
+            self.calls = 0
+
+        async def parse(self, **kwargs):
+            self.calls += 1
+            self.inputs.append(kwargs["input"])
+            if self.calls == 1:
+                raise ValidationError.from_exception_data(
+                    "Answer", [{"type": "missing", "loc": ("summary",), "input": {}}]
+                )
+            return SimpleNamespace(output_parsed=Answer(summary="retried"))
+
+    class FlakyClient:
+        def __init__(self) -> None:
+            self.responses = FlakyResponses()
+
+    gateway = OpenAIModelGateway(client=FlakyClient(), model="gpt-test-model")
+
+    result = await gateway.structured(system="s", input_text="input", schema=Answer)
+
+    assert result == Answer(summary="retried")
+    assert gateway._client.responses.calls == 2
+    assert "previous response" in gateway._client.responses.inputs[1]
