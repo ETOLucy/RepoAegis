@@ -21,3 +21,4 @@ data/
 output/
 private/
 *.log
+.pytest-tmp

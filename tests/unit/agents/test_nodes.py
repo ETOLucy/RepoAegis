@@ -12,6 +12,7 @@ from repo_maintenance_agent.agents.schemas import (
     ReviewOutput,
     TaskSpecOutput,
 )
+from repo_maintenance_agent.domain.errors import ToolExecutionError
 from repo_maintenance_agent.domain.models import (
     ApprovalDecision,
     RepoTaskState,
@@ -466,3 +467,70 @@ async def test_pr_node_commits_pushes_and_creates_draft_through_gateway(
     assert result["task"].status is TaskStatus.DELIVERING
     assert result["task"].pr_draft["draft"] is True
     assert result["task"].pr_draft["commit_sha"] == "c" * 40
+
+
+class PatchFeedbackModel(FakeModel):
+    def __init__(self) -> None:
+        self.patch_inputs: list[dict[str, object]] = []
+
+    async def structured(self, *, system, input_text, schema):
+        if schema is PatchProposal:
+            self.patch_inputs.append(json.loads(input_text))
+            return PatchProposal(
+                summary="Use the safe default.",
+                unified_diff="--- a/src/config.py\n+++ b/src/config.py\n",
+                changed_files=["src/config.py"],
+            )
+        return await super().structured(system=system, input_text=input_text, schema=schema)
+
+
+class FailingOnceGateway(RecordingGateway):
+    def __init__(self) -> None:
+        super().__init__()
+        self.apply_calls = 0
+
+    async def execute(self, call, state):
+        if call.name == "apply_patch":
+            self.apply_calls += 1
+            if self.apply_calls == 1:
+                raise ToolExecutionError("patch does not apply")
+        return await super().execute(call, state)
+
+
+@pytest.mark.asyncio
+async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
+    model = PatchFeedbackModel()
+    gateway = FailingOnceGateway()
+    nodes = build_agent_nodes(
+        AgentRuntime(model=model, artifacts=FileArtifactStore(tmp_path), gateway=gateway)
+    )
+    approved = (
+        task()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .transition(TaskStatus.NEEDS_APPROVAL)
+        .model_copy(
+            update={
+                "plan_hash": "b" * 64,
+                "approval": ApprovalDecision(
+                    approved=True,
+                    approver="tenant-a",
+                    plan_hash="b" * 64,
+                    target_commit="a" * 40,
+                    allowed_tools=(),
+                    reason="Approved.",
+                ),
+            }
+        )
+        .transition(TaskStatus.CODING)
+    )
+
+    result = await nodes.coding({"task": approved, "trace": []})
+
+    assert result["task"].status is TaskStatus.CODING
+    assert gateway.apply_calls == 2
+    assert len(model.patch_inputs) == 2
+    assert "patch_feedback" in model.patch_inputs[1]
+    assert "patch does not apply" in str(model.patch_inputs[1]["patch_feedback"])
+

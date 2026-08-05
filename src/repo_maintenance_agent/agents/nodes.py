@@ -44,12 +44,15 @@ class AgentRuntime:
     gateway: Gateway
     max_context_rounds: int = 1
     max_context_tool_calls: int = 8
+    max_patch_attempts: int = 2
 
     def __post_init__(self) -> None:
         if not 1 <= self.max_context_rounds <= 5:
             raise ValueError("context rounds must be between 1 and 5")
         if not 1 <= self.max_context_tool_calls <= 20:
             raise ValueError("context tool calls must be between 1 and 20")
+        if not 1 <= self.max_patch_attempts <= 5:
+            raise ValueError("patch attempts must be between 1 and 5")
 
 
 def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
@@ -258,49 +261,58 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 controlled_context["files"].update(files)
             if context_tool_calls >= runtime.max_context_tool_calls:
                 break
-        output = await runtime.model.structured(
-            system=(
-                "Produce a minimal unified diff for the approved plan. Do not modify unrelated "
-                "files, credentials, CI permissions, or dependency locks unless explicitly planned."
-            ),
-            input_text=json.dumps(
-                {
-                    "issue": task.issue.model_dump(mode="json"),
-                    "plan": task.plan,
-                    "controlled_context": controlled_context,
-                    "verification_feedback": (
-                        task.verification.model_dump(mode="json") if task.verification else None
+        patch_feedback: str | None = None
+        tool_result = None
+        for patch_attempt in range(runtime.max_patch_attempts):
+            patch_payload = {
+                "issue": task.issue.model_dump(mode="json"),
+                "plan": task.plan,
+                "controlled_context": controlled_context,
+                "verification_feedback": (
+                    task.verification.model_dump(mode="json") if task.verification else None
+                ),
+            }
+            if patch_feedback:
+                patch_payload["patch_feedback"] = patch_feedback
+            output = await runtime.model.structured(
+                system=(
+                    "Produce a minimal unified diff for the approved plan. Do not modify unrelated "
+                    "files, credentials, CI permissions, or dependency locks unless explicitly planned."
+                ),
+                input_text=json.dumps(patch_payload, sort_keys=True),
+                schema=PatchProposal,
+            )
+            patch = output.unified_diff.encode()
+            artifact_id = await runtime.artifacts.put(
+                task.tenant_id,
+                task.task_id,
+                "proposed.patch",
+                patch,
+                "text/x-diff",
+            )
+            try:
+                tool_result = await runtime.gateway.execute(
+                    ToolCall(
+                        task_id=task.task_id,
+                        tenant_id=task.tenant_id,
+                        repo_id=task.repo_id,
+                        commit_sha=task.commit_sha,
+                        agent="coding",
+                        name="apply_patch",
+                        permission=ToolPermission.SANDBOX_WRITE,
+                        arguments={
+                            "artifact_id": artifact_id,
+                            "files": list(output.changed_files),
+                        },
+                        idempotency_key=f"patch:{task.iteration + 1}:{artifact_id}",
                     ),
-                },
-                sort_keys=True,
-            ),
-            schema=PatchProposal,
-        )
-        patch = output.unified_diff.encode()
-        artifact_id = await runtime.artifacts.put(
-            task.tenant_id,
-            task.task_id,
-            "proposed.patch",
-            patch,
-            "text/x-diff",
-        )
-        tool_result = await runtime.gateway.execute(
-            ToolCall(
-                task_id=task.task_id,
-                tenant_id=task.tenant_id,
-                repo_id=task.repo_id,
-                commit_sha=task.commit_sha,
-                agent="coding",
-                name="apply_patch",
-                permission=ToolPermission.SANDBOX_WRITE,
-                arguments={
-                    "artifact_id": artifact_id,
-                    "files": list(output.changed_files),
-                },
-                idempotency_key=f"patch:{task.iteration + 1}:{artifact_id}",
-            ),
-            task,
-        )
+                    task,
+                )
+                break
+            except ToolExecutionError as error:
+                patch_feedback = str(error)
+                if patch_attempt == runtime.max_patch_attempts - 1:
+                    raise
         changed_files = _changed_files(tool_result)
         coding_task = (
             task if task.status is TaskStatus.CODING else task.transition(TaskStatus.CODING)
