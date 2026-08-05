@@ -54,3 +54,28 @@ async def test_gateway_rejects_empty_parsed_response() -> None:
     with pytest.raises(RuntimeError, match="structured"):
         await gateway.structured(system="system", input_text="input", schema=Answer)
 
+
+
+def test_from_settings_passes_base_url_and_model(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeAsyncOpenAI:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "repo_maintenance_agent.models.openai_gateway.AsyncOpenAI",
+        FakeAsyncOpenAI,
+    )
+    from repo_maintenance_agent.config import Settings
+
+    gateway = OpenAIModelGateway.from_settings(
+        Settings(
+            OPENAI_API_KEY="test-key",
+            OPENAI_BASE_URL="https://api.deepseek.com",
+            OPENAI_MODEL="deepseek-chat",
+        )
+    )
+    assert captured["api_key"] == "test-key"
+    assert captured["base_url"] == "https://api.deepseek.com"
+    assert gateway._model == "deepseek-chat"

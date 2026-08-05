@@ -25,6 +25,10 @@ class Settings(BaseSettings):
         default="gpt-5.6",
         validation_alias=AliasChoices("OPENAI_MODEL", "REPO_AGENT_OPENAI_MODEL"),
     )
+    openai_base_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPENAI_BASE_URL", "REPO_AGENT_OPENAI_BASE_URL"),
+    )
     api_url: str = Field(default="http://127.0.0.1:8000")
     api_token: SecretStr | None = Field(default=None, repr=False)
     api_timeout_seconds: float = Field(default=30.0, gt=0, le=300)

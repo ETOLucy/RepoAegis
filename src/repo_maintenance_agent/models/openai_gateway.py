@@ -19,7 +19,10 @@ class OpenAIModelGateway:
     def from_settings(cls, settings: Settings) -> OpenAIModelGateway:
         if settings.openai_api_key is None:
             raise RuntimeError("OPENAI_API_KEY is required for live model execution")
-        client = AsyncOpenAI(api_key=settings.openai_api_key.get_secret_value())
+        client = AsyncOpenAI(
+            api_key=settings.openai_api_key.get_secret_value(),
+            base_url=settings.openai_base_url,
+        )
         return cls(client=client, model=settings.openai_model)
 
     async def structured(
