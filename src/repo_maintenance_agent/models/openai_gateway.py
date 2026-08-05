@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, TypeVar, cast
 
 from openai import AsyncOpenAI
+from pydantic import ValidationError
 from pydantic import BaseModel
 
 from repo_maintenance_agent.config import Settings
@@ -31,15 +32,26 @@ class OpenAIModelGateway:
         system: str,
         input_text: str,
         schema: type[SchemaT],
+        max_attempts: int = 2,
     ) -> SchemaT:
-        response = await self._client.responses.parse(
-            model=self._model,
-            instructions=system,
-            input=input_text,
-            text_format=schema,
-            store=False,
-        )
-        parsed = response.output_parsed
-        if parsed is None:
-            raise RuntimeError("model did not return the requested structured output")
-        return cast(SchemaT, parsed)
+        if max_attempts < 1 or max_attempts > 5:
+            raise ValueError("structured attempts must be between 1 and 5")
+        last_error: Exception | None = None
+        for _ in range(max_attempts):
+            try:
+                response = await self._client.responses.parse(
+                    model=self._model,
+                    instructions=system,
+                    input=input_text,
+                    text_format=schema,
+                    store=False,
+                )
+                parsed = response.output_parsed
+                if parsed is None:
+                    raise RuntimeError("model did not return the requested structured output")
+                return cast(SchemaT, parsed)
+            except ValidationError as error:
+                last_error = error
+                continue
+        assert last_error is not None
+        raise last_error

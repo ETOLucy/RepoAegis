@@ -79,3 +79,32 @@ def test_from_settings_passes_base_url_and_model(monkeypatch) -> None:
     assert captured["api_key"] == "test-key"
     assert captured["base_url"] == "https://api.deepseek.com"
     assert gateway._model == "deepseek-chat"
+
+@pytest.mark.asyncio
+async def test_gateway_retries_once_on_invalid_structured_output() -> None:
+    from pydantic import ValidationError
+
+    class FlakyResponses:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def parse(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise ValidationError.from_exception_data(
+                    "Answer", [{"type": "missing", "loc": ("summary",), "input": {}}]
+                )
+            return SimpleNamespace(output_parsed=Answer(summary="retried"))
+
+    class FlakyClient:
+        def __init__(self) -> None:
+            self.responses = FlakyResponses()
+
+    gateway = OpenAIModelGateway(client=FlakyClient(), model="gpt-test-model")
+
+    result = await gateway.structured(
+        system="system", input_text="input", schema=Answer
+    )
+
+    assert result == Answer(summary="retried")
+    assert gateway._client.responses.calls == 2
