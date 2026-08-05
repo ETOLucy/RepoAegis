@@ -127,7 +127,7 @@ class WorkspaceReadAdapter:
             raise ValueError("workspace read files are required")
         root = workspace.resolve()
         remaining = self._max_total_bytes
-        contents: dict[str, str] = {}
+        contents: dict[str, str | dict[str, str]] = {}
         for relative in raw_files:
             candidate = (root / relative).resolve()
             if not candidate.is_relative_to(root):

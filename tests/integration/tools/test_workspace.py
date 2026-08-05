@@ -93,3 +93,62 @@ def _git(cwd: Path, *arguments: str) -> str:
         encoding="utf-8",
     )
     return result.stdout.strip()
+
+@pytest.mark.asyncio
+async def test_workspace_prepare_cleans_leftover_files_through_gateway(
+    tmp_path: Path,
+) -> None:
+    remote, commit_sha = _bare_repository(tmp_path)
+    workspace_root = tmp_path / "workspaces"
+    workspace_root.mkdir()
+    state = RepoTaskState(
+        tenant_id="tenant-a",
+        repo_id="owner/repo",
+        commit_sha=commit_sha,
+        base_branch="main",
+        issue={"title": "Fix the bug", "body": "Reproduction"},
+    )
+    adapter = WorkspaceAdapter(
+        ProcessRunner(allowed_executables={"git"}),
+        repository_locators={"owner/repo": str(remote)},
+    )
+    gateway = ToolGateway(
+        policy=PermissionPolicy(),
+        adapters={"workspace_materialize": adapter, "workspace_prepare": adapter},
+        operation_log=InMemoryOperationLog(),
+        workspace_root=workspace_root,
+    )
+    materialize = ToolCall(
+        task_id=state.task_id,
+        tenant_id=state.tenant_id,
+        repo_id=state.repo_id,
+        commit_sha=state.commit_sha,
+        agent="control",
+        name="workspace_materialize",
+        permission=ToolPermission.CONTROL,
+        idempotency_key=f"workspace:{state.task_id}:{state.commit_sha}",
+    )
+    result = await gateway.execute(materialize, state)
+    assert result.success
+    workspace = workspace_root / result.output["workspace"]
+    leftover = workspace / "leftover.txt"
+    leftover.write_text("untracked", encoding="utf-8")
+    (workspace / "untracked-dir").mkdir()
+
+    prepare = ToolCall(
+        task_id=state.task_id,
+        tenant_id=state.tenant_id,
+        repo_id=state.repo_id,
+        commit_sha=state.commit_sha,
+        agent="control",
+        name="workspace_prepare",
+        permission=ToolPermission.CONTROL,
+    )
+    prepared = await gateway.execute(prepare, state)
+
+    assert prepared.success
+    assert not prepared.replayed
+    assert not leftover.exists()
+    assert not (workspace / "untracked-dir").exists()
+    assert _git(workspace, "rev-parse", "HEAD") == commit_sha
+    assert _git(workspace, "status", "--porcelain") == ""

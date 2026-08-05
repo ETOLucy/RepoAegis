@@ -64,15 +64,15 @@ point, not product completion.
 |---|---|---|---|---|
 | RepoAegis exports an immutable versioned target pack | none | none | none | **Target invariant** `repoaegis-target-pack/v2` contract and export |
 | Target pack binds runtime, baseline, images, evaluator, benchmark, tools, and policy digests | none | none | none | **Target invariant** |
-| AegisEvo invokes the pinned RepoAegis runtime rather than a second coding agent | current AegisEvo Harness has its own repository action loop | Harness tests | no joint demo | **Target invariant** architectural replacement |
-| One joint demo completes task, exports pack, searches, reports, and promotes | none | none | none | **Target invariant** |
+| AegisEvo invokes the pinned RepoAegis runtime rather than a second coding agent | `RepoAegisHarnessRunner` drives the real RepoAegis API through the versioned `repoaegis-http-v1` adapter (create task, poll, approve, collect) | `tests/repoaegis_harness.rs` + `tests/repoaegis_adapter.rs` (container-run) | **Verified 2026-08-06**: live joint demo drove a real task to `completed` with `resolution=true`; evidence at AegisEvo `examples-output/repoaegis-live-demo.json` | **Verified** adapter-driven joint demo boundary |
+| One joint demo completes a real task and records the governed observation | RepoAegis API + worker graph + `RepoAegisHarnessRunner` | harness + API integration tests | **Verified 2026-08-06**: task `cb733020` completed (materialize -> patch -> container verification -> review -> commit/push -> draft PR); observation `resolution=true`, `task_score=1.0` | **Under validation**: pack export + equal-budget search + report + controlled promotion orchestration remain |
 
 ## Release and Repository Identity
 
 | Claim | Implementation | Automated test | Runtime evidence | Status / gap |
 |---|---|---|---|---|
-| README accurately separates implemented, experimental, and roadmap features | README currently presents several partial items as end-to-end guarantees | documentation tests are limited | none | **Under validation**; implementation must be completed before final wording is accepted |
-| README badges use real data sources | CI, Python, and License badges have real targets | link checks not yet present | public CI source exists | **Under validation**; release badge waits for an actual release |
+| README accurately separates implemented, experimental, and roadmap features | README.md + README.zh-CN.md present verified guarantees, under-validation boundaries, and roadmap separately; joint governance flow and version compatibility matrix added | documentation checks + relative-link checks | published README pair | **Verified** documentation boundary; live claims cross-checked in claim-to-evidence |
+| README badges use real data sources | CI, Python 3.12, and Apache-2.0 badges point to real targets in both README.md and README.zh-CN.md | link checks | public CI source exists | **Under validation**; release badge waits for an actual release |
 | Version, changelog, tag, release notes, and target-pack compatibility are prepared locally | package version is `0.1.0`; no final changelog/compatibility matrix | none | none | **Target invariant** release preparation |
 | Remote metadata and release are updated | intentionally not authorized in unattended work | none | none | **Under validation**: local proposal is required before user approval |
 

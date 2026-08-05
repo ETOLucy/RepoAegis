@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
 
 from repo_maintenance_agent.domain.errors import ToolExecutionError
@@ -22,21 +23,20 @@ class WorkspaceAdapter:
         self._repository_locators = dict(repository_locators)
 
     async def execute(self, call: ToolCall, workspace: Path) -> ToolResult:
-        if call.name != "workspace_materialize":
-            raise ValueError(f"unsupported workspace tool: {call.name}")
+        if call.name == "workspace_materialize":
+            return await self._materialize(call, workspace)
+        if call.name == "workspace_prepare":
+            return await self._prepare(call, workspace)
+        raise ValueError(f"unsupported workspace tool: {call.name}")
+
+    async def _materialize(self, call: ToolCall, workspace: Path) -> ToolResult:
         locator = self._repository_locators.get(call.repo_id)
         if locator is None:
             raise ToolExecutionError("repository is not registered")
         root = workspace.resolve()
-        tenant_key = hashlib.sha256(call.tenant_id.encode()).hexdigest()[:24]
-        task_key = hashlib.sha256(call.task_id.encode()).hexdigest()[:24]
-        relative = Path(tenant_key) / task_key
-        target = (root / relative).resolve()
-        if not target.is_relative_to(root):
-            raise ToolExecutionError("workspace path escaped root")
-        branch = f"repoaegis/{task_key}"
+        relative, target, branch = self._resolve_target(call, root)
         if target.exists():
-            await self._verify_existing(target, call.commit_sha, branch)
+            await self._reset_existing(target, call.commit_sha, branch)
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             await self._runner.run(
@@ -59,7 +59,37 @@ class WorkspaceAdapter:
             output={"workspace": relative.as_posix(), "branch": branch},
         )
 
-    async def _verify_existing(self, target: Path, commit_sha: str, branch: str) -> None:
+    async def _prepare(self, call: ToolCall, workspace: Path) -> ToolResult:
+        """Return the task workspace to a clean tree at the pinned commit.
+
+        Unlike materialization this call is intentionally not replayed from the
+        operation log: every graph attempt (including retries after a failed
+        attempt that left untracked files behind) must start from a clean tree so
+        patch application cannot fail with "already exists in working directory".
+        """
+        root = workspace.resolve()
+        relative, target, branch = self._resolve_target(call, root)
+        if not target.is_dir():
+            raise ToolExecutionError("workspace is not materialized")
+        await self._reset_existing(target, call.commit_sha, branch)
+        self._make_workspace_shared(target)
+        return ToolResult(
+            call_id=call.call_id,
+            success=True,
+            output={"workspace": relative.as_posix(), "branch": branch},
+        )
+
+    @staticmethod
+    def _resolve_target(call: ToolCall, root: Path) -> tuple[Path, Path, str]:
+        tenant_key = hashlib.sha256(call.tenant_id.encode()).hexdigest()[:24]
+        task_key = hashlib.sha256(call.task_id.encode()).hexdigest()[:24]
+        relative = Path(tenant_key) / task_key
+        target = (root / relative).resolve()
+        if not target.is_relative_to(root):
+            raise ToolExecutionError("workspace path escaped root")
+        return relative, target, f"repoaegis/{task_key}"
+
+    async def _reset_existing(self, target: Path, commit_sha: str, branch: str) -> None:
         await self._assert_head(target, commit_sha)
         await self._runner.run(["git", "reset", "--hard", "HEAD"], cwd=target)
         await self._runner.run(["git", "clean", "-fd"], cwd=target)
@@ -86,12 +116,7 @@ class WorkspaceAdapter:
         network-less; this only relaxes ownership on the disposable task volume.
         """
         for path in target.rglob("*"):
-            try:
+            with suppress(OSError):
                 path.chmod(path.stat().st_mode | 0o222)
-            except OSError:
-                continue
-        try:
+        with suppress(OSError):
             target.chmod(target.stat().st_mode | 0o222)
-        except OSError:
-            pass
-

@@ -304,6 +304,44 @@ tests/             unit and integration contracts
 - [Threat model](docs/threat-model.md)
 - [Security best-practices report](security_best_practices_report.md)
 
+## Joint Governance Flow With AegisEvo
+
+RepoAegis and AegisEvo form one governed pipeline. RepoAegis is the repository-maintenance
+control plane; AegisEvo is its search, evaluation, and promotion platform. AegisEvo never
+maintains a second coding agent ? it drives the pinned RepoAegis runtime through a versioned,
+content-addressed target pack.
+
+```mermaid
+flowchart LR
+    RA[RepoAegis runtime] -->|exports immutable| TP[Target pack / v2]
+    TP --> AE[AegisEvo search + evaluation]
+    AE -->|equal-budget candidate runs| RA
+    RA -->|resolution + evidence| AE
+    AE -->|aggregate + gates| Report[Report]
+    Report -->|human approval| Promotion[Controlled Promotion]
+```
+
+- **RepoAegis** executes real repository tasks: materialize the pinned commit -> plan -> approve ->
+  patch -> container verification -> review -> commit/push -> draft PR.
+- **Target pack** freezes the RepoAegis commit, runtime contract, candidate mapping, baseline
+  genome, images, evaluator, benchmark, tools, and policy digests (`repoaegis-target-pack/v2`).
+- **AegisEvo** consumes the target pack through the versioned `repoaegis-http-v1` adapter, runs
+  equal-budget baseline / random / evolution search, and reports resolution, safety, cost, and
+  latency evidence (`evaluation-observation/v1`).
+- **Controlled promotion** requires absolute quality, statistical significance, zero safety
+  regression, budget compliance, and human approval. A new RepoAegis release creates a new target
+  pack instead of overwriting the previous one.
+
+### Version Compatibility
+
+| RepoAegis | Target pack | AegisEvo | Contract |
+|---|---|---|---|
+| `0.1.0` (current main) | `repoaegis-target-pack/v2` (`repoaegis-v2`) | `0.1.0` (current main) | `repoaegis-http-v1` adapter + `evaluation-observation/v1` |
+
+Cross-language digest checks and the live joint demo (AegisEvo drives a real RepoAegis task to
+`completed` with `resolution=true`) verify this compatibility. See
+[AegisEvo](https://github.com/ETOLucy/AegisEvo) for the evaluation side.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).

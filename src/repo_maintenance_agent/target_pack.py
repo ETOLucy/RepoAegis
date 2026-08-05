@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +21,9 @@ _SENSITIVE_PATTERNS = (
     "BEGIN RSA PRIVATE KEY",
     "BEGIN OPENSSH PRIVATE KEY",
 )
-_IGNORED_PARTS = frozenset({".git", ".venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "target"})
+_IGNORED_PARTS = frozenset(
+    {".git", ".venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "target"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,8 +74,11 @@ def _collect_policy(root: Path) -> dict[str, object]:
 
 
 def _git_head(root: Path) -> str:
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
+    git = shutil.which("git")
+    if git is None:
+        raise ValueError("git is required for the target pack")
+    result = subprocess.run(  # noqa: S603 - resolved executable and fixed arguments
+        [git, "rev-parse", "HEAD"],
         cwd=root,
         capture_output=True,
         text=True,
@@ -101,7 +107,7 @@ def _tree_digest(root: Path, *, include: tuple[str, ...]) -> str:
 
 
 def _hash_file(hasher: hashlib._Hash, scope: str, root: Path, file: Path) -> None:
-    identity = f"{scope}:{file.relative_to(root).as_posix()}".encode("utf-8")
+    identity = f"{scope}:{file.relative_to(root).as_posix()}".encode()
     hasher.update(identity + b"\0")
     hasher.update(file.read_bytes() + b"\0")
 

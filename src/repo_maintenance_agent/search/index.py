@@ -8,12 +8,25 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-_IGNORED_PARTS = frozenset({".git", ".venv", ".worktrees", "node_modules", "dist", "build", ".pytest_cache", ".pytest-tmp", ".mypy_cache", ".ruff_cache"})
+_IGNORED_PARTS = frozenset(
+    {
+        ".git",
+        ".venv",
+        ".worktrees",
+        "node_modules",
+        "dist",
+        "build",
+        ".pytest_cache",
+        ".pytest-tmp",
+        ".mypy_cache",
+        ".ruff_cache",
+    }
+)
 _TEXT_SUFFIXES = frozenset(
     {".py", ".rs", ".go", ".java", ".js", ".jsx", ".ts", ".tsx", ".md", ".toml", ".yml", ".yaml"}
 )
@@ -217,9 +230,13 @@ def _python_symbol_chunks(
     chunks: list[CodeChunk] = []
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            chunks.append(_symbol_chunk(node, node.name, lines, tenant_id, repo_id, commit_sha, path))
+            chunks.append(
+                _symbol_chunk(node, node.name, lines, tenant_id, repo_id, commit_sha, path)
+            )
         elif isinstance(node, ast.ClassDef):
-            chunks.append(_symbol_chunk(node, node.name, lines, tenant_id, repo_id, commit_sha, path))
+            chunks.append(
+                _symbol_chunk(node, node.name, lines, tenant_id, repo_id, commit_sha, path)
+            )
             for child in node.body:
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     chunks.append(
@@ -245,8 +262,9 @@ def _symbol_chunk(
     commit_sha: str,
     path: str,
 ) -> CodeChunk:
-    start = int(getattr(node, "lineno"))
-    end = int(getattr(node, "end_lineno", start))
+    node_typed = cast(Any, node)
+    start = int(node_typed.lineno)
+    end = int(node_typed.end_lineno or start)
     return _chunk(tenant_id, repo_id, commit_sha, path, lines[start - 1 : end], start, symbol)
 
 

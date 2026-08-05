@@ -77,7 +77,11 @@ def build_worker_runtime(
             "workspace_materialize": WorkspaceAdapter(
                 ProcessRunner(allowed_executables={"git"}),
                 repository_locators=settings.repository_locators,
-            )
+            ),
+            "workspace_prepare": WorkspaceAdapter(
+                ProcessRunner(allowed_executables={"git"}),
+                repository_locators=settings.repository_locators,
+            ),
         },
         operation_log=runtime.operations,
         workspace_root=workspace_root,

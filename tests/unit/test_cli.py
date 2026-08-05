@@ -33,7 +33,7 @@ def test_control_plane_client_sends_bearer_token_without_exposing_it() -> None:
 
     client = ControlPlaneClient(
         base_url="https://agent.example.invalid",
-        token="private-test-token",  # noqa: S106 - explicit non-secret test fixture
+        token="private-test-token",
         transport=httpx.MockTransport(handler),
     )
 
@@ -53,7 +53,7 @@ def test_control_plane_client_binds_approval_to_target_and_tools() -> None:
 
     client = ControlPlaneClient(
         base_url="https://agent.example.invalid",
-        token="private-test-token",  # noqa: S106 - explicit non-secret test fixture
+        token="private-test-token",
         transport=httpx.MockTransport(handler),
     )
 

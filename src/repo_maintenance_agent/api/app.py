@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import os
-
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, FastAPI, Request, Response, status
@@ -15,14 +15,11 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from repo_maintenance_agent.api.auth import Principal, StaticTokenAuthenticator
-from repo_maintenance_agent.chat import ChatEngine
-from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.api.schemas import (
+    ApprovalRequest,
     ChatHit,
     ChatRequest,
     ChatResponse,
-
-    ApprovalRequest,
     EvaluationReplayRequest,
     EvaluationRunCreateRequest,
     EvaluationRunListResponse,
@@ -31,6 +28,8 @@ from repo_maintenance_agent.api.schemas import (
     TaskListResponse,
     TaskResponse,
 )
+from repo_maintenance_agent.chat import ChatEngine
+from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.domain.errors import (
     ConcurrentUpdate,
     InvalidStateTransition,
@@ -51,7 +50,6 @@ from repo_maintenance_agent.evaluation.storage import (
     EvaluationRepository,
     InMemoryEvaluationRepository,
 )
-
 
 chat_router = APIRouter(prefix="/v1", tags=["chat"])
 
@@ -79,11 +77,12 @@ async def chat(body: ChatRequest) -> ChatResponse:
     if engine is None:
         raise ConcurrentUpdate("chat is not configured (REPO_AGENT_CHAT_REPO_ROOT missing)")
     result = await engine.answer(body.query, top_k=body.top_k)
+    raw_hits = cast(list[dict[str, Any]], result["hits"])
     return ChatResponse(
-        answer=result["answer"],
-        hits=tuple(ChatHit(**hit) for hit in result["hits"]),
-        repo_id=result["repo_id"],
-        commit_sha=result["commit_sha"],
+        answer=cast(str, result["answer"]),
+        hits=tuple(ChatHit(**hit) for hit in raw_hits),
+        repo_id=cast(str, result["repo_id"]),
+        commit_sha=cast(str, result["commit_sha"]),
     )
 
 

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
@@ -27,7 +27,7 @@ class WorkspaceGraphExecutor:
         self._graph_factory = graph_factory
 
     async def execute(self, state: RepoTaskState) -> RepoTaskState:
-        call = ToolCall(
+        materialize = ToolCall(
             task_id=state.task_id,
             tenant_id=state.tenant_id,
             repo_id=state.repo_id,
@@ -37,13 +37,25 @@ class WorkspaceGraphExecutor:
             permission=ToolPermission.CONTROL,
             idempotency_key=f"workspace:{state.task_id}:{state.commit_sha}",
         )
-        result = await self._gateway.execute(call, state)
+        result = await self._gateway.execute(materialize, state)
         if not result.success:
             raise ToolExecutionError("workspace materialization failed")
         workspace = self._resolve_workspace(result.output.get("workspace"))
         branch = result.output.get("branch")
         if not isinstance(branch, str) or not branch:
             raise ToolExecutionError("workspace tool returned an invalid branch")
+        prepare = ToolCall(
+            task_id=state.task_id,
+            tenant_id=state.tenant_id,
+            repo_id=state.repo_id,
+            commit_sha=state.commit_sha,
+            agent="control",
+            name="workspace_prepare",
+            permission=ToolPermission.CONTROL,
+        )
+        prepared = await self._gateway.execute(prepare, state)
+        if not prepared.success:
+            raise ToolExecutionError("workspace preparation failed")
         state = state.model_copy(
             update={"repo_profile": state.repo_profile | {"workspace_branch": branch}}
         )

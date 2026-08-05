@@ -118,7 +118,7 @@ class Worker:
                 expected_version=task.version,
             )
         except Exception:
-            traceback.print_exc()  # noqa: T201 - worker observability
+            traceback.print_exc()
             stop_heartbeat.set()
             await heartbeat
             if isinstance(lease_state.error, LeaseConflict):

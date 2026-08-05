@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -32,7 +35,7 @@ class ChatEngine:
         tenant_id: str = "demo",
         repo_id: str = "repoaegis",
         commit_sha: str | None = None,
-        model: object | None = None,
+        model: Any | None = None,
     ) -> None:
         self._settings = settings
         self._repo_root = repo_root.resolve()
@@ -116,10 +119,11 @@ def _render_hit(hit: SearchHit) -> dict[str, object]:
 
 
 def _git_head(repo_root: Path) -> str:
-    import subprocess
-
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
+    git = shutil.which("git")
+    if git is None:
+        raise ValueError("git is required for the chat engine")
+    result = subprocess.run(  # noqa: S603 - resolved executable and fixed arguments
+        [git, "rev-parse", "HEAD"],
         cwd=repo_root,
         capture_output=True,
         text=True,

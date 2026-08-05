@@ -33,7 +33,11 @@ async def test_executor_materializes_task_workspace_before_running_graph(
             "workspace_materialize": WorkspaceAdapter(
                 ProcessRunner(allowed_executables={"git"}),
                 repository_locators={"owner/repo": str(remote)},
-            )
+            ),
+            "workspace_prepare": WorkspaceAdapter(
+                ProcessRunner(allowed_executables={"git"}),
+                repository_locators={"owner/repo": str(remote)},
+            ),
         },
         operation_log=InMemoryOperationLog(),
         workspace_root=workspace_root,
@@ -120,3 +124,99 @@ def _git(cwd: Path, *arguments: str) -> str:
         encoding="utf-8",
     )
     return result.stdout.strip()
+
+@pytest.mark.asyncio
+async def test_executor_cleans_leftover_files_on_replayed_retry(
+    tmp_path: Path,
+) -> None:
+    """A retried graph execution must start from a clean tree.
+
+    The materialization call is replayed from the operation log on retry, so the
+    reset/clean in the adapter would be skipped without the explicit
+    workspace_prepare step. A previous failed attempt can leave untracked files
+    behind (for example a patch that created BENCHMARK_GUIDE.md before a later
+    node failed); patch application on the retry would then fail with
+    "already exists in working directory".
+    """
+    remote, commit_sha = _bare_repository(tmp_path)
+    workspace_root = tmp_path / "workspaces"
+    workspace_root.mkdir()
+    gateway = ToolGateway(
+        policy=PermissionPolicy(),
+        adapters={
+            "workspace_materialize": WorkspaceAdapter(
+                ProcessRunner(allowed_executables={"git"}),
+                repository_locators={"owner/repo": str(remote)},
+            ),
+            "workspace_prepare": WorkspaceAdapter(
+                ProcessRunner(allowed_executables={"git"}),
+                repository_locators={"owner/repo": str(remote)},
+            ),
+        },
+        operation_log=InMemoryOperationLog(),
+        workspace_root=workspace_root,
+    )
+    run_count = 0
+    workspaces: list[Path] = []
+
+    async def coding_node(graph_state: GraphState) -> dict[str, object]:
+        nonlocal run_count
+        run_count += 1
+        workspace = workspaces[0]
+        leftover = workspace / "leftover.txt"
+        if run_count > 1:
+            assert not leftover.exists(), "retry must start from a clean tree"
+        leftover.write_text("untracked", encoding="utf-8")
+        task = graph_state["task"].transition(TaskStatus.CODING).model_copy(
+            update={"iteration": 1}
+        )
+        return {"task": task, "trace": ["coding"]}
+
+    def graph_factory(workspace: Path):
+        workspaces.append(workspace)
+        return build_graph(
+            AgentNodes(
+                intake=_transition_node(TaskStatus.INTAKE, "intake"),
+                research=_transition_node(TaskStatus.RESEARCH, "research"),
+                planning=_transition_node(TaskStatus.PLANNING, "planning"),
+                approval=_transition_node(TaskStatus.CODING, "approval"),
+                coding=coding_node,
+                verification=_transition_node(
+                    TaskStatus.VERIFYING,
+                    "verification",
+                    verification=VerificationResult(passed=True),
+                ),
+                review=_transition_node(
+                    TaskStatus.REVIEWING,
+                    "review",
+                    review={"decision": "approve"},
+                ),
+                pr=_transition_node(TaskStatus.DELIVERING, "pr"),
+                failure=_transition_node(TaskStatus.FAILED, "failure"),
+            )
+        )
+
+    executor = WorkspaceGraphExecutor(
+        gateway=gateway,
+        workspace_root=workspace_root,
+        graph_factory=graph_factory,
+    )
+    task = RepoTaskState(
+        tenant_id="tenant-a",
+        repo_id="owner/repo",
+        commit_sha=commit_sha,
+        base_branch="main",
+        issue={"title": "Fix", "body": "Details"},
+    )
+
+    first = await executor.execute(task)
+    assert first.status is TaskStatus.COMPLETED
+    assert run_count == 1
+    assert (workspaces[0] / "leftover.txt").exists()
+
+    # Same task executed again (worker retry after a failed graph attempt).
+    # Materialization is replayed; workspace_prepare must still clean the tree.
+    second = await executor.execute(task)
+    assert second.status is TaskStatus.COMPLETED
+    assert run_count == 2
+    assert (workspaces[0] / "leftover.txt").exists()

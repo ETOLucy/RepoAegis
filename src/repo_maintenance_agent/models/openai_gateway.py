@@ -3,8 +3,7 @@ from __future__ import annotations
 from typing import Any, TypeVar, cast
 
 from openai import AsyncOpenAI
-from pydantic import ValidationError
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from repo_maintenance_agent.config import Settings
 

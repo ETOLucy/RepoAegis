@@ -264,7 +264,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
         patch_feedback: str | None = None
         tool_result = None
         for patch_attempt in range(runtime.max_patch_attempts):
-            patch_payload = {
+            patch_payload: dict[str, object] = {
                 "issue": task.issue.model_dump(mode="json"),
                 "plan": task.plan,
                 "controlled_context": controlled_context,
@@ -277,7 +277,8 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             output = await runtime.model.structured(
                 system=(
                     "Produce a minimal unified diff for the approved plan. Do not modify unrelated "
-                    "files, credentials, CI permissions, or dependency locks unless explicitly planned."
+                    "files, credentials, CI permissions, or dependency locks unless explicitly "
+                    "planned."
                 ),
                 input_text=json.dumps(patch_payload, sort_keys=True),
                 schema=PatchProposal,
@@ -313,6 +314,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 patch_feedback = str(error)
                 if patch_attempt == runtime.max_patch_attempts - 1:
                     raise
+        assert tool_result is not None
         changed_files = _changed_files(tool_result)
         coding_task = (
             task if task.status is TaskStatus.CODING else task.transition(TaskStatus.CODING)

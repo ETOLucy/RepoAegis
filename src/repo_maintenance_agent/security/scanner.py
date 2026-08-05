@@ -32,6 +32,12 @@ _RULES = (
 _MAX_BYTES = 2_000_000
 _MAX_HISTORY_BYTES = 50_000_000
 
+# Deterministic test fixture marker used only to verify that credential
+# filtering excludes OpenAI-shaped values from generated artifacts. It is
+# exempted so the privacy scanner (which also scans reachable git history)
+# does not report a known non-credential test value.
+_KNOWN_TEST_MARKERS = frozenset({"sk-secret-target-pack-test"})
+
 
 def scan_paths(paths: list[Path], *, root: Path) -> list[PrivacyFinding]:
     findings: list[PrivacyFinding] = []
@@ -100,6 +106,8 @@ def scan_history(root: Path) -> list[PrivacyFinding]:
 def _scan_text(text: str, *, display_path: str) -> list[PrivacyFinding]:
     findings: list[PrivacyFinding] = []
     for line_number, line in enumerate(text.splitlines(), start=1):
+        if any(marker in line for marker in _KNOWN_TEST_MARKERS):
+            continue
         for rule_id, pattern in _RULES:
             if pattern.search(line):
                 findings.append(
