@@ -420,6 +420,8 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                     "verification": (
                         task.verification.model_dump(mode="json") if task.verification else None
                     ),
+                    "workspace_branch": task.repo_profile.get("workspace_branch"),
+                    "base_branch": task.base_branch,
                 },
                 sort_keys=True,
             ),
