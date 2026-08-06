@@ -327,6 +327,18 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 input_text=json.dumps(patch_payload, sort_keys=True),
                 schema=PatchProposal,
             )
+            await runtime.artifacts.put(
+                task.tenant_id,
+                task.task_id,
+                "proposed-edits.json",
+                json.dumps(
+                    output.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8"),
+                "application/json",
+            )
             proposal_paths = tuple(sorted({edit.path for edit in output.edits}))
             current_files: dict[str, object] = {}
             try:

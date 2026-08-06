@@ -637,6 +637,15 @@ async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
     }
     assert "patch_feedback" in model.patch_inputs[1]
     assert "old_text was not found" in str(model.patch_inputs[1]["patch_feedback"])
+    proposal_artifacts = sorted(tmp_path.rglob("*-proposed-edits.json"))
+    assert len(proposal_artifacts) == 2
+    saved_proposals = [
+        json.loads(path.read_text(encoding="utf-8")) for path in proposal_artifacts
+    ]
+    assert {value["edits"][0]["old_text"] for value in saved_proposals} == {
+        "missing implementation",
+        "def load(): return default",
+    }
 
 
 @pytest.mark.asyncio
