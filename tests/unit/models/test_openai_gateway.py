@@ -1,9 +1,15 @@
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from repo_maintenance_agent.models.openai_gateway import OpenAIModelGateway
+from repo_maintenance_agent.models.usage import (
+    ModelBudgetExceeded,
+    UsageLedger,
+    UsageRates,
+)
 
 
 class Answer(BaseModel):
@@ -39,6 +45,8 @@ async def test_gateway_uses_responses_structured_output_without_storing_prompt()
     assert client.responses.arguments["model"] == "gpt-test-model"
     assert client.responses.arguments["store"] is False
     assert client.responses.arguments["text_format"] is Answer
+    assert client.responses.arguments["max_output_tokens"] == 16_384
+    assert "temperature" not in client.responses.arguments
 
 
 @pytest.mark.asyncio
@@ -74,11 +82,15 @@ def test_from_settings_passes_base_url_and_model(monkeypatch) -> None:
             OPENAI_API_KEY="test-key",
             OPENAI_BASE_URL="https://api.deepseek.com",
             OPENAI_MODEL="deepseek-chat",
+            model_api_style="chat-json",
         )
     )
     assert captured["api_key"] == "test-key"
     assert captured["base_url"] == "https://api.deepseek.com"
+    assert captured["timeout"] == 180
+    assert captured["max_retries"] == 0
     assert gateway._model == "deepseek-chat"
+    assert gateway._api_style == "chat-json"
 
 @pytest.mark.asyncio
 async def test_gateway_retries_once_on_invalid_structured_output() -> None:
@@ -123,7 +135,14 @@ async def test_gateway_retry_includes_validation_feedback() -> None:
             self.inputs.append(kwargs["input"])
             if self.calls == 1:
                 raise ValidationError.from_exception_data(
-                    "Answer", [{"type": "missing", "loc": ("summary",), "input": {}}]
+                    "Answer",
+                    [
+                        {
+                            "type": "missing",
+                            "loc": ("summary",),
+                            "input": {"secret": "do-not-echo"},
+                        }
+                    ],
                 )
             return SimpleNamespace(output_parsed=Answer(summary="retried"))
 
@@ -138,3 +157,189 @@ async def test_gateway_retry_includes_validation_feedback() -> None:
     assert result == Answer(summary="retried")
     assert gateway._client.responses.calls == 2
     assert "previous response" in gateway._client.responses.inputs[1]
+    assert '"loc":["summary"]' in gateway._client.responses.inputs[1]
+    assert '"type":"missing"' in gateway._client.responses.inputs[1]
+    assert "do-not-echo" not in gateway._client.responses.inputs[1]
+
+
+@pytest.mark.asyncio
+async def test_gateway_default_allows_third_structured_attempt() -> None:
+    class Responses:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def parse(self, **kwargs):
+            self.calls += 1
+            if self.calls < 3:
+                raise ValidationError.from_exception_data(
+                    "Answer", [{"type": "missing", "loc": ("summary",), "input": {}}]
+                )
+            return SimpleNamespace(output_parsed=Answer(summary="third attempt"))
+
+    gateway = OpenAIModelGateway(
+        client=SimpleNamespace(responses=Responses()),
+        model="test-model",
+    )
+
+    result = await gateway.structured(system="s", input_text="input", schema=Answer)
+
+    assert result == Answer(summary="third attempt")
+    assert gateway._client.responses.calls == 3
+
+
+@pytest.mark.asyncio
+async def test_gateway_records_deepseek_usage_categories() -> None:
+    class Responses:
+        async def parse(self, **kwargs):
+            return SimpleNamespace(
+                output_parsed=Answer(summary="metered"),
+                usage=SimpleNamespace(
+                    prompt_tokens=1_000,
+                    prompt_cache_hit_tokens=700,
+                    prompt_cache_miss_tokens=300,
+                    completion_tokens=80,
+                    completion_tokens_details=SimpleNamespace(reasoning_tokens=20),
+                ),
+            )
+
+    client = SimpleNamespace(responses=Responses())
+    ledger = UsageLedger(
+        limit_cny=Decimal("1"),
+        rates=UsageRates(
+            cache_hit_input_cny_per_million=Decimal("0.2"),
+            cache_miss_input_cny_per_million=Decimal("2"),
+            output_cny_per_million=Decimal("8"),
+        ),
+    )
+    gateway = OpenAIModelGateway(
+        client=client,
+        model="deepseek-chat",
+        usage_ledger=ledger,
+        maximum_call_cost_cny=Decimal("0.1"),
+    )
+
+    result = await gateway.structured(system="s", input_text="input", schema=Answer)
+
+    assert result == Answer(summary="metered")
+    assert ledger.snapshot().input_cache_hit_tokens == 700
+    assert ledger.snapshot().input_cache_miss_tokens == 300
+    assert ledger.snapshot().reasoning_tokens == 20
+
+
+@pytest.mark.asyncio
+async def test_gateway_records_usage_before_rejecting_unparsed_response() -> None:
+    class Responses:
+        async def parse(self, **kwargs):
+            return SimpleNamespace(
+                output_parsed=None,
+                usage=SimpleNamespace(
+                    input_tokens=1_000,
+                    output_tokens=80,
+                    input_tokens_details=SimpleNamespace(cached_tokens=700),
+                    output_tokens_details=SimpleNamespace(reasoning_tokens=20),
+                ),
+            )
+
+    ledger = UsageLedger(
+        limit_cny=Decimal("1"),
+        rates=UsageRates(
+            cache_hit_input_cny_per_million=Decimal("0.2"),
+            cache_miss_input_cny_per_million=Decimal("2"),
+            output_cny_per_million=Decimal("8"),
+        ),
+    )
+    gateway = OpenAIModelGateway(
+        client=SimpleNamespace(responses=Responses()),
+        model="deepseek-v4-flash",
+        usage_ledger=ledger,
+        maximum_call_cost_cny=Decimal("0.1"),
+    )
+
+    with pytest.raises(RuntimeError, match="structured"):
+        await gateway.structured(system="s", input_text="input", schema=Answer)
+
+    usage = ledger.snapshot()
+    assert usage.input_cache_hit_tokens == 700
+    assert usage.input_cache_miss_tokens == 300
+    assert usage.output_tokens == 80
+
+
+@pytest.mark.asyncio
+async def test_gateway_refuses_before_call_when_budget_is_exhausted() -> None:
+    class Responses:
+        async def parse(self, **kwargs):
+            raise AssertionError("provider must not be called")
+
+    ledger = UsageLedger(
+        limit_cny=Decimal("0.05"),
+        rates=UsageRates(
+            cache_hit_input_cny_per_million=Decimal("0.2"),
+            cache_miss_input_cny_per_million=Decimal("2"),
+            output_cny_per_million=Decimal("8"),
+        ),
+    )
+    gateway = OpenAIModelGateway(
+        client=SimpleNamespace(responses=Responses()),
+        model="deepseek-chat",
+        usage_ledger=ledger,
+        maximum_call_cost_cny=Decimal("0.1"),
+    )
+
+    with pytest.raises(ModelBudgetExceeded, match="hard limit"):
+        await gateway.structured(system="s", input_text="input", schema=Answer)
+
+
+@pytest.mark.asyncio
+async def test_gateway_chat_json_mode_uses_deepseek_compatible_contract() -> None:
+    class Completions:
+        def __init__(self) -> None:
+            self.arguments: dict[str, object] = {}
+
+        async def create(self, **kwargs):
+            self.arguments = kwargs
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content='{"summary":"chat-json"}')
+                    )
+                ],
+                usage=SimpleNamespace(
+                    prompt_tokens=100,
+                    prompt_cache_hit_tokens=60,
+                    prompt_cache_miss_tokens=40,
+                    completion_tokens=10,
+                ),
+            )
+
+    completions = Completions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    ledger = UsageLedger(
+        limit_cny=Decimal("1"),
+        rates=UsageRates(
+            cache_hit_input_cny_per_million=Decimal("0.2"),
+            cache_miss_input_cny_per_million=Decimal("2"),
+            output_cny_per_million=Decimal("8"),
+        ),
+    )
+    gateway = OpenAIModelGateway(
+        client=client,
+        model="deepseek-chat",
+        api_style="chat-json",
+        usage_ledger=ledger,
+        maximum_call_cost_cny=Decimal("0.1"),
+    )
+
+    result = await gateway.structured(system="Return JSON.", input_text="input", schema=Answer)
+
+    assert result == Answer(summary="chat-json")
+    assert completions.arguments["response_format"] == {"type": "json_object"}
+    assert completions.arguments["extra_body"] == {"thinking": {"type": "disabled"}}
+    assert completions.arguments["temperature"] == 0
+    assert completions.arguments["max_tokens"] == 16_384
+    messages = completions.arguments["messages"]
+    assert messages[0]["role"] == "system"
+    assert "Return JSON." in messages[0]["content"]
+    assert '"summary"' in messages[0]["content"]
+    assert messages[1] == {"role": "user", "content": "input"}
+    assert ledger.snapshot().input_cache_hit_tokens == 60
+    assert ledger.snapshot().input_cache_miss_tokens == 40

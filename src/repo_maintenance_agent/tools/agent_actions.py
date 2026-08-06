@@ -137,7 +137,8 @@ class WorkspaceReadAdapter:
                 continue
             data = candidate.read_bytes()
             if len(data) > remaining:
-                raise ValueError("workspace read exceeds total byte limit")
+                contents[relative] = {"error": "byte_limit"}
+                continue
             remaining -= len(data)
             contents[relative] = data.decode("utf-8", errors="replace")
         return ToolResult(call_id=call.call_id, success=True, output={"files": contents})

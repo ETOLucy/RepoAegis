@@ -1,21 +1,20 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/repo-aegis-lockup-dark.svg">
-    <img src="docs/repo-aegis-lockup.svg" width="480" alt="RepoAegis single-wing seed logo and wordmark">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/repo-aegis-mark-reversed.svg">
+    <img src="docs/repo-aegis-mark.svg" width="112" alt="RepoAegis single-wing seed mark">
   </picture>
 </p>
 
 <h1 align="center">RepoAegis</h1>
 
 <p align="center">
-  <a href="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml"><img src="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-245dcc.svg" alt="Python 3.12"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-177245.svg" alt="License: Apache-2.0"></a>
+  A policy-controlled repository maintenance agent for evidence-backed patches and reviewable delivery.
 </p>
 
 <p align="center">
-  A policy-controlled agent system that turns repository issues into evidence-backed patches,
-  sandbox verification, and reviewable draft pull requests.
+  <a href="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml"><img src="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-245dcc.svg" alt="Python 3.12"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-177245.svg" alt="License: Apache-2.0"></a>
 </p>
 
 RepoAegis is built as an AI control plane rather than a chat wrapper. Typed state,
@@ -45,24 +44,13 @@ This repository implements those boundaries end to end.
 
 ## System Map
 
-```mermaid
-flowchart LR
-    Client[CLI / Console / GitHub Event] --> API[FastAPI Control Plane]
-    API --> DB[(PostgreSQL)]
-    DB --> Queue[Leased Task Queue]
-    Queue --> Worker[Worker Pool]
-    Worker --> Graph[LangGraph State Machine]
-    Graph --> Agents[Intake / Research / Plan / Code / Verify / Review / PR]
-    Agents --> Gateway[Policy Tool Gateway]
-    Gateway --> Search[Hybrid Search]
-    Gateway --> GitHub[GitHub CLI]
-    Gateway --> Sandbox[Docker Sandbox]
-    Search --> OpenSearch[(OpenSearch)]
-    Graph --> Approval{Plan Approval}
-    API --> Harness[Evaluation Harness]
-    Harness --> EvalDB[(Run Evidence)]
-    Harness --> Console[Evaluation Operations]
-```
+![RepoAegis runtime architecture](docs/diagrams/runtime-architecture.svg)
+
+[Editable Excalidraw source](docs/diagrams/runtime-architecture.excalidraw) ·
+[PNG export](docs/diagrams/runtime-architecture.png) ·
+[Official evaluation evidence chain](docs/diagrams/official-evaluation-evidence.svg)
+([editable source](docs/diagrams/official-evaluation-evidence.excalidraw),
+[PNG](docs/diagrams/official-evaluation-evidence.png))
 
 The Python control plane owns identity, state, policy, evidence, and orchestration. Repository code
 executes only in assigned workspaces or language-specific Docker sandboxes.
@@ -76,11 +64,11 @@ executes only in assigned workspaces or language-specific Docker sandboxes.
 | Retrieval | Lexical and semantic adapters with deterministic reciprocal-rank fusion |
 | Tool use | Tenant/repository/commit scope plus role and stage authorization |
 | Remote writes | Human decision bound to the plan, target commit, declared files, verification commands, and exact tool scope |
-| Patch safety | Declared-file enforcement and `git apply --check` preflight |
+| Patch safety | Exact-text proposals, approved-path enforcement, local diff rendering, and `git apply --check` preflight |
 | Independent review | Gateway-collected Git diff, post-change source, acceptance criteria, and verification evidence |
 | Commands | Argument arrays, executable allowlist, timeout, output limit, sanitized environment |
 | Sandbox | Digest-pinned image, non-root user, read-only root, dropped capabilities, offline checks |
-| Model output | Structured Responses parsing with `store=False` |
+| Model output | Provider-specific structured JSON with strict local validation; Responses calls use `store=False`; the model does not author diff hunk metadata |
 | Coding context | Gateway-only search/read requests with fixed round and tool-call ceilings |
 | Evaluation | Concurrent suites, retries, provenance, baseline deltas, hard gates, deterministic replay |
 | Privacy | Recursive redaction plus current-tree and reachable-history publication scanning |
@@ -115,14 +103,36 @@ Run the included credential-free example:
 The command writes both reports before returning exit code `1` for a failed gate, which makes it
 usable as a CI release check.
 
+### SWE-bench evidence labels
+
+RepoAegis keeps generation and quality evidence separate:
+
+- **one-shot generation**: a prediction was produced without prior official-test feedback;
+- **officially resolved**: the official SWE-bench Docker harness passed all required tests;
+- **feedback-assisted calibration**: a development rerun consumed a previous official failure;
+- **frozen evaluation**: the CLI rejects development feedback and preserves the one-shot boundary.
+
+Feedback-assisted calibration is useful for improving the agent loop, but it is not reported as a
+one-shot or frozen benchmark score. See [the evaluation integrity guide](docs/evaluation.md) for
+the feedback contract and auditable resume behavior.
+
+The frozen interview-scale run completed on 2026-08-07. Eight SWE-bench Verified tasks were frozen
+before evaluation and kept out of development; RepoAegis generated predictions for 4 of them. The
+official SWE-bench 4.1.0 Docker harness resolved 3 predictions.
+Generation failures remain in the denominator, so the strict result is **3/8 (37.5%)**, not 3/4.
+The formal holdout recorded 387,775 model tokens: 179,328 cache-hit input, 184,636 cache-miss input,
+and 23,811 output. This is directional fixed-subset evidence, not a leaderboard or
+statistical-significance claim. See the
+[redacted evidence record](docs/evidence/swebench-holdout-v2.json).
+
 ## Web Workbench (AI Full-Stack)
 
 A React + Vite workbench that talks to the control plane and a RAG chat endpoint:
 
-- **代码问答 (RAG)** `POST /v1/chat`: hybrid BM25 + symbol retrieval over the repo, cited
-  answers via an OpenAI-compatible model (deepseek), reference paths/line ranges returned.
-- **任务控制台** `/v1/tasks`: list/create/inspect repository maintenance tasks.
-- **评测看板** `/v1/evaluations/runs`: evaluation runs and release gates.
+- **Code Q&A (RAG)** `POST /v1/chat`: hybrid BM25 + symbol retrieval over the repo, cited
+  answers via an OpenAI-compatible model (DeepSeek), reference paths/line ranges returned.
+- **Task console** `/v1/tasks`: list, create, and inspect repository maintenance tasks.
+- **Evaluation dashboard** `/v1/evaluations/runs`: evaluation runs and release gates.
 
 Build the frontend and serve it:
 
@@ -237,8 +247,9 @@ docker compose up --build
 Application and task sandbox containers run as UID 10001 with a read-only root filesystem, dropped
 capabilities, `no-new-privileges`, and immutable base-image digests. The dedicated rootless daemon
 is isolated from worker and host sockets. Sandbox dependency setup is a separate auditable phase;
-test and lint phases run without network access. Compose syntax and isolation topology are tested;
-a live Docker startup remains under validation on the current development machine.
+test and lint phases run without network access. Compose syntax, isolation topology, image build,
+six-service startup, and one local submitted-task lifecycle are verified. Production availability,
+hostile multi-tenant operation, and capacity are not claimed.
 
 ## Configuration
 
@@ -314,25 +325,18 @@ tests/             unit and integration contracts
 
 RepoAegis and AegisEvo form one governed pipeline. RepoAegis is the repository-maintenance
 control plane; AegisEvo is its search, evaluation, and promotion platform. AegisEvo never
-maintains a second coding agent ? it drives the pinned RepoAegis runtime through a versioned,
+maintains a second coding agent; it drives the pinned RepoAegis runtime through a versioned,
 content-addressed target pack.
 
-```mermaid
-flowchart LR
-    RA[RepoAegis runtime] -->|exports immutable| TP[Target pack / v2]
-    TP --> AE[AegisEvo search + evaluation]
-    AE -->|equal-budget candidate runs| RA
-    RA -->|resolution + evidence| AE
-    AE -->|aggregate + gates| Report[Report]
-    Report -->|human approval| Promotion[Controlled Promotion]
-```
+![RepoAegis to official harness to AegisEvo evidence flow](docs/diagrams/official-evaluation-evidence.svg)
 
 - **RepoAegis** executes real repository tasks: materialize the pinned commit -> plan -> approve ->
   patch -> container verification -> review -> commit/push -> draft PR.
-- **Target pack** freezes the RepoAegis commit, runtime contract, candidate mapping, baseline
-  genome, images, evaluator, benchmark, tools, and policy digests (`repoaegis-target-pack/v2`).
+- **Target pack** freezes the RepoAegis commit, runtime source, images, and policy digests
+  (`repoaegis-target-pack/v2`). The separate SWE-bench protocol binds task IDs, model,
+  orchestration metadata, and token-accounting policy.
 - **AegisEvo** consumes the target pack through the versioned `repoaegis-http-v1` adapter, runs
-  equal-budget baseline / random / evolution search, and reports resolution, safety, cost, and
+  equal-budget baseline / random / evolution search, and reports resolution, safety, usage, and
   latency evidence (`evaluation-observation/v1`).
 - **Controlled promotion** requires absolute quality, statistical significance, zero safety
   regression, budget compliance, and human approval. A new RepoAegis release creates a new target
@@ -342,10 +346,11 @@ flowchart LR
 
 | RepoAegis | Target pack | AegisEvo | Contract |
 |---|---|---|---|
-| `0.1.0` (current main) | `repoaegis-target-pack/v2` (`repoaegis-v2`) | `0.1.0` (current main) | `repoaegis-http-v1` adapter + `evaluation-observation/v1` |
+| `978d24e` (evaluated revision) | `repoaegis-target-pack/v2` (`repoaegis-v2`) | `ed1f445` (evaluated revision) | `repoaegis-http-v1` adapter + `evaluation-observation/v1` |
 
-Cross-language digest checks and the live joint demo (AegisEvo drives a real RepoAegis task to
-`completed` with `resolution=true`) verify this compatibility. See
+Cross-language digest checks and the live joint demo verify runtime compatibility: AegisEvo drives
+a real RepoAegis task to `completed`. That historical demo did not prove task resolution; only an
+official verifier report may establish `resolved`. See
 [AegisEvo](https://github.com/ETOLucy/AegisEvo) for the evaluation side.
 
 ## License

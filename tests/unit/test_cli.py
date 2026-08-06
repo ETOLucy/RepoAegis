@@ -1,10 +1,27 @@
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import httpx
+import pytest
 from typer.testing import CliRunner
 
-from repo_maintenance_agent.cli import ControlPlaneClient, app
+from repo_maintenance_agent.cli import (
+    ControlPlaneClient,
+    _evidence_spend,
+    _protocol_arm_configuration,
+    _protocol_cost_policy,
+    _protocol_model_api_style,
+    _read_development_feedback,
+    _validated_protocol_digest,
+    app,
+)
+from repo_maintenance_agent.evaluation.models import ModelUsage
+from repo_maintenance_agent.evaluation.swebench import SWEbenchPrediction
+from repo_maintenance_agent.evaluation.swebench_runner import (
+    SWEbenchGenerationEvidence,
+    SWEbenchGenerationFailureEvidence,
+)
 
 
 def test_doctor_reports_key_availability_without_printing_secret(monkeypatch) -> None:
@@ -82,6 +99,7 @@ def test_cli_exposes_documented_control_and_evaluation_commands() -> None:
         "cancel",
         "evaluate",
         "evaluate-suite",
+        "swebench-generate",
     ):
         assert command in result.stdout
 
@@ -111,6 +129,155 @@ def test_evaluate_rejects_string_boolean_observations(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert result.exception is not None
 
+
+def test_swebench_cost_policy_is_bound_to_the_frozen_protocol() -> None:
+    maximum_spend, maximum_call_cost, rates = _protocol_cost_policy(
+        {
+            "maximum_spend_cny": "50",
+            "maximum_call_cost_cny": "0.25",
+            "cost_rates_cny_per_million": {
+                "cache_hit_input": "0.028",
+                "cache_miss_input": "0.14",
+                "output": "0.28",
+            },
+        }
+    )
+
+    assert maximum_spend == Decimal("50")
+    assert maximum_call_cost == Decimal("0.25")
+    assert rates.cache_hit_input_cny_per_million == Decimal("0.028")
+    assert rates.cache_miss_input_cny_per_million == Decimal("0.14")
+    assert rates.output_cny_per_million == Decimal("0.28")
+
+
+def test_swebench_model_api_style_is_bound_to_the_frozen_protocol() -> None:
+    import pytest
+
+    assert _protocol_model_api_style({"model_api_style": "chat-json"}) == "chat-json"
+    assert _protocol_model_api_style({"model_api_style": "responses"}) == "responses"
+    with pytest.raises(Exception, match="model API style"):
+        _protocol_model_api_style({})
+    with pytest.raises(Exception, match="model API style"):
+        _protocol_model_api_style({"model_api_style": "unbound"})
+
+
+def test_swebench_protocol_digest_rejects_body_tampering() -> None:
+    import hashlib
+
+    import pytest
+
+    body = {
+        "schema_version": "swebench-protocol/v1",
+        "model_api_style": "chat-json",
+    }
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    digest = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    protocol = {**body, "protocol_digest": digest}
+
+    assert _validated_protocol_digest(protocol) == digest
+    with pytest.raises(Exception, match="protocol digest"):
+        _validated_protocol_digest(protocol | {"model_api_style": "responses"})
+
+
+def test_swebench_arm_configuration_is_digest_bound_and_ready() -> None:
+    config = {
+        "max_context_rounds": 1,
+        "max_context_tool_calls": 8,
+        "max_iterations": 3,
+        "max_patch_attempts": 2,
+    }
+    import hashlib
+
+    canonical = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
+    digest = "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+    assert _protocol_arm_configuration(
+        {
+            "arms": {
+                "baseline": {
+                    "status": "ready",
+                    "generation_config": config,
+                    "generation_config_digest": digest,
+                }
+            }
+        },
+        "baseline",
+    ) == (3, 1, 8, 2)
+
+
+def test_swebench_arm_configuration_rejects_pending_candidate() -> None:
+    import pytest
+
+    with pytest.raises(Exception, match="not finalized"):
+        _protocol_arm_configuration(
+            {"arms": {"candidate": {"status": "pending_development_analysis"}}},
+            "candidate",
+        )
+
+
+def test_swebench_development_feedback_is_rejected_for_frozen_role(
+    tmp_path: Path,
+) -> None:
+    feedback = _feedback_file(tmp_path, ["owner__repo-1"])
+
+    with pytest.raises(Exception, match=r"frozen.*feedback"):
+        _read_development_feedback(
+            feedback,
+            selected_ids=["owner__repo-1"],
+            role="frozen",
+        )
+
+
+def test_swebench_development_feedback_requires_exact_unique_selected_tasks(
+    tmp_path: Path,
+) -> None:
+    duplicate = _feedback_file(tmp_path, ["owner__repo-1", "owner__repo-1"])
+    with pytest.raises(Exception, match="unique"):
+        _read_development_feedback(
+            duplicate,
+            selected_ids=["owner__repo-1"],
+            role="calibration",
+        )
+
+    unselected = _feedback_file(tmp_path, ["owner__repo-2"])
+    with pytest.raises(Exception, match="selected tasks"):
+        _read_development_feedback(
+            unselected,
+            selected_ids=["owner__repo-1"],
+            role="development",
+        )
+
+
+def test_swebench_evidence_spend_includes_failed_generation(tmp_path: Path) -> None:
+    protocol_digest = "sha256:" + "a" * 64
+    usage = ModelUsage(estimated_cost_cny=Decimal("0.125"))
+    success = SWEbenchGenerationEvidence(
+        protocol_digest=protocol_digest,
+        arm="candidate",
+        instance_id="owner__repo-1",
+        model_name_or_path="fixture-model",
+        prediction=SWEbenchPrediction(
+            instance_id="owner__repo-1",
+            model_patch="diff --git a/app.py b/app.py\n",
+            model_name_or_path="fixture-model",
+        ),
+        usage=usage,
+        latency_ms=10,
+    )
+    failure = SWEbenchGenerationFailureEvidence(
+        protocol_digest=protocol_digest,
+        arm="candidate",
+        instance_id="owner__repo-2",
+        model_name_or_path="fixture-model",
+        usage=usage,
+        latency_ms=20,
+        error_type="RuntimeError",
+        error_summary="patch did not apply",
+    )
+    (tmp_path / "success.json").write_text(success.model_dump_json(), encoding="utf-8")
+    (tmp_path / "failure.json").write_text(failure.model_dump_json(), encoding="utf-8")
+
+    assert _evidence_spend(tmp_path, protocol_digest) == Decimal("0.250")
 
 def test_evaluate_suite_writes_json_and_markdown_reports(tmp_path: Path) -> None:
     suite_file, observations_file = _suite_files(tmp_path, hidden_tests_passed=True)
@@ -210,3 +377,23 @@ def _suite_files(
         encoding="utf-8",
     )
     return suite_file, observations_file
+
+
+def _feedback_file(root: Path, instance_ids: list[str]) -> Path:
+    path = root / f"feedback-{len(list(root.glob('feedback-*.jsonl')))}.jsonl"
+    records = [
+        {
+            "instance_id": instance_id,
+            "source_run_id": "repoaegis-smoke-v3b",
+            "prediction_digest": "sha256:" + "a" * 64,
+            "official_report_digest": "sha256:" + "b" * 64,
+            "failing_tests": ["tests/test_value.py::test_value"],
+            "summary": "The target test still observed VALUE = 1.",
+        }
+        for instance_id in instance_ids
+    ]
+    path.write_text(
+        "".join(json.dumps(record) + "\n" for record in records),
+        encoding="utf-8",
+    )
+    return path

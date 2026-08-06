@@ -28,7 +28,7 @@ class GitPatchApplier:
             patch_path = Path(temp_dir) / "proposal.patch"
             patch_path.write_bytes(patch)
             numstat = await self._runner.run(
-                ["git", "apply", "--numstat", "--", str(patch_path)],
+                ["git", "apply", "--recount", "--numstat", "--", str(patch_path)],
                 cwd=workspace,
             )
             actual = _parse_numstat(numstat.stdout)
@@ -41,6 +41,7 @@ class GitPatchApplier:
                 [
                     "git",
                     "apply",
+                    "--recount",
                     "--check",
                     "--whitespace=error-all",
                     "--",
@@ -52,6 +53,7 @@ class GitPatchApplier:
                 [
                     "git",
                     "apply",
+                    "--recount",
                     "--whitespace=error-all",
                     "--",
                     str(patch_path),

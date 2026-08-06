@@ -1,0 +1,102 @@
+{
+  "schema_version": "repoaegis-swebench-evidence/v1",
+  "recorded_on": "2026-08-07",
+  "timezone": "Asia/Shanghai",
+  "dataset": "SWE-bench/SWE-bench_Verified",
+  "split": "test",
+  "scope": "frozen_before_generation",
+  "now_consumed": true,
+  "protocol_digest": "sha256:6b388c25f96b06662dff7bdb0c015f7f3b3ae4eca7ecc2174727ea38d69b168e",
+  "repoaegis_commit": "978d24e98ae9e55485646435f056aecad8e495aa",
+  "target_pack_digest": "sha256:6034765d2dc9c1097ff06c9f550df928d69fff2f72555ae980fe2732616b14f0",
+  "model": {
+    "revision": "deepseek-v4-flash@2026-08-06",
+    "api_style": "chat-json",
+    "temperature": 0,
+    "provider_seed_supported": false
+  },
+  "generation": {
+    "frozen_tasks": 8,
+    "predictions_generated": 4,
+    "generation_failures": 4,
+    "failure_categories": {
+      "approved_path_rejection": 1,
+      "workspace_file_conflict": 1,
+      "exact_edit_target_mismatch": 2
+    },
+    "usage": {
+      "cache_hit_input_tokens": 179328,
+      "cache_miss_input_tokens": 184636,
+      "output_tokens": 23811,
+      "total_tokens": 387775
+    },
+    "predictions_sha256": "sha256:9be9ac2682947194f15663771e18bdfd5215ffa77575004367a13d0885f929ae"
+  },
+  "official_grading": {
+    "harness": "swebench==4.1.0",
+    "submitted_predictions": 4,
+    "completed_predictions": 4,
+    "resolved_predictions": 3,
+    "unresolved_predictions": 1,
+    "harness_errors": 0,
+    "strict_resolved": 3,
+    "strict_total": 8,
+    "strict_resolved_rate": 0.375,
+    "official_report_sha256": "sha256:91af692ea970d170a1ada3e7ff48d3e4f78d91504e18412f6566e05bffe1f470"
+  },
+  "cases": [
+    {
+      "instance_id": "django__django-14539",
+      "generation_status": "failed",
+      "failure_category": "approved_path_rejection",
+      "official_status": "not_submitted"
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-26113",
+      "generation_status": "failed",
+      "failure_category": "exact_edit_target_mismatch",
+      "official_status": "not_submitted"
+    },
+    {
+      "instance_id": "django__django-13568",
+      "generation_status": "generated",
+      "failure_category": null,
+      "official_status": "resolved"
+    },
+    {
+      "instance_id": "django__django-12708",
+      "generation_status": "failed",
+      "failure_category": "workspace_file_conflict",
+      "official_status": "not_submitted"
+    },
+    {
+      "instance_id": "sympy__sympy-16450",
+      "generation_status": "failed",
+      "failure_category": "exact_edit_target_mismatch",
+      "official_status": "not_submitted"
+    },
+    {
+      "instance_id": "psf__requests-1921",
+      "generation_status": "generated",
+      "failure_category": null,
+      "official_status": "resolved"
+    },
+    {
+      "instance_id": "django__django-15037",
+      "generation_status": "generated",
+      "failure_category": null,
+      "official_status": "unresolved"
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-10466",
+      "generation_status": "generated",
+      "failure_category": null,
+      "official_status": "resolved"
+    }
+  ],
+  "limitations": [
+    "The eight-task subset is too small for statistical-significance claims.",
+    "This is a fixed-subset portfolio result, not an official leaderboard submission.",
+    "Observed holdout tasks will not be reused as an unseen evaluation after optimization."
+  ]
+}

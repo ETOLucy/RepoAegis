@@ -131,6 +131,29 @@ async def test_workspace_reader_returns_bounded_changed_source(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
+async def test_workspace_reader_marks_files_over_remaining_budget(tmp_path: Path) -> None:
+    first = tmp_path / "first.py"
+    second = tmp_path / "second.py"
+    first.write_bytes(b"1234")
+    second.write_bytes(b"5678")
+    adapter = WorkspaceReadAdapter(max_total_bytes=6)
+    call = _call(
+        name="read_files",
+        permission=ToolPermission.REPO_READ,
+        arguments={"files": ["first.py", "second.py"]},
+    )
+
+    result = await adapter.execute(call, tmp_path)
+
+    assert result.output == {
+        "files": {
+            "first.py": "1234",
+            "second.py": {"error": "byte_limit"},
+        }
+    }
+
+
+@pytest.mark.asyncio
 async def test_workspace_reader_rejects_symlink_or_path_escape(tmp_path: Path) -> None:
     adapter = WorkspaceReadAdapter(max_total_bytes=1_000)
     call = _call(

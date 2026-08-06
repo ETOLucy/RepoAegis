@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import difflib
 import json
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from langgraph.types import interrupt
 
+from repo_maintenance_agent.agents.patches import render_patch
 from repo_maintenance_agent.agents.schemas import (
     ContextRequest,
     PatchProposal,
@@ -193,6 +195,41 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
     async def coding(state: GraphState) -> dict[str, Any]:
         task = state["task"]
         controlled_context: dict[str, Any] = {"searches": [], "files": {}}
+        if task.review.get("decision") == "request_changes":
+            diff_result = await runtime.gateway.execute(
+                ToolCall(
+                    task_id=task.task_id,
+                    tenant_id=task.tenant_id,
+                    repo_id=task.repo_id,
+                    commit_sha=task.commit_sha,
+                    agent="coding",
+                    name="git_diff",
+                    permission=ToolPermission.REPO_READ,
+                    arguments={"ref": task.commit_sha},
+                ),
+                task,
+            )
+            source_result = await runtime.gateway.execute(
+                ToolCall(
+                    task_id=task.task_id,
+                    tenant_id=task.tenant_id,
+                    repo_id=task.repo_id,
+                    commit_sha=task.commit_sha,
+                    agent="coding",
+                    name="read_files",
+                    permission=ToolPermission.REPO_READ,
+                    arguments={"files": list(task.declared_files)},
+                ),
+                task,
+            )
+            current_diff = diff_result.output.get("diff")
+            files = source_result.output.get("files")
+            if not diff_result.success or not isinstance(current_diff, str):
+                raise ToolExecutionError("coding revision diff collection failed")
+            if not source_result.success or not isinstance(files, dict):
+                raise ToolExecutionError("coding revision source collection failed")
+            controlled_context["current_diff"] = current_diff
+            controlled_context["files"].update(files)
         context_tool_calls = 0
         for _ in range(runtime.max_context_rounds):
             request = await runtime.model.structured(
@@ -207,6 +244,9 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                         "research_evidence": [
                             item.model_dump(mode="json") for item in task.evidence
                         ],
+                        "development_feedback": task.repo_profile.get(
+                            "development_feedback"
+                        ),
                         "controlled_context": controlled_context,
                         "remaining_tool_calls": (
                             runtime.max_context_tool_calls - context_tool_calls
@@ -263,35 +303,84 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 break
         patch_feedback: str | None = None
         tool_result = None
+        artifact_id: str | None = None
         for patch_attempt in range(runtime.max_patch_attempts):
             patch_payload: dict[str, object] = {
                 "issue": task.issue.model_dump(mode="json"),
                 "plan": task.plan,
                 "controlled_context": controlled_context,
+                "development_feedback": task.repo_profile.get("development_feedback"),
                 "verification_feedback": (
                     task.verification.model_dump(mode="json") if task.verification else None
                 ),
             }
             if patch_feedback:
                 patch_payload["patch_feedback"] = patch_feedback
+            if task.review.get("decision") == "request_changes":
+                patch_payload["review_feedback"] = task.review
             output = await runtime.model.structured(
                 system=(
-                    "Produce a minimal unified diff for the approved plan. Do not modify unrelated "
-                    "files, credentials, CI permissions, or dependency locks unless explicitly "
-                    "planned."
+                    "Produce minimal exact-text edits for the approved plan. Each old_text must be "
+                    "copied verbatim from the current file and identify exactly one location. Use "
+                    "old_text=null only to create a missing file. Do not modify unrelated files, "
+                    "credentials, CI permissions, or dependency locks unless explicitly planned."
                 ),
                 input_text=json.dumps(patch_payload, sort_keys=True),
                 schema=PatchProposal,
             )
-            patch = output.unified_diff.encode()
-            artifact_id = await runtime.artifacts.put(
+            await runtime.artifacts.put(
                 task.tenant_id,
                 task.task_id,
-                "proposed.patch",
-                patch,
-                "text/x-diff",
+                "proposed-edits.json",
+                json.dumps(
+                    output.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8"),
+                "application/json",
             )
+            proposal_paths = tuple(sorted({edit.path for edit in output.edits}))
+            current_files: dict[str, object] = {}
             try:
+                undeclared = sorted(set(proposal_paths) - set(task.declared_files))
+                if undeclared:
+                    raise ToolExecutionError(
+                        "patch contains paths outside the approved plan: "
+                        + ", ".join(undeclared)
+                    )
+                source_result = await runtime.gateway.execute(
+                    ToolCall(
+                        task_id=task.task_id,
+                        tenant_id=task.tenant_id,
+                        repo_id=task.repo_id,
+                        commit_sha=task.commit_sha,
+                        agent="coding",
+                        name="read_files",
+                        permission=ToolPermission.REPO_READ,
+                        arguments={"files": list(proposal_paths)},
+                    ),
+                    task,
+                )
+                files = source_result.output.get("files")
+                if not source_result.success or not isinstance(files, dict):
+                    raise ToolExecutionError("coding proposal source collection failed")
+                current_files.update(files)
+                try:
+                    rendered = render_patch(
+                        output,
+                        current_files=current_files,
+                        declared_files=task.declared_files,
+                    )
+                except ValueError as error:
+                    raise ToolExecutionError(str(error)) from error
+                artifact_id = await runtime.artifacts.put(
+                    task.tenant_id,
+                    task.task_id,
+                    "proposed.patch",
+                    rendered.data,
+                    "text/x-diff",
+                )
                 tool_result = await runtime.gateway.execute(
                     ToolCall(
                         task_id=task.task_id,
@@ -303,7 +392,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                         permission=ToolPermission.SANDBOX_WRITE,
                         arguments={
                             "artifact_id": artifact_id,
-                            "files": list(output.changed_files),
+                            "files": list(rendered.changed_files),
                         },
                         idempotency_key=f"patch:{task.iteration + 1}:{artifact_id}",
                     ),
@@ -311,10 +400,32 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 )
                 break
             except ToolExecutionError as error:
-                patch_feedback = str(error)
+                patch_feedback = _patch_retry_feedback(error, output, current_files)
                 if patch_attempt == runtime.max_patch_attempts - 1:
                     raise
+                if current_files:
+                    controlled_context["files"].update(current_files)
+                    continue
+                refresh_paths = sorted(set(task.declared_files))
+                refreshed = await runtime.gateway.execute(
+                    ToolCall(
+                        task_id=task.task_id,
+                        tenant_id=task.tenant_id,
+                        repo_id=task.repo_id,
+                        commit_sha=task.commit_sha,
+                        agent="coding",
+                        name="read_files",
+                        permission=ToolPermission.REPO_READ,
+                        arguments={"files": refresh_paths},
+                    ),
+                    task,
+                )
+                files = refreshed.output.get("files")
+                if not refreshed.success or not isinstance(files, dict):
+                    raise ToolExecutionError("coding patch refresh failed") from error
+                controlled_context["files"].update(files)
         assert tool_result is not None
+        assert artifact_id is not None
         changed_files = _changed_files(tool_result)
         coding_task = (
             task if task.status is TaskStatus.CODING else task.transition(TaskStatus.CODING)
@@ -398,6 +509,9 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                     "changed_files": task.changed_files,
                     "diff": diff,
                     "changed_source": changed_source,
+                    "development_feedback": task.repo_profile.get(
+                        "development_feedback"
+                    ),
                     "verification": (
                         task.verification.model_dump(mode="json") if task.verification else None
                     ),
@@ -517,6 +631,45 @@ def _hit_locator(path: str, line_start: int | None, line_end: int | None) -> str
     if line_start is None:
         return path
     return f"{path}:{line_start}-{line_end or line_start}"
+
+
+def _patch_retry_feedback(
+    error: ToolExecutionError,
+    proposal: PatchProposal,
+    current_files: dict[str, object],
+) -> str:
+    feedback = str(error)
+    if "old_text was not found" not in feedback:
+        return feedback
+
+    best_ratio = -1.0
+    best_path = ""
+    best_excerpt = ""
+    for edit in proposal.edits:
+        source = current_files.get(edit.path)
+        if edit.old_text is None or not isinstance(source, str):
+            continue
+        old_lines = [line for line in edit.old_text.splitlines() if line.strip()]
+        source_lines = source.splitlines()
+        if not old_lines or not source_lines:
+            continue
+        needle = old_lines[0]
+        index, _ = max(
+            enumerate(source_lines),
+            key=lambda item: difflib.SequenceMatcher(None, needle, item[1]).ratio(),
+        )
+        ratio = difflib.SequenceMatcher(None, needle, source_lines[index]).ratio()
+        if ratio <= best_ratio:
+            continue
+        start = max(0, index - 2)
+        end = min(len(source_lines), index + max(3, len(old_lines) + 2))
+        best_ratio = ratio
+        best_path = edit.path
+        best_excerpt = "\n".join(source_lines[start:end])[:600]
+
+    if not best_excerpt:
+        return feedback
+    return f"{feedback}. nearest source excerpt for {best_path}:\n{best_excerpt}"
 
 
 def _changed_files(result: ToolResult) -> tuple[str, ...]:

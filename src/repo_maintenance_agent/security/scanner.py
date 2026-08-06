@@ -86,6 +86,7 @@ def scan_history(root: Path) -> list[PrivacyFinding]:
             git,
             "log",
             "-p",
+            "--no-textconv",
             "--all",
             "--no-ext-diff",
             "--no-color",

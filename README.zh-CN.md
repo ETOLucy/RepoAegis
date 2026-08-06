@@ -1,21 +1,20 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/repo-aegis-lockup-dark.svg">
-    <img src="docs/repo-aegis-lockup.svg" width="480" alt="RepoAegis single-wing seed logo and wordmark">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/repo-aegis-mark-reversed.svg">
+    <img src="docs/repo-aegis-mark.svg" width="112" alt="RepoAegis 单翼种子图形标志">
   </picture>
 </p>
 
 <h1 align="center">RepoAegis</h1>
 
 <p align="center">
-  <a href="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml"><img src="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-245dcc.svg" alt="Python 3.12"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-177245.svg" alt="License: Apache-2.0"></a>
+  面向证据化补丁与可审查交付的策略受控仓库维护 Agent。
 </p>
 
 <p align="center">
-  一个受策略控制的 Agent 系统：把仓库 issue 变成有证据支撑的补丁、沙箱验证结果和可审查的草稿
-  Pull Request。
+  <a href="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml"><img src="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-245dcc.svg" alt="Python 3.12"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-177245.svg" alt="License: Apache-2.0"></a>
 </p>
 
 RepoAegis 是 AI 控制面（control plane）而不是聊天包装器。每一次模型决策到任何副作用之间，都隔着
@@ -41,24 +40,13 @@ RepoAegis 是 AI 控制面（control plane）而不是聊天包装器。每一�
 
 ## 系统图
 
-```mermaid
-flowchart LR
-    Client[CLI / Console / GitHub Event] --> API[FastAPI Control Plane]
-    API --> DB[(PostgreSQL)]
-    DB --> Queue[Leased Task Queue]
-    Queue --> Worker[Worker Pool]
-    Worker --> Graph[LangGraph State Machine]
-    Graph --> Agents[Intake / Research / Plan / Code / Verify / Review / PR]
-    Agents --> Gateway[Policy Tool Gateway]
-    Gateway --> Search[Hybrid Search]
-    Gateway --> GitHub[GitHub CLI]
-    Gateway --> Sandbox[Docker Sandbox]
-    Search --> OpenSearch[(OpenSearch)]
-    Graph --> Approval{Plan Approval}
-    API --> Harness[Evaluation Harness]
-    Harness --> EvalDB[(Run Evidence)]
-    Harness --> Console[Evaluation Operations]
-```
+![RepoAegis 运行时架构](docs/diagrams/runtime-architecture.svg)
+
+[可编辑 Excalidraw 源文件](docs/diagrams/runtime-architecture.excalidraw) ·
+[PNG 导出](docs/diagrams/runtime-architecture.png) ·
+[官方评测证据链](docs/diagrams/official-evaluation-evidence.svg)
+（[可编辑源文件](docs/diagrams/official-evaluation-evidence.excalidraw)，
+[PNG](docs/diagrams/official-evaluation-evidence.png)）
 
 Python 控制面拥有身份、状态、策略、证据与编排。仓库代码只在分配的工作区或语言专属的 Docker
 沙箱中执行。
@@ -72,11 +60,11 @@ Python 控制面拥有身份、状态、策略、证据与编排。仓库代码�
 | 检索 | 词法与语义适配器 + 确定性倒数排名融合 |
 | 工具使用 | 租户/仓库/commit 作用域 + 角色与阶段授权 |
 | 远端写入 | 人工决策绑定计划、目标 commit、声明文件、验证命令与精确工具范围 |
-| 补丁安全 | 声明文件强制 + `git apply --check` 预检 |
+| 补丁安全 | 精确文本编辑、批准路径强制、本地 diff 渲染 + `git apply --check` 预检 |
 | 独立审查 | Gateway 收集的 Git diff、变更后源码、验收条件与验证证据 |
 | 命令 | 参数数组、可执行白名单、超时、输出上限、净化环境 |
 | 沙箱 | 摘要固定镜像、非 root、只读根、drop capabilities、离线检查 |
-| 模型输出 | 结构化 Responses 解析 + `store=False` |
+| 模型输出 | provider 专属结构化 JSON + 严格本地校验；Responses 调用使用 `store=False`；模型不编写 diff hunk 元数据 |
 | 编码上下文 | 仅 Gateway 的搜索/读取请求，固定轮次与工具调用上限 |
 | 评测 | 并发套件、重试、来源、基线增量、硬门禁、确定性重放 |
 | 隐私 | 递归脱敏 + 当前树与可达历史发布扫描 |
@@ -109,12 +97,22 @@ Harness 在有界并发下评测版本化套件。它保持清单顺序，只重
 
 命令在返回前写入两个报告；门禁失败时以退出码 `1` 返回，可直接用作 CI 发布检查。
 
+### SWE-bench 真实评测
+
+2026-08-07 完成了冻结的面试规模评测。8 个 SWE-bench Verified 任务在评测前预先冻结，且未用于
+开发调参；RepoAegis 为其中 4 个任务生成了预测。官方 SWE-bench 4.1.0 Docker harness 判定其中
+3 个 resolved。4 个生成失败仍计入分母，因此严格结果是 **3/8（37.5%）**，不是 3/4。正式
+holdout 共记录 387,775 个模型 token：179,328 个 cache-hit input、184,636 个 cache-miss input
+和 23,811 个 output token。
+这是固定小样本的方向性证据，不是排行榜或统计显著性结论。见
+[脱敏证据记录](docs/evidence/swebench-holdout-v2.json)。
+
 ## Web 工作台（AI 全栈）
 
 一个 React + Vite 工作台，连接控制面与 RAG 对话接口：
 
 - **代码问答 (RAG)** `POST /v1/chat`：对仓库做 BM25 + 符号混合检索，通过 OpenAI 兼容模型
-  （deepseek）返回带引用的回答，并返回参考路径/行区间。
+  （DeepSeek）返回带引用的回答，并返回参考路径/行区间。
 - **任务控制台** `/v1/tasks`：列出/创建/查看仓库维护任务。
 - **评测看板** `/v1/evaluations/runs`：评测 run 与发布门禁。
 
@@ -226,8 +224,8 @@ docker compose up --build
 
 应用与任务沙箱容器以 UID 10001 运行，只读根文件系统、drop capabilities、
 `no-new-privileges` 与不可变基础镜像摘要。专用 rootless daemon 与 worker 及宿主机 socket 隔离。
-沙箱依赖安装是独立可审计阶段；测试与 lint 阶段无网络运行。Compose 语法与隔离拓扑已测试；当前
-开发机上的真实 Docker 启动仍在验证中。
+沙箱依赖安装是独立可审计阶段；测试与 lint 阶段无网络运行。Compose 语法、隔离拓扑、镜像构建、
+六服务启动与一个本地任务生命周期已经验证；不声称生产可用性、恶意多租户运行或容量结论。
 
 ## 配置
 
@@ -302,22 +300,15 @@ RepoAegis 与 AegisEvo 构成一条受治理的流水线。RepoAegis 是仓库�
 评测与晋升平台。AegisEvo 不维护第二套编码 Agent——它通过版本化、内容寻址的 target pack 驱动
 固定版本的 RepoAegis 运行时。
 
-```mermaid
-flowchart LR
-    RA[RepoAegis runtime] -->|exports immutable| TP[Target pack / v2]
-    TP --> AE[AegisEvo search + evaluation]
-    AE -->|equal-budget candidate runs| RA
-    RA -->|resolution + evidence| AE
-    AE -->|aggregate + gates| Report[Report]
-    Report -->|human approval| Promotion[Controlled Promotion]
-```
+![RepoAegis 到官方 harness 再到 AegisEvo 的证据流](docs/diagrams/official-evaluation-evidence.svg)
 
 - **RepoAegis** 执行真实仓库任务：物化固定 commit -> 计划 -> 审批 -> 补丁 -> 容器验证 -> 审查 ->
   commit/push -> 草稿 PR。
-- **Target pack** 冻结 RepoAegis commit、运行时契约、候选映射、基线基因组、镜像、评测器、基准、
-  工具与策略摘要（`repoaegis-target-pack/v2`）。
+- **Target pack** 冻结 RepoAegis commit、运行时源码、镜像与策略摘要
+  （`repoaegis-target-pack/v2`）；独立的 SWE-bench 协议再绑定任务 ID、模型、编排元数据与 token
+  记账策略。
 - **AegisEvo** 通过版本化 `repoaegis-http-v1` 适配器消费 target pack，运行等预算的 baseline /
-  random / evolution 搜索，并报告 resolution、安全、成本与延迟证据（`evaluation-observation/v1`）。
+  random / evolution 搜索，并报告 resolution、安全、用量与延迟证据（`evaluation-observation/v1`）。
 - **受控晋升** 要求绝对质量、统计显著、零安全回归、预算合规与人工审批。新的 RepoAegis 发布创建
   新的 target pack，而不是覆盖旧包。
 
@@ -325,10 +316,11 @@ flowchart LR
 
 | RepoAegis | Target pack | AegisEvo | 契约 |
 |---|---|---|---|
-| `0.1.0`（当前 main） | `repoaegis-target-pack/v2`（`repoaegis-v2`） | `0.1.0`（当前 main） | `repoaegis-http-v1` 适配器 + `evaluation-observation/v1` |
+| `978d24e`（评测版本） | `repoaegis-target-pack/v2`（`repoaegis-v2`） | `ed1f445`（评测版本） | `repoaegis-http-v1` 适配器 + `evaluation-observation/v1` |
 
-跨语言摘要校验与真实联合演示（AegisEvo 驱动真实 RepoAegis 任务到 `completed`、`resolution=true`）
-验证该兼容性。评测侧见 [AegisEvo](https://github.com/ETOLucy/AegisEvo)。
+跨语言摘要校验与真实联合演示只验证运行时兼容性：AegisEvo 能驱动真实 RepoAegis 任务到
+`completed`。该历史演示不证明任务已解决；只有官方 verifier 报告可以建立 `resolved`。评测侧见
+[AegisEvo](https://github.com/ETOLucy/AegisEvo)。
 
 ## License
 
