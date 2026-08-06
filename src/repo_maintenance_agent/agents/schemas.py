@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from pathlib import PurePosixPath
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from repo_maintenance_agent.domain.models import RiskLevel
 
@@ -44,10 +45,49 @@ class ContextRequest(AgentOutput):
         return self
 
 
+class PatchEdit(AgentOutput):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+
+    path: str = Field(min_length=1, max_length=1_000)
+    old_text: str | None = Field(default=None, max_length=200_000)
+    new_text: str = Field(max_length=200_000)
+
+    @field_validator("path")
+    @classmethod
+    def path_is_safe(cls, value: str) -> str:
+        normalized = value.strip().replace("\\", "/")
+        path = PurePosixPath(normalized)
+        if (
+            not normalized
+            or path.is_absolute()
+            or ".." in path.parts
+            or normalized.startswith("-")
+            or "\t" in normalized
+            or "\n" in normalized
+            or "\r" in normalized
+        ):
+            raise ValueError("path must be a safe repository-relative path")
+        normalized = path.as_posix()
+        if normalized in {"", "."}:
+            raise ValueError("path must be a safe repository-relative path")
+        return normalized
+
+    @model_validator(mode="after")
+    def edit_has_a_real_change(self) -> PatchEdit:
+        if self.old_text is None:
+            if not self.new_text:
+                raise ValueError("new file content must be non-empty")
+            return self
+        if not self.old_text:
+            raise ValueError("old_text must be non-empty for replacement")
+        if self.old_text == self.new_text:
+            raise ValueError("patch edit must not be a no-op")
+        return self
+
+
 class PatchProposal(AgentOutput):
     summary: str = Field(min_length=1, max_length=2_000)
-    unified_diff: str = Field(min_length=1, max_length=500_000)
-    changed_files: list[str] = Field(min_length=1, max_length=100)
+    edits: list[PatchEdit] = Field(min_length=1, max_length=100)
 
 
 class ReviewOutput(AgentOutput):
