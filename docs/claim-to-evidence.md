@@ -63,7 +63,7 @@ point, not product completion.
 
 | Claim | Implementation | Automated test | Runtime evidence | Status / gap |
 |---|---|---|---|---|
-| RepoAegis exports an immutable versioned target pack | `target_pack.build_target_pack` hashes runtime source, pyproject, images, and permission policy | `tests/unit/test_target_pack.py` | current SWE-bench protocol binds commit `54c8efe` and clean-checkout target-pack digest `sha256:ff7d...5186` | **Verified** local export and content digest |
+| RepoAegis exports an immutable versioned target pack | `target_pack.build_target_pack` hashes runtime source, pyproject, images, and permission policy | `tests/unit/test_target_pack.py` | current SWE-bench protocol binds commit `4c0b858` and clean-checkout target-pack digest `sha256:0260...5b1a` | **Verified** local export and content digest |
 | AegisEvo invokes the pinned RepoAegis runtime rather than a second coding agent | `RepoAegisHarnessRunner` drives the real RepoAegis API through the versioned `repoaegis-http-v1` adapter (create task, poll, approve, collect) | AegisEvo harness and adapter tests | the earlier joint demo reached RepoAegis runtime `completed` | **Verified runtime adapter boundary**; completion is not official task resolution |
 | One joint demo completes a real task and records a runtime observation | RepoAegis API + worker graph + `RepoAegisHarnessRunner` | harness + API integration tests | task `cb733020` completed its local lifecycle | **Under validation for quality**: the historical runtime-to-resolution mapping was invalidated; only an official verifier may set resolution |
 

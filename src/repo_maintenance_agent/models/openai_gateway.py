@@ -12,8 +12,8 @@ from repo_maintenance_agent.models.usage import UsageLedger, usage_from_response
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
-_MODEL_TIMEOUT_SECONDS = 120
-_MAX_OUTPUT_TOKENS = 8_192
+_MODEL_TIMEOUT_SECONDS = 180
+_MAX_OUTPUT_TOKENS = 16_384
 
 
 class OpenAIModelGateway:
@@ -103,10 +103,10 @@ class OpenAIModelGateway:
                     store=False,
                     max_output_tokens=_MAX_OUTPUT_TOKENS,
                 )
+                _record_usage(self._usage_ledger, reservation, response)
                 parsed = response.output_parsed
                 if parsed is None:
                     raise RuntimeError("model did not return the requested structured output")
-                _record_usage(self._usage_ledger, reservation, response)
                 return cast(SchemaT, parsed)
             except ValidationError as error:
                 last_error = error

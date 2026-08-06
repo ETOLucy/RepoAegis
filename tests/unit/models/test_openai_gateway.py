@@ -45,7 +45,7 @@ async def test_gateway_uses_responses_structured_output_without_storing_prompt()
     assert client.responses.arguments["model"] == "gpt-test-model"
     assert client.responses.arguments["store"] is False
     assert client.responses.arguments["text_format"] is Answer
-    assert client.responses.arguments["max_output_tokens"] == 8_192
+    assert client.responses.arguments["max_output_tokens"] == 16_384
 
 
 @pytest.mark.asyncio
@@ -86,7 +86,7 @@ def test_from_settings_passes_base_url_and_model(monkeypatch) -> None:
     )
     assert captured["api_key"] == "test-key"
     assert captured["base_url"] == "https://api.deepseek.com"
-    assert captured["timeout"] == 120
+    assert captured["timeout"] == 180
     assert captured["max_retries"] == 0
     assert gateway._model == "deepseek-chat"
     assert gateway._api_style == "chat-json"
@@ -191,6 +191,44 @@ async def test_gateway_records_deepseek_usage_categories() -> None:
 
 
 @pytest.mark.asyncio
+async def test_gateway_records_usage_before_rejecting_unparsed_response() -> None:
+    class Responses:
+        async def parse(self, **kwargs):
+            return SimpleNamespace(
+                output_parsed=None,
+                usage=SimpleNamespace(
+                    input_tokens=1_000,
+                    output_tokens=80,
+                    input_tokens_details=SimpleNamespace(cached_tokens=700),
+                    output_tokens_details=SimpleNamespace(reasoning_tokens=20),
+                ),
+            )
+
+    ledger = UsageLedger(
+        limit_cny=Decimal("1"),
+        rates=UsageRates(
+            cache_hit_input_cny_per_million=Decimal("0.2"),
+            cache_miss_input_cny_per_million=Decimal("2"),
+            output_cny_per_million=Decimal("8"),
+        ),
+    )
+    gateway = OpenAIModelGateway(
+        client=SimpleNamespace(responses=Responses()),
+        model="deepseek-v4-flash",
+        usage_ledger=ledger,
+        maximum_call_cost_cny=Decimal("0.1"),
+    )
+
+    with pytest.raises(RuntimeError, match="structured"):
+        await gateway.structured(system="s", input_text="input", schema=Answer)
+
+    usage = ledger.snapshot()
+    assert usage.input_cache_hit_tokens == 700
+    assert usage.input_cache_miss_tokens == 300
+    assert usage.output_tokens == 80
+
+
+@pytest.mark.asyncio
 async def test_gateway_refuses_before_call_when_budget_is_exhausted() -> None:
     class Responses:
         async def parse(self, **kwargs):
@@ -259,7 +297,7 @@ async def test_gateway_chat_json_mode_uses_deepseek_compatible_contract() -> Non
 
     assert result == Answer(summary="chat-json")
     assert completions.arguments["response_format"] == {"type": "json_object"}
-    assert completions.arguments["max_tokens"] == 8_192
+    assert completions.arguments["max_tokens"] == 16_384
     messages = completions.arguments["messages"]
     assert messages[0]["role"] == "system"
     assert "Return JSON." in messages[0]["content"]
