@@ -4,6 +4,12 @@ RepoAegis uses the official SWE-bench Docker harness as the authority for task r
 generation, patch application, and internal review are intermediate evidence; none of them implies
 that an instance is resolved.
 
+The model proposes bounded exact-text edits. RepoAegis validates them against current files and
+renders unified diff bytes locally before the existing Git preflight. These stages are recorded
+separately: a valid proposal is not necessarily a rendered patch, a rendered patch is not
+necessarily applied, and an applied/reviewed patch is not officially resolved until the Docker
+harness passes every required test.
+
 ## Result labels
 
 | Label | Meaning |
@@ -44,3 +50,8 @@ development task. The `frozen` role rejects the option.
 
 The generated evidence stores a canonical digest of the feedback record. Resume fails if the
 feedback changes, so an older prediction cannot be silently reused under new development evidence.
+
+Paid-call evidence records the Asia/Shanghai date and time, dated model revision, cache-hit input,
+cache-miss input, output tokens, the observed rate snapshot, computed CNY cost, and whether usage is
+exact response evidence or a balance estimate. A transport failure without a provider usage object
+has unknown token usage; a locally saved zero must not be presented as exact zero cost.

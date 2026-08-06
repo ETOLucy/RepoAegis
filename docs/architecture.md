@@ -97,6 +97,14 @@ twenty calls. Every search and read uses the same task-scoped gateway, and the r
 context is supplied to `PatchProposal`. Verification and review can route code failures back to
 coding only while `iteration < max_iterations`.
 
+`PatchProposal` contains exact search/replace edits rather than model-authored diff hunks. Before
+reading a proposed path, coding requires it to be present in the human-approved plan. It then reads
+the current file through the Tool Gateway and a pure local renderer requires every non-empty
+`old_text` to occur exactly once, rejects overlapping/no-op edits, and derives the changed-file set.
+Only the resulting local unified diff enters the artifact store and `GitPatchApplier`; the existing
+declared-file check and `git apply --check` remain the workspace mutation authority. A renderer or
+apply failure is bounded feedback for the next coding attempt, not evidence that a patch applied.
+
 ## Persistence and Queue Semantics
 
 `SqlTaskRepository` uses `(tenant_id, task_id)` as the primary identity and optimistic versions for compare-and-swap updates. Creation writes the task and queue row in one transaction. Approval writes the decision and restores a runnable queue row in one transaction.
