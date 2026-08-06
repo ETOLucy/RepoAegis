@@ -46,6 +46,7 @@ async def test_gateway_uses_responses_structured_output_without_storing_prompt()
     assert client.responses.arguments["store"] is False
     assert client.responses.arguments["text_format"] is Answer
     assert client.responses.arguments["max_output_tokens"] == 16_384
+    assert "temperature" not in client.responses.arguments
 
 
 @pytest.mark.asyncio
@@ -333,6 +334,7 @@ async def test_gateway_chat_json_mode_uses_deepseek_compatible_contract() -> Non
     assert result == Answer(summary="chat-json")
     assert completions.arguments["response_format"] == {"type": "json_object"}
     assert completions.arguments["extra_body"] == {"thinking": {"type": "disabled"}}
+    assert completions.arguments["temperature"] == 0
     assert completions.arguments["max_tokens"] == 16_384
     messages = completions.arguments["messages"]
     assert messages[0]["role"] == "system"

@@ -86,6 +86,7 @@ class OpenAIModelGateway:
                         ],
                         response_format={"type": "json_object"},
                         max_tokens=_MAX_OUTPUT_TOKENS,
+                        temperature=0,
                         extra_body={"thinking": {"type": "disabled"}},
                     )
                     _record_usage(self._usage_ledger, reservation, response)
