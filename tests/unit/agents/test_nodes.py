@@ -6,6 +6,7 @@ import pytest
 from repo_maintenance_agent.agents.nodes import AgentRuntime, build_agent_nodes
 from repo_maintenance_agent.agents.schemas import (
     ContextRequest,
+    PatchEdit,
     PatchProposal,
     PlanOutput,
     PullRequestDraft,
@@ -53,8 +54,13 @@ class FakeModel:
         if schema is PatchProposal:
             return PatchProposal(
                 summary="Use the safe default.",
-                unified_diff="--- a/src/config.py\n+++ b/src/config.py\n",
-                changed_files=["src/config.py"],
+                edits=[
+                    PatchEdit(
+                        path="src/config.py",
+                        old_text="def load(): return default",
+                        new_text="def load(): return safe_default",
+                    )
+                ],
             )
         if schema is PullRequestDraft:
             return PullRequestDraft(
@@ -258,10 +264,11 @@ async def test_planning_deterministically_elevates_dependency_changes(tmp_path: 
 @pytest.mark.asyncio
 async def test_coding_resumes_from_api_approved_state(tmp_path: Path) -> None:
     gateway = RecordingGateway()
+    artifacts = FileArtifactStore(tmp_path)
     nodes = build_agent_nodes(
         AgentRuntime(
             model=FakeModel(),
-            artifacts=FileArtifactStore(tmp_path),
+            artifacts=artifacts,
             gateway=gateway,
         )
     )
@@ -274,6 +281,7 @@ async def test_coding_resumes_from_api_approved_state(tmp_path: Path) -> None:
         .model_copy(
             update={
                 "plan_hash": "b" * 64,
+                "declared_files": ("src/config.py",),
                 "approval": ApprovalDecision(
                     approved=True,
                     approver="tenant-a",
@@ -292,11 +300,19 @@ async def test_coding_resumes_from_api_approved_state(tmp_path: Path) -> None:
     assert result["task"].status is TaskStatus.CODING
     assert result["task"].iteration == 1
     assert result["task"].patch_artifact_id is not None
-    call = gateway.calls[0][0]
+    assert [call.name for call, _ in gateway.calls] == ["read_files", "apply_patch"]
+    call = gateway.calls[1][0]
     assert call.name == "apply_patch"
     assert call.arguments["files"] == ["src/config.py"]
     assert call.arguments["artifact_id"] == result["task"].patch_artifact_id
     assert call.idempotency_key is not None
+    patch = await artifacts.get("tenant-a", result["task"].patch_artifact_id)
+    assert patch.endswith(
+        b"-def load(): return default\n"
+        b"\\ No newline at end of file\n"
+        b"+def load(): return safe_default\n"
+        b"\\ No newline at end of file\n"
+    )
 
 
 @pytest.mark.asyncio
@@ -314,14 +330,19 @@ async def test_coding_collects_bounded_context_through_gateway_before_patch(
             max_context_tool_calls=4,
         )
     )
-    coding = task().transition(TaskStatus.INTAKE).transition(TaskStatus.RESEARCH).transition(
-        TaskStatus.PLANNING
+    coding = (
+        task()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .model_copy(update={"declared_files": ("src/config.py",)})
     )
 
     result = await nodes.coding({"task": coding, "trace": []})
 
     assert [call.name for call, _ in gateway.calls] == [
         "search_code",
+        "read_files",
         "read_files",
         "apply_patch",
     ]
@@ -345,14 +366,22 @@ async def test_coding_stops_context_collection_at_tool_budget(tmp_path: Path) ->
             max_context_tool_calls=1,
         )
     )
-    coding = task().transition(TaskStatus.INTAKE).transition(TaskStatus.RESEARCH).transition(
-        TaskStatus.PLANNING
+    coding = (
+        task()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .model_copy(update={"declared_files": ("src/config.py",)})
     )
 
     await nodes.coding({"task": coding, "trace": []})
 
     assert model.context_requests == 1
-    assert [call.name for call, _ in gateway.calls] == ["search_code", "apply_patch"]
+    assert [call.name for call, _ in gateway.calls] == [
+        "search_code",
+        "read_files",
+        "apply_patch",
+    ]
 
 
 @pytest.mark.asyncio
@@ -478,8 +507,13 @@ class PatchFeedbackModel(FakeModel):
             self.patch_inputs.append(json.loads(input_text))
             return PatchProposal(
                 summary="Use the safe default.",
-                unified_diff="--- a/src/config.py\n+++ b/src/config.py\n",
-                changed_files=["src/config.py"],
+                edits=[
+                    PatchEdit(
+                        path="src/config.py",
+                        old_text="def load(): return default",
+                        new_text="def load(): return safe_default",
+                    )
+                ],
             )
         return await super().structured(system=system, input_text=input_text, schema=schema)
 
@@ -492,11 +526,37 @@ class WrongPathPatchFeedbackModel(PatchFeedbackModel):
             schema=schema,
         )
         if schema is PatchProposal and len(self.patch_inputs) == 1:
-            return output.model_copy(update={"changed_files": ["src/legacy.py"]})
+            return output.model_copy(
+                update={
+                    "edits": [
+                        PatchEdit(
+                            path="src/config.py",
+                            old_text="missing implementation",
+                            new_text="def load(): return safe_default",
+                        )
+                    ]
+                }
+            )
         return output
 
 
-class FailingOnceGateway(RecordingGateway):
+class UndeclaredPathModel(FakeModel):
+    async def structured(self, *, system, input_text, schema):
+        if schema is PatchProposal:
+            return PatchProposal(
+                summary="Modify an unapproved path.",
+                edits=[
+                    PatchEdit(
+                        path="src/secret.py",
+                        old_text="secret = 1",
+                        new_text="secret = 2",
+                    )
+                ],
+            )
+        return await super().structured(system=system, input_text=input_text, schema=schema)
+
+
+class CountingApplyGateway(RecordingGateway):
     def __init__(self) -> None:
         super().__init__()
         self.apply_calls = 0
@@ -504,16 +564,38 @@ class FailingOnceGateway(RecordingGateway):
     async def execute(self, call, state):
         if call.name == "apply_patch":
             self.apply_calls += 1
-            if self.apply_calls == 1:
-                self.calls.append((call, state))
-                raise ToolExecutionError("patch does not apply")
         return await super().execute(call, state)
+
+
+@pytest.mark.asyncio
+async def test_coding_rejects_unapproved_path_before_reading_it(tmp_path: Path) -> None:
+    gateway = RecordingGateway()
+    nodes = build_agent_nodes(
+        AgentRuntime(
+            model=UndeclaredPathModel(),
+            artifacts=FileArtifactStore(tmp_path),
+            gateway=gateway,
+            max_patch_attempts=1,
+        )
+    )
+    coding = (
+        task()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .model_copy(update={"declared_files": ("src/config.py",)})
+    )
+
+    with pytest.raises(ToolExecutionError, match="approved plan"):
+        await nodes.coding({"task": coding, "trace": []})
+
+    assert gateway.calls == []
 
 
 @pytest.mark.asyncio
 async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
     model = WrongPathPatchFeedbackModel()
-    gateway = FailingOnceGateway()
+    gateway = CountingApplyGateway()
     nodes = build_agent_nodes(
         AgentRuntime(model=model, artifacts=FileArtifactStore(tmp_path), gateway=gateway)
     )
@@ -543,22 +625,18 @@ async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
     result = await nodes.coding({"task": approved, "trace": []})
 
     assert result["task"].status is TaskStatus.CODING
-    assert gateway.apply_calls == 2
+    assert gateway.apply_calls == 1
     assert len(model.patch_inputs) == 2
     assert [call.name for call, _ in gateway.calls] == [
-        "apply_patch",
+        "read_files",
         "read_files",
         "apply_patch",
-    ]
-    assert gateway.calls[1][0].arguments["files"] == [
-        "src/config.py",
-        "src/legacy.py",
     ]
     assert model.patch_inputs[1]["controlled_context"]["files"] == {
         "src/config.py": "def load(): return default"
     }
     assert "patch_feedback" in model.patch_inputs[1]
-    assert "patch does not apply" in str(model.patch_inputs[1]["patch_feedback"])
+    assert "old_text was not found" in str(model.patch_inputs[1]["patch_feedback"])
 
 
 @pytest.mark.asyncio

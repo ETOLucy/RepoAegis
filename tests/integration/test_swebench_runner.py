@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from repo_maintenance_agent.agents.schemas import (
     ContextRequest,
+    PatchEdit,
     PatchProposal,
     PlanOutput,
     ReviewOutput,
@@ -81,15 +82,13 @@ class GraphFixtureModel:
         if schema is PatchProposal:
             return PatchProposal(
                 summary="Update the value.",
-                unified_diff=(
-                    "diff --git a/app.py b/app.py\n"
-                    "--- a/app.py\n"
-                    "+++ b/app.py\n"
-                    "@@ -1 +1 @@\n"
-                    "-VALUE = 1\n"
-                    "+VALUE = 2\n"
-                ),
-                changed_files=["app.py"],
+                edits=[
+                    PatchEdit(
+                        path="app.py",
+                        old_text="VALUE = 1",
+                        new_text="VALUE = 2",
+                    )
+                ],
             )
         if schema is ReviewOutput:
             return ReviewOutput(

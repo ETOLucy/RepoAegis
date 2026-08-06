@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 from langgraph.types import interrupt
 
+from repo_maintenance_agent.agents.patches import render_patch
 from repo_maintenance_agent.agents.schemas import (
     ContextRequest,
     PatchProposal,
@@ -301,6 +302,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 break
         patch_feedback: str | None = None
         tool_result = None
+        artifact_id: str | None = None
         for patch_attempt in range(runtime.max_patch_attempts):
             patch_payload: dict[str, object] = {
                 "issue": task.issue.model_dump(mode="json"),
@@ -317,22 +319,55 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 patch_payload["review_feedback"] = task.review
             output = await runtime.model.structured(
                 system=(
-                    "Produce a minimal unified diff for the approved plan. Do not modify unrelated "
-                    "files, credentials, CI permissions, or dependency locks unless explicitly "
-                    "planned."
+                    "Produce minimal exact-text edits for the approved plan. Each old_text must be "
+                    "copied verbatim from the current file and identify exactly one location. Use "
+                    "old_text=null only to create a missing file. Do not modify unrelated files, "
+                    "credentials, CI permissions, or dependency locks unless explicitly planned."
                 ),
                 input_text=json.dumps(patch_payload, sort_keys=True),
                 schema=PatchProposal,
             )
-            patch = output.unified_diff.encode()
-            artifact_id = await runtime.artifacts.put(
-                task.tenant_id,
-                task.task_id,
-                "proposed.patch",
-                patch,
-                "text/x-diff",
-            )
+            proposal_paths = tuple(sorted({edit.path for edit in output.edits}))
+            current_files: dict[str, object] = {}
             try:
+                undeclared = sorted(set(proposal_paths) - set(task.declared_files))
+                if undeclared:
+                    raise ToolExecutionError(
+                        "patch contains paths outside the approved plan: "
+                        + ", ".join(undeclared)
+                    )
+                source_result = await runtime.gateway.execute(
+                    ToolCall(
+                        task_id=task.task_id,
+                        tenant_id=task.tenant_id,
+                        repo_id=task.repo_id,
+                        commit_sha=task.commit_sha,
+                        agent="coding",
+                        name="read_files",
+                        permission=ToolPermission.REPO_READ,
+                        arguments={"files": list(proposal_paths)},
+                    ),
+                    task,
+                )
+                files = source_result.output.get("files")
+                if not source_result.success or not isinstance(files, dict):
+                    raise ToolExecutionError("coding proposal source collection failed")
+                current_files.update(files)
+                try:
+                    rendered = render_patch(
+                        output,
+                        current_files=current_files,
+                        declared_files=task.declared_files,
+                    )
+                except ValueError as error:
+                    raise ToolExecutionError(str(error)) from error
+                artifact_id = await runtime.artifacts.put(
+                    task.tenant_id,
+                    task.task_id,
+                    "proposed.patch",
+                    rendered.data,
+                    "text/x-diff",
+                )
                 tool_result = await runtime.gateway.execute(
                     ToolCall(
                         task_id=task.task_id,
@@ -344,7 +379,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                         permission=ToolPermission.SANDBOX_WRITE,
                         arguments={
                             "artifact_id": artifact_id,
-                            "files": list(output.changed_files),
+                            "files": list(rendered.changed_files),
                         },
                         idempotency_key=f"patch:{task.iteration + 1}:{artifact_id}",
                     ),
@@ -355,9 +390,10 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 patch_feedback = str(error)
                 if patch_attempt == runtime.max_patch_attempts - 1:
                     raise
-                refresh_paths = sorted(
-                    set(task.declared_files) | set(output.changed_files)
-                )
+                if current_files:
+                    controlled_context["files"].update(current_files)
+                    continue
+                refresh_paths = sorted(set(task.declared_files))
                 refreshed = await runtime.gateway.execute(
                     ToolCall(
                         task_id=task.task_id,
@@ -376,6 +412,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                     raise ToolExecutionError("coding patch refresh failed") from error
                 controlled_context["files"].update(files)
         assert tool_result is not None
+        assert artifact_id is not None
         changed_files = _changed_files(tool_result)
         coding_task = (
             task if task.status is TaskStatus.CODING else task.transition(TaskStatus.CODING)
