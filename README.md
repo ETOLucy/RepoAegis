@@ -114,6 +114,19 @@ Run the included credential-free example:
 The command writes both reports before returning exit code `1` for a failed gate, which makes it
 usable as a CI release check.
 
+### SWE-bench evidence labels
+
+RepoAegis keeps generation and quality evidence separate:
+
+- **one-shot generation**: a prediction was produced without prior official-test feedback;
+- **officially resolved**: the official SWE-bench Docker harness passed all required tests;
+- **feedback-assisted calibration**: a development rerun consumed a previous official failure;
+- **frozen evaluation**: the CLI rejects development feedback and preserves the one-shot boundary.
+
+Feedback-assisted calibration is useful for improving the agent loop, but it is not reported as a
+one-shot or frozen benchmark score. See [the evaluation integrity guide](docs/evaluation.md) for
+the feedback contract and auditable resume behavior.
+
 ## Web Workbench (AI Full-Stack)
 
 A React + Vite workbench that talks to the control plane and a RAG chat endpoint:
