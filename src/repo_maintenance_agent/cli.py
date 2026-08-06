@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import platform
 from decimal import Decimal
@@ -363,6 +364,12 @@ def swebench_generate(
     maximum_spend, maximum_call_cost_cny, rates = _protocol_cost_policy(
         protocol_value
     )
+    (
+        max_iterations,
+        max_context_rounds,
+        max_context_tool_calls,
+        max_patch_attempts,
+    ) = _protocol_arm_configuration(protocol_value, arm)
     if not isinstance(protocol_digest, str) or not protocol_digest.startswith("sha256:"):
         raise typer.BadParameter("protocol digest is invalid")
     roles = protocol_value.get("task_roles")
@@ -407,7 +414,10 @@ def swebench_generate(
             maximum_call_cost_cny=maximum_call_cost_cny,
         ),
         artifact_root=artifact_root,
-        max_iterations=settings.max_iterations,
+        max_iterations=max_iterations,
+        max_context_rounds=max_context_rounds,
+        max_context_tool_calls=max_context_tool_calls,
+        max_patch_attempts=max_patch_attempts,
     )
     runtime = GitSWEbenchRuntime(
         repository_locators=locators,
@@ -519,6 +529,52 @@ def _protocol_cost_policy(
         ),
     )
     return maximum_spend, maximum_call_cost, rates
+
+
+def _protocol_arm_configuration(
+    protocol: dict[str, Any], arm: Literal["baseline", "candidate"]
+) -> tuple[int, int, int, int]:
+    arms = protocol.get("arms")
+    if not isinstance(arms, dict) or not isinstance(arms.get(arm), dict):
+        raise typer.BadParameter(f"protocol does not define experiment arm: {arm}")
+    arm_value = arms[arm]
+    if arm_value.get("status") != "ready":
+        raise typer.BadParameter(
+            f"SWE-bench {arm} configuration is not finalized after development analysis"
+        )
+    config = arm_value.get("generation_config")
+    if not isinstance(config, dict):
+        raise typer.BadParameter(f"SWE-bench {arm} generation config is missing")
+    expected_fields = {
+        "max_iterations": (1, 10),
+        "max_context_rounds": (1, 5),
+        "max_context_tool_calls": (1, 20),
+        "max_patch_attempts": (1, 5),
+    }
+    if set(config) != set(expected_fields):
+        raise typer.BadParameter(f"SWE-bench {arm} generation config fields are invalid")
+    normalized: dict[str, int] = {}
+    for field, (minimum, maximum) in expected_fields.items():
+        value = config[field]
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise typer.BadParameter(f"SWE-bench {arm} {field} must be an integer")
+        if not minimum <= value <= maximum:
+            raise typer.BadParameter(
+                f"SWE-bench {arm} {field} must be between {minimum} and {maximum}"
+            )
+        normalized[field] = value
+    canonical = json.dumps(
+        normalized, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    expected_digest = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    if arm_value.get("generation_config_digest") != expected_digest:
+        raise typer.BadParameter(f"SWE-bench {arm} generation config digest is invalid")
+    return (
+        normalized["max_iterations"],
+        normalized["max_context_rounds"],
+        normalized["max_context_tool_calls"],
+        normalized["max_patch_attempts"],
+    )
 
 
 def _evidence_spend(root: Path, protocol_digest: str) -> Decimal:

@@ -5,7 +5,12 @@ from pathlib import Path
 import httpx
 from typer.testing import CliRunner
 
-from repo_maintenance_agent.cli import ControlPlaneClient, _protocol_cost_policy, app
+from repo_maintenance_agent.cli import (
+    ControlPlaneClient,
+    _protocol_arm_configuration,
+    _protocol_cost_policy,
+    app,
+)
 
 
 def test_doctor_reports_key_availability_without_printing_secret(monkeypatch) -> None:
@@ -132,6 +137,42 @@ def test_swebench_cost_policy_is_bound_to_the_frozen_protocol() -> None:
     assert rates.cache_hit_input_cny_per_million == Decimal("0.028")
     assert rates.cache_miss_input_cny_per_million == Decimal("0.14")
     assert rates.output_cny_per_million == Decimal("0.28")
+
+
+def test_swebench_arm_configuration_is_digest_bound_and_ready() -> None:
+    config = {
+        "max_context_rounds": 1,
+        "max_context_tool_calls": 8,
+        "max_iterations": 3,
+        "max_patch_attempts": 2,
+    }
+    import hashlib
+
+    canonical = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
+    digest = "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+    assert _protocol_arm_configuration(
+        {
+            "arms": {
+                "baseline": {
+                    "status": "ready",
+                    "generation_config": config,
+                    "generation_config_digest": digest,
+                }
+            }
+        },
+        "baseline",
+    ) == (3, 1, 8, 2)
+
+
+def test_swebench_arm_configuration_rejects_pending_candidate() -> None:
+    import pytest
+
+    with pytest.raises(Exception, match="not finalized"):
+        _protocol_arm_configuration(
+            {"arms": {"candidate": {"status": "pending_development_analysis"}}},
+            "candidate",
+        )
 
 
 def test_evaluate_suite_writes_json_and_markdown_reports(tmp_path: Path) -> None:
