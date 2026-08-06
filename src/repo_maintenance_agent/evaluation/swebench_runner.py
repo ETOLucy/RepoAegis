@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 from collections.abc import Callable, Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
@@ -261,7 +262,7 @@ class GitSWEbenchRuntime:
         if workspace.exists():
             current_commit = await self._current_commit(workspace)
             if current_commit is None:
-                shutil.rmtree(workspace)
+                shutil.rmtree(workspace, onexc=_retry_readonly_removal)
             else:
                 if current_commit != task.base_commit:
                     raise RuntimeError(
@@ -494,3 +495,12 @@ def _atomic_json(path: Path, evidence: SWEbenchGenerationEvidence) -> None:
     )
     temporary.write_text(payload + "\n", encoding="utf-8")
     os.replace(temporary, path)
+
+
+def _retry_readonly_removal(
+    function: Callable[..., Any], path: str, error: BaseException
+) -> None:
+    if not isinstance(error, PermissionError):
+        raise error
+    os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+    function(path)

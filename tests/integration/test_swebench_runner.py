@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import stat
 import subprocess
 from decimal import Decimal
 from pathlib import Path
@@ -154,7 +155,11 @@ async def test_generate_prediction_rebuilds_incomplete_checkout(tmp_path: Path) 
     )
     workspace_root = tmp_path / "workspaces"
     partial = workspace_root / hashlib.sha256(task.instance_id.encode()).hexdigest()[:24]
-    (partial / ".git").mkdir(parents=True)
+    pack_directory = partial / ".git" / "objects" / "pack"
+    pack_directory.mkdir(parents=True)
+    interrupted_pack = pack_directory / "tmp_pack"
+    interrupted_pack.write_bytes(b"partial clone")
+    interrupted_pack.chmod(stat.S_IREAD)
     runtime = GitSWEbenchRuntime(
         repository_locators={"owner/repo": str(repository)},
         workspace_root=workspace_root,
