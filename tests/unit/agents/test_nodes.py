@@ -484,6 +484,18 @@ class PatchFeedbackModel(FakeModel):
         return await super().structured(system=system, input_text=input_text, schema=schema)
 
 
+class WrongPathPatchFeedbackModel(PatchFeedbackModel):
+    async def structured(self, *, system, input_text, schema):
+        output = await super().structured(
+            system=system,
+            input_text=input_text,
+            schema=schema,
+        )
+        if schema is PatchProposal and len(self.patch_inputs) == 1:
+            return output.model_copy(update={"changed_files": ["src/legacy.py"]})
+        return output
+
+
 class FailingOnceGateway(RecordingGateway):
     def __init__(self) -> None:
         super().__init__()
@@ -500,7 +512,7 @@ class FailingOnceGateway(RecordingGateway):
 
 @pytest.mark.asyncio
 async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
-    model = PatchFeedbackModel()
+    model = WrongPathPatchFeedbackModel()
     gateway = FailingOnceGateway()
     nodes = build_agent_nodes(
         AgentRuntime(model=model, artifacts=FileArtifactStore(tmp_path), gateway=gateway)
@@ -514,6 +526,7 @@ async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
         .model_copy(
             update={
                 "plan_hash": "b" * 64,
+                "declared_files": ("src/config.py",),
                 "approval": ApprovalDecision(
                     approved=True,
                     approver="tenant-a",
@@ -536,6 +549,10 @@ async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
         "apply_patch",
         "read_files",
         "apply_patch",
+    ]
+    assert gateway.calls[1][0].arguments["files"] == [
+        "src/config.py",
+        "src/legacy.py",
     ]
     assert model.patch_inputs[1]["controlled_context"]["files"] == {
         "src/config.py": "def load(): return default"
@@ -565,6 +582,7 @@ async def test_coding_receives_review_feedback_on_next_iteration(tmp_path: Path)
         .model_copy(
             update={
                 "plan": ({"description": "Fix behavior", "paths": ["src/config.py"]},),
+                "declared_files": ("src/config.py",),
                 "iteration": 1,
                 "review": {
                     "decision": "request_changes",
@@ -578,4 +596,9 @@ async def test_coding_receives_review_feedback_on_next_iteration(tmp_path: Path)
     await nodes.coding({"task": reviewed, "trace": []})
 
     assert model.patch_inputs[0]["review_feedback"] == reviewed.review
+    assert model.patch_inputs[0]["controlled_context"] == {
+        "current_diff": "diff --git a/src/config.py b/src/config.py\n+return default",
+        "files": {"src/config.py": "def load(): return default"},
+        "searches": [],
+    }
 

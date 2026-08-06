@@ -193,6 +193,41 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
     async def coding(state: GraphState) -> dict[str, Any]:
         task = state["task"]
         controlled_context: dict[str, Any] = {"searches": [], "files": {}}
+        if task.review.get("decision") == "request_changes":
+            diff_result = await runtime.gateway.execute(
+                ToolCall(
+                    task_id=task.task_id,
+                    tenant_id=task.tenant_id,
+                    repo_id=task.repo_id,
+                    commit_sha=task.commit_sha,
+                    agent="coding",
+                    name="git_diff",
+                    permission=ToolPermission.REPO_READ,
+                    arguments={"ref": task.commit_sha},
+                ),
+                task,
+            )
+            source_result = await runtime.gateway.execute(
+                ToolCall(
+                    task_id=task.task_id,
+                    tenant_id=task.tenant_id,
+                    repo_id=task.repo_id,
+                    commit_sha=task.commit_sha,
+                    agent="coding",
+                    name="read_files",
+                    permission=ToolPermission.REPO_READ,
+                    arguments={"files": list(task.declared_files)},
+                ),
+                task,
+            )
+            current_diff = diff_result.output.get("diff")
+            files = source_result.output.get("files")
+            if not diff_result.success or not isinstance(current_diff, str):
+                raise ToolExecutionError("coding revision diff collection failed")
+            if not source_result.success or not isinstance(files, dict):
+                raise ToolExecutionError("coding revision source collection failed")
+            controlled_context["current_diff"] = current_diff
+            controlled_context["files"].update(files)
         context_tool_calls = 0
         for _ in range(runtime.max_context_rounds):
             request = await runtime.model.structured(
@@ -320,6 +355,9 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 patch_feedback = str(error)
                 if patch_attempt == runtime.max_patch_attempts - 1:
                     raise
+                refresh_paths = sorted(
+                    set(task.declared_files) | set(output.changed_files)
+                )
                 refreshed = await runtime.gateway.execute(
                     ToolCall(
                         task_id=task.task_id,
@@ -329,7 +367,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                         agent="coding",
                         name="read_files",
                         permission=ToolPermission.REPO_READ,
-                        arguments={"files": list(output.changed_files)},
+                        arguments={"files": refresh_paths},
                     ),
                     task,
                 )
