@@ -1,19 +1,30 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, TypeVar, cast
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
 from repo_maintenance_agent.config import Settings
+from repo_maintenance_agent.models.usage import UsageLedger, usage_from_response
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 
 class OpenAIModelGateway:
-    def __init__(self, *, client: Any, model: str) -> None:
+    def __init__(
+        self,
+        *,
+        client: Any,
+        model: str,
+        usage_ledger: UsageLedger | None = None,
+        maximum_call_cost_cny: Decimal = Decimal("0"),
+    ) -> None:
         self._client = client
         self._model = model
+        self._usage_ledger = usage_ledger
+        self._maximum_call_cost_cny = maximum_call_cost_cny
 
     @classmethod
     def from_settings(cls, settings: Settings) -> OpenAIModelGateway:
@@ -37,6 +48,11 @@ class OpenAIModelGateway:
             raise ValueError("structured attempts must be between 1 and 5")
         last_error: Exception | None = None
         for attempt in range(max_attempts):
+            reservation = (
+                self._usage_ledger.reserve(self._maximum_call_cost_cny)
+                if self._usage_ledger is not None
+                else None
+            )
             try:
                 response = await self._client.responses.parse(
                     model=self._model,
@@ -48,6 +64,11 @@ class OpenAIModelGateway:
                 parsed = response.output_parsed
                 if parsed is None:
                     raise RuntimeError("model did not return the requested structured output")
+                if self._usage_ledger is not None and reservation is not None:
+                    self._usage_ledger.record(
+                        usage_from_response(response),
+                        reservation_cny=reservation,
+                    )
                 return cast(SchemaT, parsed)
             except ValidationError as error:
                 last_error = error

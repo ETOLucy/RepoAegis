@@ -1,9 +1,15 @@
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
 from pydantic import BaseModel
 
 from repo_maintenance_agent.models.openai_gateway import OpenAIModelGateway
+from repo_maintenance_agent.models.usage import (
+    ModelBudgetExceeded,
+    UsageLedger,
+    UsageRates,
+)
 
 
 class Answer(BaseModel):
@@ -138,3 +144,67 @@ async def test_gateway_retry_includes_validation_feedback() -> None:
     assert result == Answer(summary="retried")
     assert gateway._client.responses.calls == 2
     assert "previous response" in gateway._client.responses.inputs[1]
+
+
+@pytest.mark.asyncio
+async def test_gateway_records_deepseek_usage_categories() -> None:
+    class Responses:
+        async def parse(self, **kwargs):
+            return SimpleNamespace(
+                output_parsed=Answer(summary="metered"),
+                usage=SimpleNamespace(
+                    prompt_tokens=1_000,
+                    prompt_cache_hit_tokens=700,
+                    prompt_cache_miss_tokens=300,
+                    completion_tokens=80,
+                    completion_tokens_details=SimpleNamespace(reasoning_tokens=20),
+                ),
+            )
+
+    client = SimpleNamespace(responses=Responses())
+    ledger = UsageLedger(
+        limit_cny=Decimal("1"),
+        rates=UsageRates(
+            cache_hit_input_cny_per_million=Decimal("0.2"),
+            cache_miss_input_cny_per_million=Decimal("2"),
+            output_cny_per_million=Decimal("8"),
+        ),
+    )
+    gateway = OpenAIModelGateway(
+        client=client,
+        model="deepseek-chat",
+        usage_ledger=ledger,
+        maximum_call_cost_cny=Decimal("0.1"),
+    )
+
+    result = await gateway.structured(system="s", input_text="input", schema=Answer)
+
+    assert result == Answer(summary="metered")
+    assert ledger.snapshot().input_cache_hit_tokens == 700
+    assert ledger.snapshot().input_cache_miss_tokens == 300
+    assert ledger.snapshot().reasoning_tokens == 20
+
+
+@pytest.mark.asyncio
+async def test_gateway_refuses_before_call_when_budget_is_exhausted() -> None:
+    class Responses:
+        async def parse(self, **kwargs):
+            raise AssertionError("provider must not be called")
+
+    ledger = UsageLedger(
+        limit_cny=Decimal("0.05"),
+        rates=UsageRates(
+            cache_hit_input_cny_per_million=Decimal("0.2"),
+            cache_miss_input_cny_per_million=Decimal("2"),
+            output_cny_per_million=Decimal("8"),
+        ),
+    )
+    gateway = OpenAIModelGateway(
+        client=SimpleNamespace(responses=Responses()),
+        model="deepseek-chat",
+        usage_ledger=ledger,
+        maximum_call_cost_cny=Decimal("0.1"),
+    )
+
+    with pytest.raises(ModelBudgetExceeded, match="hard limit"):
+        await gateway.structured(system="s", input_text="input", schema=Answer)
