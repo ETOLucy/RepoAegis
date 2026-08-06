@@ -1,3 +1,4 @@
+import re
 import shutil
 import xml.etree.ElementTree as ET
 from collections import deque
@@ -97,3 +98,23 @@ def test_seed_is_closed_and_visually_separated_from_wing() -> None:
             )
             == 2
         )
+
+
+def test_wing_root_stays_optically_aligned_over_seed() -> None:
+    root = ET.parse(  # noqa: S314 - parses a committed local SVG fixture
+        ROOT / "docs" / "repo-aegis-mark.svg"
+    ).getroot()
+    paths = [element for element in root if element.tag.endswith("path")]
+    assert len(paths) == 2
+    assert all(path.attrib["d"].rstrip().endswith("Z") for path in paths)
+
+    wing_root_match = re.match(r"M(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)", paths[0].attrib["d"])
+    assert wing_root_match is not None
+    wing_root_x = float(wing_root_match.group(1))
+    seed_coordinates = [
+        float(value) for value in re.findall(r"-?\d+(?:\.\d+)?", paths[1].attrib["d"])
+    ]
+    seed_x_coordinates = seed_coordinates[::2]
+    seed_center_x = (min(seed_x_coordinates) + max(seed_x_coordinates)) / 2
+
+    assert abs(wing_root_x - seed_center_x) <= 16

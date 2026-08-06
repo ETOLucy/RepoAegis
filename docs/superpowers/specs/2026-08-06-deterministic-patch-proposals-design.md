@@ -66,7 +66,7 @@ is allowed until the implementation passes the full local quality gates.
 
 Every future paid call record must include the Asia/Shanghai date and time,
 model and dated revision, cache-hit input tokens, cache-miss input tokens,
-output tokens, the dated per-million-token rate snapshot, computed CNY cost,
+output tokens, the dated per-million-token rate snapshot, computed provider cost,
 and whether the value comes from exact response usage or a balance estimate.
 An interrupted response without a usage object is recorded as unknown rather
 than silently treated as exact zero cost.

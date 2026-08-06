@@ -21,7 +21,7 @@ From the isolated worktree, use its source tree with the repository virtual envi
 
 ```powershell
 $env:PYTHONPATH = "$PWD/src"
-& 'D:\Repos\Agents\RepoAegis\.venv\Scripts\python.exe' -m pytest tests/integration/test_runtime.py -q
+& '.venv\Scripts\python.exe' -m pytest tests/integration/test_runtime.py -q
 ```
 
 The test creates a temporary SQLite database, submits through the real FastAPI route, then claims

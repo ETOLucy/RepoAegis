@@ -52,6 +52,19 @@ The generated evidence stores a canonical digest of the feedback record. Resume 
 feedback changes, so an older prediction cannot be silently reused under new development evidence.
 
 Paid-call evidence records the Asia/Shanghai date and time, dated model revision, cache-hit input,
-cache-miss input, output tokens, the observed rate snapshot, computed CNY cost, and whether usage is
+cache-miss input, output tokens, their total, and whether usage is
 exact response evidence or a balance estimate. A transport failure without a provider usage object
 has unknown token usage; a locally saved zero must not be presented as exact zero cost.
+
+## Consumed frozen holdout
+
+The protocol `sha256:6b388c25f96b06662dff7bdb0c015f7f3b3ae4eca7ecc2174727ea38d69b168e`
+froze eight previously unseen Verified tasks before generation. RepoAegis commit `978d24e` generated
+four predictions and recorded four terminal generation failures. SWE-bench 4.1.0 officially
+resolved three of the four submitted predictions, so the strict result is 3/8 (37.5%). Generation
+failures are not removed from the denominator.
+
+This holdout is now consumed. Its outcomes may diagnose failure mechanisms, but no later revision
+may reuse it as unseen evidence. A future improvement claim requires a new frozen RepoAegis
+revision, a new disjoint holdout, and results reported separately from this run. The redacted record
+is [`docs/evidence/swebench-holdout-v2.json`](evidence/swebench-holdout-v2.json).

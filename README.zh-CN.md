@@ -64,7 +64,7 @@ Python 控制面拥有身份、状态、策略、证据与编排。仓库代码�
 | 独立审查 | Gateway 收集的 Git diff、变更后源码、验收条件与验证证据 |
 | 命令 | 参数数组、可执行白名单、超时、输出上限、净化环境 |
 | 沙箱 | 摘要固定镜像、非 root、只读根、drop capabilities、离线检查 |
-| 模型输出 | 结构化精确文本编辑 + `store=False`；模型不编写 diff hunk 元数据 |
+| 模型输出 | provider 专属结构化 JSON + 严格本地校验；Responses 调用使用 `store=False`；模型不编写 diff hunk 元数据 |
 | 编码上下文 | 仅 Gateway 的搜索/读取请求，固定轮次与工具调用上限 |
 | 评测 | 并发套件、重试、来源、基线增量、硬门禁、确定性重放 |
 | 隐私 | 递归脱敏 + 当前树与可达历史发布扫描 |
@@ -97,12 +97,22 @@ Harness 在有界并发下评测版本化套件。它保持清单顺序，只重
 
 命令在返回前写入两个报告；门禁失败时以退出码 `1` 返回，可直接用作 CI 发布检查。
 
+### SWE-bench 真实评测
+
+2026-08-07 完成了冻结的面试规模评测。8 个 SWE-bench Verified 任务在评测前预先冻结，且未用于
+开发调参；RepoAegis 为其中 4 个任务生成了预测。官方 SWE-bench 4.1.0 Docker harness 判定其中
+3 个 resolved。4 个生成失败仍计入分母，因此严格结果是 **3/8（37.5%）**，不是 3/4。正式
+holdout 共记录 387,775 个模型 token：179,328 个 cache-hit input、184,636 个 cache-miss input
+和 23,811 个 output token。
+这是固定小样本的方向性证据，不是排行榜或统计显著性结论。见
+[脱敏证据记录](docs/evidence/swebench-holdout-v2.json)。
+
 ## Web 工作台（AI 全栈）
 
 一个 React + Vite 工作台，连接控制面与 RAG 对话接口：
 
 - **代码问答 (RAG)** `POST /v1/chat`：对仓库做 BM25 + 符号混合检索，通过 OpenAI 兼容模型
-  （deepseek）返回带引用的回答，并返回参考路径/行区间。
+  （DeepSeek）返回带引用的回答，并返回参考路径/行区间。
 - **任务控制台** `/v1/tasks`：列出/创建/查看仓库维护任务。
 - **评测看板** `/v1/evaluations/runs`：评测 run 与发布门禁。
 
@@ -214,8 +224,8 @@ docker compose up --build
 
 应用与任务沙箱容器以 UID 10001 运行，只读根文件系统、drop capabilities、
 `no-new-privileges` 与不可变基础镜像摘要。专用 rootless daemon 与 worker 及宿主机 socket 隔离。
-沙箱依赖安装是独立可审计阶段；测试与 lint 阶段无网络运行。Compose 语法与隔离拓扑已测试；当前
-开发机上的真实 Docker 启动仍在验证中。
+沙箱依赖安装是独立可审计阶段；测试与 lint 阶段无网络运行。Compose 语法、隔离拓扑、镜像构建、
+六服务启动与一个本地任务生命周期已经验证；不声称生产可用性、恶意多租户运行或容量结论。
 
 ## 配置
 
@@ -290,23 +300,15 @@ RepoAegis 与 AegisEvo 构成一条受治理的流水线。RepoAegis 是仓库�
 评测与晋升平台。AegisEvo 不维护第二套编码 Agent——它通过版本化、内容寻址的 target pack 驱动
 固定版本的 RepoAegis 运行时。
 
-```mermaid
-flowchart LR
-    RA[RepoAegis runtime] -->|exports immutable| TP[Target pack / v2]
-    TP --> AE[AegisEvo search + evaluation]
-    AE -->|equal-budget generation| RA
-    RA -->|patch + runtime evidence| Official[Official SWE-bench harness]
-    Official -->|structured verdict| AE
-    AE -->|aggregate + gates| Report[Report]
-    Report -->|human approval| Promotion[Controlled Promotion]
-```
+![RepoAegis 到官方 harness 再到 AegisEvo 的证据流](docs/diagrams/official-evaluation-evidence.svg)
 
 - **RepoAegis** 执行真实仓库任务：物化固定 commit -> 计划 -> 审批 -> 补丁 -> 容器验证 -> 审查 ->
   commit/push -> 草稿 PR。
 - **Target pack** 冻结 RepoAegis commit、运行时源码、镜像与策略摘要
-  （`repoaegis-target-pack/v2`）；独立的 SWE-bench 协议再绑定任务 ID、模型、seed 与成本策略。
+  （`repoaegis-target-pack/v2`）；独立的 SWE-bench 协议再绑定任务 ID、模型、编排元数据与 token
+  记账策略。
 - **AegisEvo** 通过版本化 `repoaegis-http-v1` 适配器消费 target pack，运行等预算的 baseline /
-  random / evolution 搜索，并报告 resolution、安全、成本与延迟证据（`evaluation-observation/v1`）。
+  random / evolution 搜索，并报告 resolution、安全、用量与延迟证据（`evaluation-observation/v1`）。
 - **受控晋升** 要求绝对质量、统计显著、零安全回归、预算合规与人工审批。新的 RepoAegis 发布创建
   新的 target pack，而不是覆盖旧包。
 
@@ -314,7 +316,7 @@ flowchart LR
 
 | RepoAegis | Target pack | AegisEvo | 契约 |
 |---|---|---|---|
-| `0.1.0`（当前 main） | `repoaegis-target-pack/v2`（`repoaegis-v2`） | `0.1.0`（当前 main） | `repoaegis-http-v1` 适配器 + `evaluation-observation/v1` |
+| `978d24e`（评测版本） | `repoaegis-target-pack/v2`（`repoaegis-v2`） | `ed1f445`（评测版本） | `repoaegis-http-v1` 适配器 + `evaluation-observation/v1` |
 
 跨语言摘要校验与真实联合演示只验证运行时兼容性：AegisEvo 能驱动真实 RepoAegis 任务到
 `completed`。该历史演示不证明任务已解决；只有官方 verifier 报告可以建立 `resolved`。评测侧见

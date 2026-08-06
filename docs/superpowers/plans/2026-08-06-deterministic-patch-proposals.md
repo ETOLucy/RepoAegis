@@ -16,7 +16,7 @@
 - Creation uses `old_text = null` and requires a missing target.
 - File deletion and binary edits are out of scope.
 - Preserve artifact storage, `git apply --check`, internal review, and official SWE-bench grading.
-- Every future cost record includes Asia/Shanghai date/time, model revision, hit/miss/output tokens, dated rates, computed CNY, and evidence precision.
+- Every future private cost record includes Asia/Shanghai date/time, model revision, hit/miss/output tokens, dated rates, computed provider cost, and evidence precision; public evidence publishes token usage only.
 
 ---
 
@@ -126,7 +126,7 @@ Run: `git add src/repo_maintenance_agent/agents/nodes.py tests/unit/agents/test_
 - Modify: `docs/architecture.md`
 - Modify: `docs/evaluation.md`
 - Modify: `docs/claim-to-evidence.md`
-- Modify: private protocol and cost ledger under `D:/Repos/Agents/.portfolio-eval`
+- Modify: private protocol and cost ledger outside the public repository
 
 **Interfaces:**
 - Documents: model proposal, local rendering, patch application, and official resolution as separate stages.
@@ -160,8 +160,8 @@ than exact zero.
 - [ ] **Step 5: Perform at most one paid generation**
 
 Use the authorized public SWE-bench issue, public Sphinx source, and private
-failure summary. Keep the DeepSeek credential process-local and route the
-external request through `127.0.0.1:7897`. Persist exact dated usage and cost.
+failure summary. Keep the DeepSeek credential process-local and use the
+operator's process-local network configuration. Persist exact dated usage and cost.
 
 - [ ] **Step 6: Run official grading only for a produced prediction**
 
