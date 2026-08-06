@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 from collections.abc import Callable, Mapping, Sequence
@@ -105,6 +106,26 @@ class SWEbenchGenerationEvidence(BaseModel):
     prediction: SWEbenchPrediction
     usage: ModelUsage
     latency_ms: int = Field(ge=0)
+    development_feedback_digest: str | None = Field(
+        default=None, pattern=r"^sha256:[a-f0-9]{64}$"
+    )
+
+
+class SWEbenchGenerationFailureEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["swebench-generation-failure-evidence/v1"] = (
+        "swebench-generation-failure-evidence/v1"
+    )
+    protocol_digest: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    arm: Literal["baseline", "candidate"]
+    instance_id: str = Field(min_length=1, max_length=256)
+    model_name_or_path: str = Field(min_length=1, max_length=256)
+    runtime_completed: Literal[False] = False
+    usage: ModelUsage
+    latency_ms: int = Field(ge=0)
+    error_type: str = Field(min_length=1, max_length=256)
+    error_summary: str = Field(min_length=1, max_length=2_000)
     development_feedback_digest: str | None = Field(
         default=None, pattern=r"^sha256:[a-f0-9]{64}$"
     )
@@ -358,7 +379,25 @@ async def run_predictions(
 
         before = ledger.snapshot()
         started = monotonic()
-        prediction = await generate_prediction(task, runtime, ledger)
+        try:
+            prediction = await generate_prediction(task, runtime, ledger)
+        except Exception as error:
+            failure = SWEbenchGenerationFailureEvidence(
+                protocol_digest=protocol_digest,
+                arm=arm,
+                instance_id=task.instance_id,
+                model_name_or_path=runtime.model_name_or_path,
+                usage=_usage_difference(ledger.snapshot(), before),
+                latency_ms=int((monotonic() - started) * 1_000),
+                error_type=type(error).__name__,
+                error_summary=_safe_error_summary(error),
+                development_feedback_digest=development_feedback_digest,
+            )
+            _atomic_json(
+                _next_failure_evidence_path(evidence_directory, task.instance_id),
+                failure,
+            )
+            raise
         evidence = SWEbenchGenerationEvidence(
             protocol_digest=protocol_digest,
             arm=arm,
@@ -485,7 +524,27 @@ def _validate_resume(
         raise ValueError("saved SWE-bench evidence does not match this run")
 
 
-def _atomic_json(path: Path, evidence: SWEbenchGenerationEvidence) -> None:
+def _next_failure_evidence_path(root: Path, instance_id: str) -> Path:
+    task_digest = hashlib.sha256(instance_id.encode()).hexdigest()
+    attempt = 1
+    while True:
+        candidate = root / f"{task_digest}.failure-{attempt:04d}.json"
+        if not candidate.exists():
+            return candidate
+        attempt += 1
+
+
+_CREDENTIAL_PATTERN = re.compile(
+    r"(?i)\b(?:bearer\s+[A-Za-z0-9._~+/=-]+|sk-[A-Za-z0-9_-]+)\b"
+)
+
+
+def _safe_error_summary(error: Exception) -> str:
+    first_line = str(error).splitlines()[0].strip() if str(error) else "generation failed"
+    return _CREDENTIAL_PATTERN.sub("[REDACTED]", first_line)[:2_000]
+
+
+def _atomic_json(path: Path, evidence: BaseModel) -> None:
     temporary = path.with_name(f".{path.name}.tmp")
     payload = json.dumps(
         evidence.model_dump(mode="json"),

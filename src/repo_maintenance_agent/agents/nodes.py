@@ -320,6 +320,23 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 patch_feedback = str(error)
                 if patch_attempt == runtime.max_patch_attempts - 1:
                     raise
+                refreshed = await runtime.gateway.execute(
+                    ToolCall(
+                        task_id=task.task_id,
+                        tenant_id=task.tenant_id,
+                        repo_id=task.repo_id,
+                        commit_sha=task.commit_sha,
+                        agent="coding",
+                        name="read_files",
+                        permission=ToolPermission.REPO_READ,
+                        arguments={"files": list(output.changed_files)},
+                    ),
+                    task,
+                )
+                files = refreshed.output.get("files")
+                if not refreshed.success or not isinstance(files, dict):
+                    raise ToolExecutionError("coding patch refresh failed") from error
+                controlled_context["files"].update(files)
         assert tool_result is not None
         changed_files = _changed_files(tool_result)
         coding_task = (

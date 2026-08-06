@@ -31,6 +31,7 @@ from repo_maintenance_agent.evaluation.swebench_runner import (
     RepoAegisPatchAgent,
     SWEbenchDevelopmentFeedback,
     SWEbenchGenerationEvidence,
+    SWEbenchGenerationFailureEvidence,
     SWEbenchTask,
     run_predictions,
 )
@@ -654,9 +655,15 @@ def _evidence_spend(root: Path, protocol_digest: str) -> Decimal:
     if not root.exists():
         return total
     for path in root.rglob("*.json"):
-        evidence = SWEbenchGenerationEvidence.model_validate_json(
-            path.read_text(encoding="utf-8")
-        )
+        raw = path.read_text(encoding="utf-8")
+        payload = json.loads(raw)
+        evidence: SWEbenchGenerationEvidence | SWEbenchGenerationFailureEvidence
+        if payload.get("schema_version") == "swebench-generation-evidence/v1":
+            evidence = SWEbenchGenerationEvidence.model_validate_json(raw)
+        elif payload.get("schema_version") == "swebench-generation-failure-evidence/v1":
+            evidence = SWEbenchGenerationFailureEvidence.model_validate_json(raw)
+        else:
+            raise typer.BadParameter(f"unrecognized SWE-bench evidence: {path.name}")
         if evidence.protocol_digest != protocol_digest:
             raise typer.BadParameter("evidence directory mixes SWE-bench protocols")
         total += evidence.usage.estimated_cost_cny

@@ -8,12 +8,19 @@ from typer.testing import CliRunner
 
 from repo_maintenance_agent.cli import (
     ControlPlaneClient,
+    _evidence_spend,
     _protocol_arm_configuration,
     _protocol_cost_policy,
     _protocol_model_api_style,
     _read_development_feedback,
     _validated_protocol_digest,
     app,
+)
+from repo_maintenance_agent.evaluation.models import ModelUsage
+from repo_maintenance_agent.evaluation.swebench import SWEbenchPrediction
+from repo_maintenance_agent.evaluation.swebench_runner import (
+    SWEbenchGenerationEvidence,
+    SWEbenchGenerationFailureEvidence,
 )
 
 
@@ -240,6 +247,37 @@ def test_swebench_development_feedback_requires_exact_unique_selected_tasks(
             role="development",
         )
 
+
+def test_swebench_evidence_spend_includes_failed_generation(tmp_path: Path) -> None:
+    protocol_digest = "sha256:" + "a" * 64
+    usage = ModelUsage(estimated_cost_cny=Decimal("0.125"))
+    success = SWEbenchGenerationEvidence(
+        protocol_digest=protocol_digest,
+        arm="candidate",
+        instance_id="owner__repo-1",
+        model_name_or_path="fixture-model",
+        prediction=SWEbenchPrediction(
+            instance_id="owner__repo-1",
+            model_patch="diff --git a/app.py b/app.py\n",
+            model_name_or_path="fixture-model",
+        ),
+        usage=usage,
+        latency_ms=10,
+    )
+    failure = SWEbenchGenerationFailureEvidence(
+        protocol_digest=protocol_digest,
+        arm="candidate",
+        instance_id="owner__repo-2",
+        model_name_or_path="fixture-model",
+        usage=usage,
+        latency_ms=20,
+        error_type="RuntimeError",
+        error_summary="patch did not apply",
+    )
+    (tmp_path / "success.json").write_text(success.model_dump_json(), encoding="utf-8")
+    (tmp_path / "failure.json").write_text(failure.model_dump_json(), encoding="utf-8")
+
+    assert _evidence_spend(tmp_path, protocol_digest) == Decimal("0.250")
 
 def test_evaluate_suite_writes_json_and_markdown_reports(tmp_path: Path) -> None:
     suite_file, observations_file = _suite_files(tmp_path, hidden_tests_passed=True)

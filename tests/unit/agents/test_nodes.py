@@ -493,6 +493,7 @@ class FailingOnceGateway(RecordingGateway):
         if call.name == "apply_patch":
             self.apply_calls += 1
             if self.apply_calls == 1:
+                self.calls.append((call, state))
                 raise ToolExecutionError("patch does not apply")
         return await super().execute(call, state)
 
@@ -531,6 +532,14 @@ async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
     assert result["task"].status is TaskStatus.CODING
     assert gateway.apply_calls == 2
     assert len(model.patch_inputs) == 2
+    assert [call.name for call, _ in gateway.calls] == [
+        "apply_patch",
+        "read_files",
+        "apply_patch",
+    ]
+    assert model.patch_inputs[1]["controlled_context"]["files"] == {
+        "src/config.py": "def load(): return default"
+    }
     assert "patch_feedback" in model.patch_inputs[1]
     assert "patch does not apply" in str(model.patch_inputs[1]["patch_feedback"])
 

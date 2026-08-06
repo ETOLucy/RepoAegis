@@ -18,10 +18,12 @@ from repo_maintenance_agent.agents.schemas import (
     TaskSpecOutput,
 )
 from repo_maintenance_agent.domain.models import RiskLevel
+from repo_maintenance_agent.evaluation.models import ModelUsage
 from repo_maintenance_agent.evaluation.swebench_runner import (
     GitSWEbenchRuntime,
     RepoAegisPatchAgent,
     SWEbenchDevelopmentFeedback,
+    SWEbenchGenerationFailureEvidence,
     SWEbenchTask,
     generate_prediction,
     run_predictions,
@@ -101,6 +103,25 @@ class GraphFixtureModel:
 class FailIfCalledAgent:
     async def run(self, task, workspace, ledger, development_feedback=None) -> None:
         raise AssertionError("completed prediction must be resumed from evidence")
+
+
+class FailingUsageRuntime:
+    model_name_or_path = "fixture-model"
+
+    def development_feedback_digest(self, instance_id: str) -> str | None:
+        del instance_id
+        return "sha256:" + "b" * 64
+
+    async def execute(
+        self, task: SWEbenchTask, ledger: UsageLedger
+    ) -> object:
+        del task
+        reservation = ledger.reserve(Decimal("0.25"))
+        ledger.record(
+            ModelUsage(input_cache_miss_tokens=1_000_000),
+            reservation_cny=reservation,
+        )
+        raise RuntimeError("provider rejected sk-private-token\nrequest details")
 
 
 @pytest.mark.asyncio
@@ -342,6 +363,63 @@ async def test_prediction_evidence_rejects_changed_development_feedback(
             protocol_digest="sha256:" + "a" * 64,
             arm="baseline",
         )
+
+
+@pytest.mark.asyncio
+async def test_prediction_failure_persists_usage_and_redacts_credentials(
+    tmp_path: Path,
+) -> None:
+    task = SWEbenchTask(
+        instance_id="owner__repo-1",
+        repo="owner/repo",
+        base_commit="a" * 40,
+        problem_statement="Change VALUE from 1 to 2.",
+    )
+    evidence_directory = tmp_path / "evidence"
+    ledger = UsageLedger(
+        limit_cny=Decimal("1"),
+        rates=UsageRates(
+            cache_hit_input_cny_per_million=Decimal("0"),
+            cache_miss_input_cny_per_million=Decimal("0.1"),
+            output_cny_per_million=Decimal("0"),
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="provider rejected"):
+        await run_predictions(
+            [task],
+            runtime=FailingUsageRuntime(),
+            ledger=ledger,
+            evidence_directory=evidence_directory,
+            output_path=tmp_path / "predictions.jsonl",
+            protocol_digest="sha256:" + "a" * 64,
+            arm="candidate",
+        )
+
+    failure_paths = list(evidence_directory.glob("*.failure-*.json"))
+    assert len(failure_paths) == 1
+    failure = SWEbenchGenerationFailureEvidence.model_validate_json(
+        failure_paths[0].read_text(encoding="utf-8")
+    )
+    assert failure.runtime_completed is False
+    assert failure.usage.estimated_cost_cny == Decimal("0.1")
+    assert failure.usage.input_cache_miss_tokens == 1_000_000
+    assert failure.error_type == "RuntimeError"
+    assert failure.error_summary == "provider rejected [REDACTED]"
+    assert failure.development_feedback_digest == "sha256:" + "b" * 64
+
+    with pytest.raises(RuntimeError, match="provider rejected"):
+        await run_predictions(
+            [task],
+            runtime=FailingUsageRuntime(),
+            ledger=ledger,
+            evidence_directory=evidence_directory,
+            output_path=tmp_path / "predictions.jsonl",
+            protocol_digest="sha256:" + "a" * 64,
+            arm="candidate",
+        )
+
+    assert len(list(evidence_directory.glob("*.failure-*.json"))) == 2
 
 
 def test_swebench_task_rejects_answer_and_hidden_test_fields() -> None:
