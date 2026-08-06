@@ -274,6 +274,8 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             }
             if patch_feedback:
                 patch_payload["patch_feedback"] = patch_feedback
+            if task.review.get("decision") == "request_changes":
+                patch_payload["review_feedback"] = task.review
             output = await runtime.model.structured(
                 system=(
                     "Produce a minimal unified diff for the approved plan. Do not modify unrelated "

@@ -534,3 +534,39 @@ async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
     assert "patch_feedback" in model.patch_inputs[1]
     assert "patch does not apply" in str(model.patch_inputs[1]["patch_feedback"])
 
+
+@pytest.mark.asyncio
+async def test_coding_receives_review_feedback_on_next_iteration(tmp_path: Path) -> None:
+    model = PatchFeedbackModel()
+    nodes = build_agent_nodes(
+        AgentRuntime(
+            model=model,
+            artifacts=FileArtifactStore(tmp_path),
+            gateway=RecordingGateway(),
+        )
+    )
+    reviewed = (
+        task()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .transition(TaskStatus.CODING)
+        .transition(TaskStatus.VERIFYING)
+        .transition(TaskStatus.REVIEWING)
+        .model_copy(
+            update={
+                "plan": ({"description": "Fix behavior", "paths": ["src/config.py"]},),
+                "iteration": 1,
+                "review": {
+                    "decision": "request_changes",
+                    "findings": ["Preserve inherited behavior."],
+                    "summary": "The first patch is too broad.",
+                },
+            }
+        )
+    )
+
+    await nodes.coding({"task": reviewed, "trace": []})
+
+    assert model.patch_inputs[0]["review_feedback"] == reviewed.review
+
