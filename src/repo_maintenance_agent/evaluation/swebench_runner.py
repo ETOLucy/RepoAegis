@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 from collections.abc import Callable, Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
@@ -258,12 +259,19 @@ class GitSWEbenchRuntime:
         if not workspace.is_relative_to(self._workspace_root):
             raise ValueError("SWE-bench workspace escaped its root")
         if workspace.exists():
-            await self._assert_commit(workspace, task.base_commit)
-            await self._runner.run(
-                ["git", "reset", "--hard", task.base_commit], cwd=workspace
-            )
-            await self._runner.run(["git", "clean", "-fd"], cwd=workspace)
-            return workspace
+            current_commit = await self._current_commit(workspace)
+            if current_commit is None:
+                shutil.rmtree(workspace)
+            else:
+                if current_commit != task.base_commit:
+                    raise RuntimeError(
+                        "SWE-bench workspace is not pinned to the task base commit"
+                    )
+                await self._runner.run(
+                    ["git", "reset", "--hard", task.base_commit], cwd=workspace
+                )
+                await self._runner.run(["git", "clean", "-fd"], cwd=workspace)
+                return workspace
 
         await self._runner.run(
             [
@@ -293,9 +301,16 @@ class GitSWEbenchRuntime:
         return workspace
 
     async def _assert_commit(self, workspace: Path, expected: str) -> None:
-        result = await self._runner.run(["git", "rev-parse", "HEAD"], cwd=workspace)
-        if result.stdout.strip() != expected:
+        if await self._current_commit(workspace) != expected:
             raise RuntimeError("SWE-bench workspace is not pinned to the task base commit")
+
+    async def _current_commit(self, workspace: Path) -> str | None:
+        result = await self._runner.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=workspace,
+            check=False,
+        )
+        return result.stdout.strip() if result.returncode == 0 else None
 
 
 async def generate_prediction(

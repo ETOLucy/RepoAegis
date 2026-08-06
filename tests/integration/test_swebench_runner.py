@@ -144,6 +144,32 @@ async def test_generate_prediction_uses_clean_checkout_and_exact_official_contra
 
 
 @pytest.mark.asyncio
+async def test_generate_prediction_rebuilds_incomplete_checkout(tmp_path: Path) -> None:
+    repository, commit = _repository(tmp_path)
+    task = SWEbenchTask(
+        instance_id="owner__repo-1",
+        repo="owner/repo",
+        base_commit=commit,
+        problem_statement="Change VALUE from 1 to 2.",
+    )
+    workspace_root = tmp_path / "workspaces"
+    partial = workspace_root / hashlib.sha256(task.instance_id.encode()).hexdigest()[:24]
+    (partial / ".git").mkdir(parents=True)
+    runtime = GitSWEbenchRuntime(
+        repository_locators={"owner/repo": str(repository)},
+        workspace_root=workspace_root,
+        model_name_or_path="fixture-model",
+        patch_agent=FixturePatchAgent(),
+        runner=ProcessRunner(allowed_executables={"git"}),
+    )
+
+    prediction = await generate_prediction(task, runtime, _ledger())
+
+    assert prediction.model_patch.endswith("-VALUE = 1\n+VALUE = 2\n")
+    assert _git(partial, "rev-parse", "HEAD") == commit
+
+
+@pytest.mark.asyncio
 async def test_repoaegis_patch_agent_reuses_the_real_agent_nodes(tmp_path: Path) -> None:
     repository, commit = _repository(tmp_path)
     model = GraphFixtureModel()
