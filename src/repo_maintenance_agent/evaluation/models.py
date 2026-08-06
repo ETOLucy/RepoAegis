@@ -1,10 +1,29 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from enum import StrEnum
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+
+
+class ModelUsage(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    input_cache_hit_tokens: int = Field(default=0, ge=0)
+    input_cache_miss_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    reasoning_tokens: int = Field(default=0, ge=0)
+    estimated_cost_cny: Decimal = Field(default=Decimal("0"), ge=0)
+
+    @property
+    def input_tokens(self) -> int:
+        return self.input_cache_hit_tokens + self.input_cache_miss_tokens
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
 
 
 class EvaluationCase(BaseModel):
