@@ -40,24 +40,13 @@ RepoAegis 是 AI 控制面（control plane）而不是聊天包装器。每一�
 
 ## 系统图
 
-```mermaid
-flowchart LR
-    Client[CLI / Console / GitHub Event] --> API[FastAPI Control Plane]
-    API --> DB[(PostgreSQL)]
-    DB --> Queue[Leased Task Queue]
-    Queue --> Worker[Worker Pool]
-    Worker --> Graph[LangGraph State Machine]
-    Graph --> Agents[Intake / Research / Plan / Code / Verify / Review / PR]
-    Agents --> Gateway[Policy Tool Gateway]
-    Gateway --> Search[Hybrid Search]
-    Gateway --> GitHub[GitHub CLI]
-    Gateway --> Sandbox[Docker Sandbox]
-    Search --> OpenSearch[(OpenSearch)]
-    Graph --> Approval{Plan Approval}
-    API --> Harness[Evaluation Harness]
-    Harness --> EvalDB[(Run Evidence)]
-    Harness --> Console[Evaluation Operations]
-```
+![RepoAegis 运行时架构](docs/diagrams/runtime-architecture.svg)
+
+[可编辑 Excalidraw 源文件](docs/diagrams/runtime-architecture.excalidraw) ·
+[PNG 导出](docs/diagrams/runtime-architecture.png) ·
+[官方评测证据链](docs/diagrams/official-evaluation-evidence.svg)
+（[可编辑源文件](docs/diagrams/official-evaluation-evidence.excalidraw)，
+[PNG](docs/diagrams/official-evaluation-evidence.png)）
 
 Python 控制面拥有身份、状态、策略、证据与编排。仓库代码只在分配的工作区或语言专属的 Docker
 沙箱中执行。

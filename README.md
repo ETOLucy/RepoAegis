@@ -44,24 +44,13 @@ This repository implements those boundaries end to end.
 
 ## System Map
 
-```mermaid
-flowchart LR
-    Client[CLI / Console / GitHub Event] --> API[FastAPI Control Plane]
-    API --> DB[(PostgreSQL)]
-    DB --> Queue[Leased Task Queue]
-    Queue --> Worker[Worker Pool]
-    Worker --> Graph[LangGraph State Machine]
-    Graph --> Agents[Intake / Research / Plan / Code / Verify / Review / PR]
-    Agents --> Gateway[Policy Tool Gateway]
-    Gateway --> Search[Hybrid Search]
-    Gateway --> GitHub[GitHub CLI]
-    Gateway --> Sandbox[Docker Sandbox]
-    Search --> OpenSearch[(OpenSearch)]
-    Graph --> Approval{Plan Approval}
-    API --> Harness[Evaluation Harness]
-    Harness --> EvalDB[(Run Evidence)]
-    Harness --> Console[Evaluation Operations]
-```
+![RepoAegis runtime architecture](docs/diagrams/runtime-architecture.svg)
+
+[Editable Excalidraw source](docs/diagrams/runtime-architecture.excalidraw) ·
+[PNG export](docs/diagrams/runtime-architecture.png) ·
+[Official evaluation evidence chain](docs/diagrams/official-evaluation-evidence.svg)
+([editable source](docs/diagrams/official-evaluation-evidence.excalidraw),
+[PNG](docs/diagrams/official-evaluation-evidence.png))
 
 The Python control plane owns identity, state, policy, evidence, and orchestration. Repository code
 executes only in assigned workspaces or language-specific Docker sandboxes.
