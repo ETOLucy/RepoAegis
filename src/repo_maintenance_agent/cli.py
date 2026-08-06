@@ -356,17 +356,13 @@ def swebench_generate(
     artifact_root: Annotated[Path, typer.Option(help="Private patch artifact root.")],
     arm: Literal["baseline", "candidate"] = typer.Option(...),
     role: Literal["calibration", "development", "frozen"] = typer.Option(...),
-    cache_hit_rate: str = typer.Option(...),
-    cache_miss_rate: str = typer.Option(...),
-    output_rate: str = typer.Option(...),
-    maximum_call_cost: str = typer.Option("1"),
 ) -> None:
     """Generate resumable predictions for one frozen SWE-bench protocol role."""
     protocol_value = _json_object(protocol, "SWE-bench protocol")
     protocol_digest = protocol_value.get("protocol_digest")
-    maximum_spend = _decimal(protocol_value.get("maximum_spend_cny"), "maximum spend")
-    if maximum_spend > Decimal("50"):
-        raise typer.BadParameter("protocol maximum spend exceeds the CNY 50 hard limit")
+    maximum_spend, maximum_call_cost_cny, rates = _protocol_cost_policy(
+        protocol_value
+    )
     if not isinstance(protocol_digest, str) or not protocol_digest.startswith("sha256:"):
         raise typer.BadParameter("protocol digest is invalid")
     roles = protocol_value.get("task_roles")
@@ -400,18 +396,9 @@ def swebench_generate(
         raise typer.BadParameter("SWE-bench experiment has exhausted its CNY budget")
 
     settings = Settings()
-    maximum_call_cost_cny = _decimal(maximum_call_cost, "maximum call cost")
     ledger = UsageLedger(
         limit_cny=remaining,
-        rates=UsageRates(
-            cache_hit_input_cny_per_million=_nonnegative_decimal(
-                cache_hit_rate, "cache-hit input rate"
-            ),
-            cache_miss_input_cny_per_million=_nonnegative_decimal(
-                cache_miss_rate, "cache-miss input rate"
-            ),
-            output_cny_per_million=_nonnegative_decimal(output_rate, "output rate"),
-        ),
+        rates=rates,
     )
     patch_agent = RepoAegisPatchAgent(
         model_factory=lambda active_ledger: OpenAIModelGateway.from_settings(
@@ -506,6 +493,32 @@ def _nonnegative_decimal(value: object, label: str) -> Decimal:
     if amount < 0:
         raise typer.BadParameter(f"{label} must not be negative")
     return amount
+
+
+def _protocol_cost_policy(
+    protocol: dict[str, Any],
+) -> tuple[Decimal, Decimal, UsageRates]:
+    maximum_spend = _decimal(protocol.get("maximum_spend_cny"), "maximum spend")
+    if maximum_spend > Decimal("50"):
+        raise typer.BadParameter("protocol maximum spend exceeds the CNY 50 hard limit")
+    maximum_call_cost = _decimal(
+        protocol.get("maximum_call_cost_cny"), "maximum call cost"
+    )
+    raw_rates = protocol.get("cost_rates_cny_per_million")
+    if not isinstance(raw_rates, dict):
+        raise typer.BadParameter("protocol cost rates are required")
+    rates = UsageRates(
+        cache_hit_input_cny_per_million=_nonnegative_decimal(
+            raw_rates.get("cache_hit_input"), "cache-hit input rate"
+        ),
+        cache_miss_input_cny_per_million=_nonnegative_decimal(
+            raw_rates.get("cache_miss_input"), "cache-miss input rate"
+        ),
+        output_cny_per_million=_nonnegative_decimal(
+            raw_rates.get("output"), "output rate"
+        ),
+    )
+    return maximum_spend, maximum_call_cost, rates
 
 
 def _evidence_spend(root: Path, protocol_digest: str) -> Decimal:

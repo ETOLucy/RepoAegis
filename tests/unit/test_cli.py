@@ -1,10 +1,11 @@
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import httpx
 from typer.testing import CliRunner
 
-from repo_maintenance_agent.cli import ControlPlaneClient, app
+from repo_maintenance_agent.cli import ControlPlaneClient, _protocol_cost_policy, app
 
 
 def test_doctor_reports_key_availability_without_printing_secret(monkeypatch) -> None:
@@ -111,6 +112,26 @@ def test_evaluate_rejects_string_boolean_observations(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert result.exception is not None
+
+
+def test_swebench_cost_policy_is_bound_to_the_frozen_protocol() -> None:
+    maximum_spend, maximum_call_cost, rates = _protocol_cost_policy(
+        {
+            "maximum_spend_cny": "50",
+            "maximum_call_cost_cny": "0.25",
+            "cost_rates_cny_per_million": {
+                "cache_hit_input": "0.028",
+                "cache_miss_input": "0.14",
+                "output": "0.28",
+            },
+        }
+    )
+
+    assert maximum_spend == Decimal("50")
+    assert maximum_call_cost == Decimal("0.25")
+    assert rates.cache_hit_input_cny_per_million == Decimal("0.028")
+    assert rates.cache_miss_input_cny_per_million == Decimal("0.14")
+    assert rates.output_cny_per_million == Decimal("0.28")
 
 
 def test_evaluate_suite_writes_json_and_markdown_reports(tmp_path: Path) -> None:
