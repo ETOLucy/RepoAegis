@@ -80,11 +80,13 @@ def test_from_settings_passes_base_url_and_model(monkeypatch) -> None:
             OPENAI_API_KEY="test-key",
             OPENAI_BASE_URL="https://api.deepseek.com",
             OPENAI_MODEL="deepseek-chat",
+            model_api_style="chat-json",
         )
     )
     assert captured["api_key"] == "test-key"
     assert captured["base_url"] == "https://api.deepseek.com"
     assert gateway._model == "deepseek-chat"
+    assert gateway._api_style == "chat-json"
 
 @pytest.mark.asyncio
 async def test_gateway_retries_once_on_invalid_structured_output() -> None:
@@ -208,3 +210,56 @@ async def test_gateway_refuses_before_call_when_budget_is_exhausted() -> None:
 
     with pytest.raises(ModelBudgetExceeded, match="hard limit"):
         await gateway.structured(system="s", input_text="input", schema=Answer)
+
+
+@pytest.mark.asyncio
+async def test_gateway_chat_json_mode_uses_deepseek_compatible_contract() -> None:
+    class Completions:
+        def __init__(self) -> None:
+            self.arguments: dict[str, object] = {}
+
+        async def create(self, **kwargs):
+            self.arguments = kwargs
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content='{"summary":"chat-json"}')
+                    )
+                ],
+                usage=SimpleNamespace(
+                    prompt_tokens=100,
+                    prompt_cache_hit_tokens=60,
+                    prompt_cache_miss_tokens=40,
+                    completion_tokens=10,
+                ),
+            )
+
+    completions = Completions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    ledger = UsageLedger(
+        limit_cny=Decimal("1"),
+        rates=UsageRates(
+            cache_hit_input_cny_per_million=Decimal("0.2"),
+            cache_miss_input_cny_per_million=Decimal("2"),
+            output_cny_per_million=Decimal("8"),
+        ),
+    )
+    gateway = OpenAIModelGateway(
+        client=client,
+        model="deepseek-chat",
+        api_style="chat-json",
+        usage_ledger=ledger,
+        maximum_call_cost_cny=Decimal("0.1"),
+    )
+
+    result = await gateway.structured(system="Return JSON.", input_text="input", schema=Answer)
+
+    assert result == Answer(summary="chat-json")
+    assert completions.arguments["response_format"] == {"type": "json_object"}
+    messages = completions.arguments["messages"]
+    assert messages[0]["role"] == "system"
+    assert "Return JSON." in messages[0]["content"]
+    assert '"summary"' in messages[0]["content"]
+    assert messages[1] == {"role": "user", "content": "input"}
+    assert ledger.snapshot().input_cache_hit_tokens == 60
+    assert ledger.snapshot().input_cache_miss_tokens == 40

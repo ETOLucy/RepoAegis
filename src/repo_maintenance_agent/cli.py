@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import platform
+from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import httpx
 import typer
@@ -24,6 +25,16 @@ from repo_maintenance_agent.evaluation.models import (
 )
 from repo_maintenance_agent.evaluation.reports import render_markdown_report
 from repo_maintenance_agent.evaluation.runner import grade_case
+from repo_maintenance_agent.evaluation.swebench_runner import (
+    GitSWEbenchRuntime,
+    RepoAegisPatchAgent,
+    SWEbenchGenerationEvidence,
+    SWEbenchTask,
+    run_predictions,
+)
+from repo_maintenance_agent.models.openai_gateway import OpenAIModelGateway
+from repo_maintenance_agent.models.usage import UsageLedger, UsageRates
+from repo_maintenance_agent.tools.process import ProcessRunner
 
 app = typer.Typer(
     name="repo-agent",
@@ -328,6 +339,121 @@ def evaluate_suite(
         raise typer.Exit(code=1)
 
 
+@app.command("swebench-generate")
+def swebench_generate(
+    tasks_file: Path,
+    output: Annotated[Path, typer.Option(help="Official prediction JSONL destination.")],
+    protocol: Annotated[Path, typer.Option(help="Frozen SWE-bench protocol JSON.")],
+    repository_locators: Annotated[
+        Path, typer.Option(help="Private JSON map from repository IDs to Git locators.")
+    ],
+    evidence_directory: Annotated[
+        Path, typer.Option(help="Private resumable generation evidence root.")
+    ],
+    workspace_root: Annotated[
+        Path, typer.Option(help="Disposable benchmark checkout root.")
+    ],
+    artifact_root: Annotated[Path, typer.Option(help="Private patch artifact root.")],
+    arm: Literal["baseline", "candidate"] = typer.Option(...),
+    role: Literal["calibration", "development", "frozen"] = typer.Option(...),
+    cache_hit_rate: str = typer.Option(...),
+    cache_miss_rate: str = typer.Option(...),
+    output_rate: str = typer.Option(...),
+    maximum_call_cost: str = typer.Option("1"),
+) -> None:
+    """Generate resumable predictions for one frozen SWE-bench protocol role."""
+    protocol_value = _json_object(protocol, "SWE-bench protocol")
+    protocol_digest = protocol_value.get("protocol_digest")
+    maximum_spend = _decimal(protocol_value.get("maximum_spend_cny"), "maximum spend")
+    if maximum_spend > Decimal("50"):
+        raise typer.BadParameter("protocol maximum spend exceeds the CNY 50 hard limit")
+    if not isinstance(protocol_digest, str) or not protocol_digest.startswith("sha256:"):
+        raise typer.BadParameter("protocol digest is invalid")
+    roles = protocol_value.get("task_roles")
+    if not isinstance(roles, dict) or not isinstance(roles.get(role), list):
+        raise typer.BadParameter(f"protocol does not define task role: {role}")
+    selected_ids = roles[role]
+    if not selected_ids or any(not isinstance(value, str) for value in selected_ids):
+        raise typer.BadParameter("protocol task IDs are invalid")
+
+    parsed_tasks = _read_swebench_tasks(tasks_file)
+    tasks_by_id = {task.instance_id: task for task in parsed_tasks}
+    if len(tasks_by_id) != len(parsed_tasks):
+        raise typer.BadParameter("SWE-bench task IDs must be unique")
+    try:
+        selected_tasks = [tasks_by_id[instance_id] for instance_id in selected_ids]
+    except KeyError as error:
+        raise typer.BadParameter(
+            f"task file is missing protocol instance: {error.args[0]}"
+        ) from error
+
+    locators = _json_object(repository_locators, "repository locator map")
+    invalid_locator = any(
+        not isinstance(key, str) or not isinstance(value, str)
+        for key, value in locators.items()
+    )
+    if invalid_locator:
+        raise typer.BadParameter("repository locators must map strings to strings")
+    previous_spend = _evidence_spend(evidence_directory, protocol_digest)
+    remaining = maximum_spend - previous_spend
+    if remaining <= 0:
+        raise typer.BadParameter("SWE-bench experiment has exhausted its CNY budget")
+
+    settings = Settings()
+    maximum_call_cost_cny = _decimal(maximum_call_cost, "maximum call cost")
+    ledger = UsageLedger(
+        limit_cny=remaining,
+        rates=UsageRates(
+            cache_hit_input_cny_per_million=_nonnegative_decimal(
+                cache_hit_rate, "cache-hit input rate"
+            ),
+            cache_miss_input_cny_per_million=_nonnegative_decimal(
+                cache_miss_rate, "cache-miss input rate"
+            ),
+            output_cny_per_million=_nonnegative_decimal(output_rate, "output rate"),
+        ),
+    )
+    patch_agent = RepoAegisPatchAgent(
+        model_factory=lambda active_ledger: OpenAIModelGateway.from_settings(
+            settings,
+            usage_ledger=active_ledger,
+            maximum_call_cost_cny=maximum_call_cost_cny,
+        ),
+        artifact_root=artifact_root,
+        max_iterations=settings.max_iterations,
+    )
+    runtime = GitSWEbenchRuntime(
+        repository_locators=locators,
+        workspace_root=workspace_root,
+        model_name_or_path=settings.openai_model,
+        patch_agent=patch_agent,
+        runner=ProcessRunner(allowed_executables={"git"}, timeout_seconds=900),
+    )
+    predictions = asyncio.run(
+        run_predictions(
+            selected_tasks,
+            runtime=runtime,
+            ledger=ledger,
+            evidence_directory=evidence_directory / arm,
+            output_path=output,
+            protocol_digest=protocol_digest,
+            arm=arm,
+        )
+    )
+    typer.echo(
+        json.dumps(
+            {
+                "arm": arm,
+                "role": role,
+                "predictions": len(predictions),
+                "new_spend_cny": str(ledger.spent_cny),
+                "remaining_cny": str(maximum_spend - previous_spend - ledger.spent_cny),
+            },
+            sort_keys=True,
+        )
+    )
+
+
 def _control_plane_client() -> ControlPlaneClient:
     settings = Settings()
     if settings.api_token is None:
@@ -341,6 +467,59 @@ def _control_plane_client() -> ControlPlaneClient:
 
 def _emit(value: dict[str, Any]) -> None:
     typer.echo(json.dumps(value, indent=2, sort_keys=True))
+
+
+def _json_object(path: Path, label: str) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise typer.BadParameter(f"{label} must contain a JSON object")
+    return value
+
+
+def _read_swebench_tasks(path: Path) -> list[SWEbenchTask]:
+    tasks: list[SWEbenchTask] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            tasks.append(SWEbenchTask.model_validate_json(line))
+        except ValueError as error:
+            raise typer.BadParameter(f"invalid SWE-bench task at line {line_number}") from error
+    return tasks
+
+
+def _decimal(value: object, label: str) -> Decimal:
+    try:
+        amount = Decimal(str(value))
+    except Exception as error:
+        raise typer.BadParameter(f"{label} must be a decimal") from error
+    if amount <= 0:
+        raise typer.BadParameter(f"{label} must be positive")
+    return amount
+
+
+def _nonnegative_decimal(value: object, label: str) -> Decimal:
+    try:
+        amount = Decimal(str(value))
+    except Exception as error:
+        raise typer.BadParameter(f"{label} must be a decimal") from error
+    if amount < 0:
+        raise typer.BadParameter(f"{label} must not be negative")
+    return amount
+
+
+def _evidence_spend(root: Path, protocol_digest: str) -> Decimal:
+    total = Decimal("0")
+    if not root.exists():
+        return total
+    for path in root.rglob("*.json"):
+        evidence = SWEbenchGenerationEvidence.model_validate_json(
+            path.read_text(encoding="utf-8")
+        )
+        if evidence.protocol_digest != protocol_digest:
+            raise typer.BadParameter("evidence directory mixes SWE-bench protocols")
+        total += evidence.usage.estimated_cost_cny
+    return total
 
 
 if __name__ == "__main__":

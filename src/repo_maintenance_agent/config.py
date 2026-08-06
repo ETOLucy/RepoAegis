@@ -29,6 +29,7 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("OPENAI_BASE_URL", "REPO_AGENT_OPENAI_BASE_URL"),
     )
+    model_api_style: Literal["responses", "chat-json"] = "responses"
     api_url: str = Field(default="http://127.0.0.1:8000")
     api_token: SecretStr | None = Field(default=None, repr=False)
     api_timeout_seconds: float = Field(default=30.0, gt=0, le=300)

@@ -82,6 +82,7 @@ def test_cli_exposes_documented_control_and_evaluation_commands() -> None:
         "cancel",
         "evaluate",
         "evaluate-suite",
+        "swebench-generate",
     ):
         assert command in result.stdout
 
