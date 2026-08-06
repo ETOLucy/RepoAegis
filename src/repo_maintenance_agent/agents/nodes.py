@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import json
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -399,7 +400,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 )
                 break
             except ToolExecutionError as error:
-                patch_feedback = str(error)
+                patch_feedback = _patch_retry_feedback(error, output, current_files)
                 if patch_attempt == runtime.max_patch_attempts - 1:
                     raise
                 if current_files:
@@ -630,6 +631,45 @@ def _hit_locator(path: str, line_start: int | None, line_end: int | None) -> str
     if line_start is None:
         return path
     return f"{path}:{line_start}-{line_end or line_start}"
+
+
+def _patch_retry_feedback(
+    error: ToolExecutionError,
+    proposal: PatchProposal,
+    current_files: dict[str, object],
+) -> str:
+    feedback = str(error)
+    if "old_text was not found" not in feedback:
+        return feedback
+
+    best_ratio = -1.0
+    best_path = ""
+    best_excerpt = ""
+    for edit in proposal.edits:
+        source = current_files.get(edit.path)
+        if edit.old_text is None or not isinstance(source, str):
+            continue
+        old_lines = [line for line in edit.old_text.splitlines() if line.strip()]
+        source_lines = source.splitlines()
+        if not old_lines or not source_lines:
+            continue
+        needle = old_lines[0]
+        index, _ = max(
+            enumerate(source_lines),
+            key=lambda item: difflib.SequenceMatcher(None, needle, item[1]).ratio(),
+        )
+        ratio = difflib.SequenceMatcher(None, needle, source_lines[index]).ratio()
+        if ratio <= best_ratio:
+            continue
+        start = max(0, index - 2)
+        end = min(len(source_lines), index + max(3, len(old_lines) + 2))
+        best_ratio = ratio
+        best_path = edit.path
+        best_excerpt = "\n".join(source_lines[start:end])[:600]
+
+    if not best_excerpt:
+        return feedback
+    return f"{feedback}. nearest source excerpt for {best_path}:\n{best_excerpt}"
 
 
 def _changed_files(result: ToolResult) -> tuple[str, ...]:

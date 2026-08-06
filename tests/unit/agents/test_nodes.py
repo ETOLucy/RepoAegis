@@ -637,6 +637,9 @@ async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
     }
     assert "patch_feedback" in model.patch_inputs[1]
     assert "old_text was not found" in str(model.patch_inputs[1]["patch_feedback"])
+    assert "nearest source excerpt" in str(model.patch_inputs[1]["patch_feedback"])
+    assert "def load(): return default" in str(model.patch_inputs[1]["patch_feedback"])
+    assert len(str(model.patch_inputs[1]["patch_feedback"])) < 1_000
     proposal_artifacts = sorted(tmp_path.rglob("*-proposed-edits.json"))
     assert len(proposal_artifacts) == 2
     saved_proposals = [

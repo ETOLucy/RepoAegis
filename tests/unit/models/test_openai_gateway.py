@@ -2,7 +2,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from repo_maintenance_agent.models.openai_gateway import OpenAIModelGateway
 from repo_maintenance_agent.models.usage import (
@@ -159,6 +159,31 @@ async def test_gateway_retry_includes_validation_feedback() -> None:
     assert '"loc":["summary"]' in gateway._client.responses.inputs[1]
     assert '"type":"missing"' in gateway._client.responses.inputs[1]
     assert "do-not-echo" not in gateway._client.responses.inputs[1]
+
+
+@pytest.mark.asyncio
+async def test_gateway_default_allows_third_structured_attempt() -> None:
+    class Responses:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def parse(self, **kwargs):
+            self.calls += 1
+            if self.calls < 3:
+                raise ValidationError.from_exception_data(
+                    "Answer", [{"type": "missing", "loc": ("summary",), "input": {}}]
+                )
+            return SimpleNamespace(output_parsed=Answer(summary="third attempt"))
+
+    gateway = OpenAIModelGateway(
+        client=SimpleNamespace(responses=Responses()),
+        model="test-model",
+    )
+
+    result = await gateway.structured(system="s", input_text="input", schema=Answer)
+
+    assert result == Answer(summary="third attempt")
+    assert gateway._client.responses.calls == 3
 
 
 @pytest.mark.asyncio

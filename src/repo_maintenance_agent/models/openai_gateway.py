@@ -62,7 +62,7 @@ class OpenAIModelGateway:
         system: str,
         input_text: str,
         schema: type[SchemaT],
-        max_attempts: int = 2,
+        max_attempts: int = 3,
     ) -> SchemaT:
         if max_attempts < 1 or max_attempts > 5:
             raise ValueError("structured attempts must be between 1 and 5")
