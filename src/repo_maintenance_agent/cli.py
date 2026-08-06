@@ -364,6 +364,7 @@ def swebench_generate(
     maximum_spend, maximum_call_cost_cny, rates = _protocol_cost_policy(
         protocol_value
     )
+    model_api_style = _protocol_model_api_style(protocol_value)
     (
         max_iterations,
         max_context_rounds,
@@ -402,7 +403,7 @@ def swebench_generate(
     if remaining <= 0:
         raise typer.BadParameter("SWE-bench experiment has exhausted its CNY budget")
 
-    settings = Settings()
+    settings = Settings(model_api_style=model_api_style)
     ledger = UsageLedger(
         limit_cny=remaining,
         rates=rates,
@@ -529,6 +530,17 @@ def _protocol_cost_policy(
         ),
     )
     return maximum_spend, maximum_call_cost, rates
+
+
+def _protocol_model_api_style(
+    protocol: dict[str, Any],
+) -> Literal["responses", "chat-json"]:
+    value = protocol.get("model_api_style")
+    if value == "responses":
+        return "responses"
+    if value == "chat-json":
+        return "chat-json"
+    raise typer.BadParameter("protocol model API style is invalid")
 
 
 def _protocol_arm_configuration(

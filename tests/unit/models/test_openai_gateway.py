@@ -297,6 +297,7 @@ async def test_gateway_chat_json_mode_uses_deepseek_compatible_contract() -> Non
 
     assert result == Answer(summary="chat-json")
     assert completions.arguments["response_format"] == {"type": "json_object"}
+    assert completions.arguments["extra_body"] == {"thinking": {"type": "disabled"}}
     assert completions.arguments["max_tokens"] == 16_384
     messages = completions.arguments["messages"]
     assert messages[0]["role"] == "system"

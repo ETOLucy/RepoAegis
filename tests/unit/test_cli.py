@@ -9,6 +9,7 @@ from repo_maintenance_agent.cli import (
     ControlPlaneClient,
     _protocol_arm_configuration,
     _protocol_cost_policy,
+    _protocol_model_api_style,
     app,
 )
 
@@ -137,6 +138,17 @@ def test_swebench_cost_policy_is_bound_to_the_frozen_protocol() -> None:
     assert rates.cache_hit_input_cny_per_million == Decimal("0.028")
     assert rates.cache_miss_input_cny_per_million == Decimal("0.14")
     assert rates.output_cny_per_million == Decimal("0.28")
+
+
+def test_swebench_model_api_style_is_bound_to_the_frozen_protocol() -> None:
+    import pytest
+
+    assert _protocol_model_api_style({"model_api_style": "chat-json"}) == "chat-json"
+    assert _protocol_model_api_style({"model_api_style": "responses"}) == "responses"
+    with pytest.raises(Exception, match="model API style"):
+        _protocol_model_api_style({})
+    with pytest.raises(Exception, match="model API style"):
+        _protocol_model_api_style({"model_api_style": "unbound"})
 
 
 def test_swebench_arm_configuration_is_digest_bound_and_ready() -> None:
