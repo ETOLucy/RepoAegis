@@ -12,6 +12,9 @@ from repo_maintenance_agent.models.usage import UsageLedger, usage_from_response
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
+_MODEL_TIMEOUT_SECONDS = 120
+_MAX_OUTPUT_TOKENS = 8_192
+
 
 class OpenAIModelGateway:
     def __init__(
@@ -42,6 +45,8 @@ class OpenAIModelGateway:
         client = AsyncOpenAI(
             api_key=settings.openai_api_key.get_secret_value(),
             base_url=settings.openai_base_url,
+            timeout=_MODEL_TIMEOUT_SECONDS,
+            max_retries=0,
         )
         return cls(
             client=client,
@@ -80,6 +85,7 @@ class OpenAIModelGateway:
                             {"role": "user", "content": input_text},
                         ],
                         response_format={"type": "json_object"},
+                        max_tokens=_MAX_OUTPUT_TOKENS,
                     )
                     _record_usage(self._usage_ledger, reservation, response)
                     content = response.choices[0].message.content
@@ -95,6 +101,7 @@ class OpenAIModelGateway:
                     input=input_text,
                     text_format=schema,
                     store=False,
+                    max_output_tokens=_MAX_OUTPUT_TOKENS,
                 )
                 parsed = response.output_parsed
                 if parsed is None:

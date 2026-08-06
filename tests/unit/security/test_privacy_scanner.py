@@ -88,3 +88,41 @@ def test_history_scan_detects_secret_removed_from_worktree(tmp_path: Path) -> No
 
     assert {finding.rule_id for finding in findings} == {"credential.openai"}
     assert all(secret not in finding.preview for finding in findings)
+
+
+def test_history_scan_does_not_invoke_repository_textconv(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "diff.broken.textconv", "command-that-does-not-exist"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    (tmp_path / ".gitattributes").write_text("*.pdf diff=broken\n", encoding="utf-8")
+    (tmp_path / "evidence.pdf").write_bytes(b"not-a-real-pdf")
+    subprocess.run(
+        ["git", "add", ".gitattributes", "evidence.pdf"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "add binary evidence"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    assert scan_history(tmp_path) == []

@@ -45,6 +45,7 @@ async def test_gateway_uses_responses_structured_output_without_storing_prompt()
     assert client.responses.arguments["model"] == "gpt-test-model"
     assert client.responses.arguments["store"] is False
     assert client.responses.arguments["text_format"] is Answer
+    assert client.responses.arguments["max_output_tokens"] == 8_192
 
 
 @pytest.mark.asyncio
@@ -85,6 +86,8 @@ def test_from_settings_passes_base_url_and_model(monkeypatch) -> None:
     )
     assert captured["api_key"] == "test-key"
     assert captured["base_url"] == "https://api.deepseek.com"
+    assert captured["timeout"] == 120
+    assert captured["max_retries"] == 0
     assert gateway._model == "deepseek-chat"
     assert gateway._api_style == "chat-json"
 
@@ -256,6 +259,7 @@ async def test_gateway_chat_json_mode_uses_deepseek_compatible_contract() -> Non
 
     assert result == Answer(summary="chat-json")
     assert completions.arguments["response_format"] == {"type": "json_object"}
+    assert completions.arguments["max_tokens"] == 8_192
     messages = completions.arguments["messages"]
     assert messages[0]["role"] == "system"
     assert "Return JSON." in messages[0]["content"]
