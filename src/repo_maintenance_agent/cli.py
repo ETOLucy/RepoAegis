@@ -29,6 +29,7 @@ from repo_maintenance_agent.evaluation.runner import grade_case
 from repo_maintenance_agent.evaluation.swebench_runner import (
     GitSWEbenchRuntime,
     RepoAegisPatchAgent,
+    SWEbenchDevelopmentFeedback,
     SWEbenchGenerationEvidence,
     SWEbenchTask,
     run_predictions,
@@ -357,6 +358,12 @@ def swebench_generate(
     artifact_root: Annotated[Path, typer.Option(help="Private patch artifact root.")],
     arm: Literal["baseline", "candidate"] = typer.Option(...),
     role: Literal["calibration", "development", "frozen"] = typer.Option(...),
+    development_feedback: Annotated[
+        Path | None,
+        typer.Option(
+            help="Private official-failure feedback JSONL for calibration/development only."
+        ),
+    ] = None,
 ) -> None:
     """Generate resumable predictions for one frozen SWE-bench protocol role."""
     protocol_value = _json_object(protocol, "SWE-bench protocol")
@@ -388,6 +395,11 @@ def swebench_generate(
         raise typer.BadParameter(
             f"task file is missing protocol instance: {error.args[0]}"
         ) from error
+    feedback_by_id = _read_development_feedback(
+        development_feedback,
+        selected_ids=selected_ids,
+        role=role,
+    )
 
     locators = _json_object(repository_locators, "repository locator map")
     invalid_locator = any(
@@ -424,6 +436,7 @@ def swebench_generate(
         model_name_or_path=settings.openai_model,
         patch_agent=patch_agent,
         runner=ProcessRunner(allowed_executables={"git"}, timeout_seconds=900),
+        development_feedback=feedback_by_id,
     )
     predictions = asyncio.run(
         run_predictions(
@@ -442,6 +455,7 @@ def swebench_generate(
                 "arm": arm,
                 "role": role,
                 "predictions": len(predictions),
+                "feedback_assisted": bool(feedback_by_id),
                 "new_spend_cny": str(ledger.spent_cny),
                 "remaining_cny": str(maximum_spend - previous_spend - ledger.spent_cny),
             },
@@ -500,6 +514,36 @@ def _read_swebench_tasks(path: Path) -> list[SWEbenchTask]:
         except ValueError as error:
             raise typer.BadParameter(f"invalid SWE-bench task at line {line_number}") from error
     return tasks
+
+
+def _read_development_feedback(
+    path: Path | None,
+    *,
+    selected_ids: list[str],
+    role: Literal["calibration", "development", "frozen"],
+) -> dict[str, SWEbenchDevelopmentFeedback]:
+    if path is None:
+        return {}
+    if role == "frozen":
+        raise typer.BadParameter("frozen SWE-bench runs cannot consume development feedback")
+    feedback_by_id: dict[str, SWEbenchDevelopmentFeedback] = {}
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            feedback = SWEbenchDevelopmentFeedback.model_validate_json(line)
+        except ValueError as error:
+            raise typer.BadParameter(
+                f"invalid development feedback at line {line_number}"
+            ) from error
+        if feedback.instance_id in feedback_by_id:
+            raise typer.BadParameter("development feedback task IDs must be unique")
+        feedback_by_id[feedback.instance_id] = feedback
+    if set(feedback_by_id) != set(selected_ids):
+        raise typer.BadParameter(
+            "development feedback must exactly match the selected tasks"
+        )
+    return feedback_by_id
 
 
 def _decimal(value: object, label: str) -> Decimal:

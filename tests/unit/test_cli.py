@@ -3,6 +3,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import httpx
+import pytest
 from typer.testing import CliRunner
 
 from repo_maintenance_agent.cli import (
@@ -10,6 +11,7 @@ from repo_maintenance_agent.cli import (
     _protocol_arm_configuration,
     _protocol_cost_policy,
     _protocol_model_api_style,
+    _read_development_feedback,
     _validated_protocol_digest,
     app,
 )
@@ -206,6 +208,39 @@ def test_swebench_arm_configuration_rejects_pending_candidate() -> None:
         )
 
 
+def test_swebench_development_feedback_is_rejected_for_frozen_role(
+    tmp_path: Path,
+) -> None:
+    feedback = _feedback_file(tmp_path, ["owner__repo-1"])
+
+    with pytest.raises(Exception, match=r"frozen.*feedback"):
+        _read_development_feedback(
+            feedback,
+            selected_ids=["owner__repo-1"],
+            role="frozen",
+        )
+
+
+def test_swebench_development_feedback_requires_exact_unique_selected_tasks(
+    tmp_path: Path,
+) -> None:
+    duplicate = _feedback_file(tmp_path, ["owner__repo-1", "owner__repo-1"])
+    with pytest.raises(Exception, match="unique"):
+        _read_development_feedback(
+            duplicate,
+            selected_ids=["owner__repo-1"],
+            role="calibration",
+        )
+
+    unselected = _feedback_file(tmp_path, ["owner__repo-2"])
+    with pytest.raises(Exception, match="selected tasks"):
+        _read_development_feedback(
+            unselected,
+            selected_ids=["owner__repo-1"],
+            role="development",
+        )
+
+
 def test_evaluate_suite_writes_json_and_markdown_reports(tmp_path: Path) -> None:
     suite_file, observations_file = _suite_files(tmp_path, hidden_tests_passed=True)
     json_report = tmp_path / "report.json"
@@ -304,3 +339,23 @@ def _suite_files(
         encoding="utf-8",
     )
     return suite_file, observations_file
+
+
+def _feedback_file(root: Path, instance_ids: list[str]) -> Path:
+    path = root / f"feedback-{len(list(root.glob('feedback-*.jsonl')))}.jsonl"
+    records = [
+        {
+            "instance_id": instance_id,
+            "source_run_id": "repoaegis-smoke-v3b",
+            "prediction_digest": "sha256:" + "a" * 64,
+            "official_report_digest": "sha256:" + "b" * 64,
+            "failing_tests": ["tests/test_value.py::test_value"],
+            "summary": "The target test still observed VALUE = 1.",
+        }
+        for instance_id in instance_ids
+    ]
+    path.write_text(
+        "".join(json.dumps(record) + "\n" for record in records),
+        encoding="utf-8",
+    )
+    return path
