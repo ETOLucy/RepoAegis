@@ -360,7 +360,7 @@ def swebench_generate(
 ) -> None:
     """Generate resumable predictions for one frozen SWE-bench protocol role."""
     protocol_value = _json_object(protocol, "SWE-bench protocol")
-    protocol_digest = protocol_value.get("protocol_digest")
+    protocol_digest = _validated_protocol_digest(protocol_value)
     maximum_spend, maximum_call_cost_cny, rates = _protocol_cost_policy(
         protocol_value
     )
@@ -371,8 +371,6 @@ def swebench_generate(
         max_context_tool_calls,
         max_patch_attempts,
     ) = _protocol_arm_configuration(protocol_value, arm)
-    if not isinstance(protocol_digest, str) or not protocol_digest.startswith("sha256:"):
-        raise typer.BadParameter("protocol digest is invalid")
     roles = protocol_value.get("task_roles")
     if not isinstance(roles, dict) or not isinstance(roles.get(role), list):
         raise typer.BadParameter(f"protocol does not define task role: {role}")
@@ -472,6 +470,24 @@ def _json_object(path: Path, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise typer.BadParameter(f"{label} must contain a JSON object")
     return value
+
+
+def _validated_protocol_digest(protocol: dict[str, Any]) -> str:
+    claimed = protocol.get("protocol_digest")
+    if (
+        not isinstance(claimed, str)
+        or not claimed.startswith("sha256:")
+        or len(claimed) != 71
+    ):
+        raise typer.BadParameter("protocol digest is invalid")
+    body = {key: value for key, value in protocol.items() if key != "protocol_digest"}
+    canonical = json.dumps(
+        body, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    expected = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    if claimed != expected:
+        raise typer.BadParameter("protocol digest does not match its body")
+    return claimed
 
 
 def _read_swebench_tasks(path: Path) -> list[SWEbenchTask]:

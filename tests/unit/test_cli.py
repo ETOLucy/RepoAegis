@@ -10,6 +10,7 @@ from repo_maintenance_agent.cli import (
     _protocol_arm_configuration,
     _protocol_cost_policy,
     _protocol_model_api_style,
+    _validated_protocol_digest,
     app,
 )
 
@@ -149,6 +150,24 @@ def test_swebench_model_api_style_is_bound_to_the_frozen_protocol() -> None:
         _protocol_model_api_style({})
     with pytest.raises(Exception, match="model API style"):
         _protocol_model_api_style({"model_api_style": "unbound"})
+
+
+def test_swebench_protocol_digest_rejects_body_tampering() -> None:
+    import hashlib
+
+    import pytest
+
+    body = {
+        "schema_version": "swebench-protocol/v1",
+        "model_api_style": "chat-json",
+    }
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    digest = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    protocol = {**body, "protocol_digest": digest}
+
+    assert _validated_protocol_digest(protocol) == digest
+    with pytest.raises(Exception, match="protocol digest"):
+        _validated_protocol_digest(protocol | {"model_api_style": "responses"})
 
 
 def test_swebench_arm_configuration_is_digest_bound_and_ready() -> None:
