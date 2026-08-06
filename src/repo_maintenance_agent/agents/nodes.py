@@ -207,6 +207,9 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                         "research_evidence": [
                             item.model_dump(mode="json") for item in task.evidence
                         ],
+                        "development_feedback": task.repo_profile.get(
+                            "development_feedback"
+                        ),
                         "controlled_context": controlled_context,
                         "remaining_tool_calls": (
                             runtime.max_context_tool_calls - context_tool_calls
@@ -268,6 +271,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 "issue": task.issue.model_dump(mode="json"),
                 "plan": task.plan,
                 "controlled_context": controlled_context,
+                "development_feedback": task.repo_profile.get("development_feedback"),
                 "verification_feedback": (
                     task.verification.model_dump(mode="json") if task.verification else None
                 ),
@@ -400,6 +404,9 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                     "changed_files": task.changed_files,
                     "diff": diff,
                     "changed_source": changed_source,
+                    "development_feedback": task.repo_profile.get(
+                        "development_feedback"
+                    ),
                     "verification": (
                         task.verification.model_dump(mode="json") if task.verification else None
                     ),

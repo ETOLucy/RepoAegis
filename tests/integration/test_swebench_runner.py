@@ -38,8 +38,9 @@ class FixturePatchAgent:
         task: SWEbenchTask,
         workspace: Path,
         ledger: UsageLedger,
+        development_feedback: SWEbenchDevelopmentFeedback | None = None,
     ) -> None:
-        del task, ledger
+        del task, ledger, development_feedback
         self.calls += 1
         leftover = workspace / "leftover.txt"
         if self.calls > 1:
@@ -49,8 +50,12 @@ class FixturePatchAgent:
 
 
 class GraphFixtureModel:
+    def __init__(self) -> None:
+        self.inputs: dict[type, list[dict[str, object]]] = {}
+
     async def structured(self, *, system, input_text, schema):
-        del system, input_text
+        del system
+        self.inputs.setdefault(schema, []).append(json.loads(input_text))
         if schema is TaskSpecOutput:
             return TaskSpecOutput(
                 task_type="bugfix",
@@ -93,7 +98,7 @@ class GraphFixtureModel:
 
 
 class FailIfCalledAgent:
-    async def run(self, task, workspace, ledger) -> None:
+    async def run(self, task, workspace, ledger, development_feedback=None) -> None:
         raise AssertionError("completed prediction must be resumed from evidence")
 
 
@@ -162,6 +167,43 @@ async def test_repoaegis_patch_agent_reuses_the_real_agent_nodes(tmp_path: Path)
     prediction = await generate_prediction(task, runtime, _ledger())
 
     assert prediction.model_patch.endswith("-VALUE = 1\n+VALUE = 2\n")
+
+
+@pytest.mark.asyncio
+async def test_calibration_feedback_reaches_planning_coding_and_review(
+    tmp_path: Path,
+) -> None:
+    repository, commit = _repository(tmp_path)
+    task = SWEbenchTask(
+        instance_id="owner__repo-1",
+        repo="owner/repo",
+        base_commit=commit,
+        problem_statement="Change VALUE from 1 to 2.",
+    )
+    feedback = _feedback(task.instance_id)
+    model = GraphFixtureModel()
+    runtime = GitSWEbenchRuntime(
+        repository_locators={"owner/repo": str(repository)},
+        workspace_root=tmp_path / "workspaces",
+        model_name_or_path="fixture-model",
+        patch_agent=RepoAegisPatchAgent(
+            model_factory=lambda ledger: model,
+            artifact_root=tmp_path / "artifacts",
+        ),
+        runner=ProcessRunner(allowed_executables={"git"}),
+        development_feedback={task.instance_id: feedback},
+    )
+
+    await generate_prediction(task, runtime, _ledger())
+
+    expected = feedback.model_dump(mode="json")
+    assert model.inputs[PlanOutput][0]["repo_profile"] == {
+        "development_feedback": expected,
+        "retrieval_count": 0,
+        "retrieved_files": [],
+    }
+    for schema in (ContextRequest, PatchProposal, ReviewOutput):
+        assert model.inputs[schema][0]["development_feedback"] == expected
 
 
 @pytest.mark.asyncio
@@ -259,6 +301,17 @@ def _ledger() -> UsageLedger:
             cache_miss_input_cny_per_million=Decimal("0"),
             output_cny_per_million=Decimal("0"),
         ),
+    )
+
+
+def _feedback(instance_id: str) -> SWEbenchDevelopmentFeedback:
+    return SWEbenchDevelopmentFeedback(
+        instance_id=instance_id,
+        source_run_id="repoaegis-smoke-v3b",
+        prediction_digest="sha256:" + "a" * 64,
+        official_report_digest="sha256:" + "b" * 64,
+        failing_tests=("tests/test_value.py::test_value",),
+        summary="The target test still observed VALUE = 1.",
     )
 
 

@@ -15,6 +15,7 @@ from repo_maintenance_agent.agents.nodes import AgentRuntime, build_agent_nodes
 from repo_maintenance_agent.domain.models import (
     ApprovalDecision,
     ApprovalEnvelope,
+    Evidence,
     IssueSpec,
     RepoTaskState,
     TaskStatus,
@@ -75,6 +76,7 @@ class PatchAgent(Protocol):
         task: SWEbenchTask,
         workspace: Path,
         ledger: UsageLedger,
+        development_feedback: SWEbenchDevelopmentFeedback | None = None,
     ) -> None: ...
 
 
@@ -129,6 +131,7 @@ class RepoAegisPatchAgent:
         task: SWEbenchTask,
         workspace: Path,
         ledger: UsageLedger,
+        development_feedback: SWEbenchDevelopmentFeedback | None = None,
     ) -> None:
         git_runner = ProcessRunner(allowed_executables={"git"})
         gateway = ToolGateway(
@@ -168,6 +171,8 @@ class RepoAegisPatchAgent:
         state: GraphState = {"task": repo_task, "trace": []}
         state = await _invoke(nodes.intake, state)
         state = await _invoke(nodes.research, state)
+        if development_feedback is not None:
+            state = _attach_development_feedback(state, development_feedback)
         state = await _invoke(nodes.planning, state)
         state = _approve_generation_scope(state)
 
@@ -192,6 +197,7 @@ class GitSWEbenchRuntime:
         model_name_or_path: str,
         patch_agent: PatchAgent,
         runner: ProcessRunner,
+        development_feedback: Mapping[str, SWEbenchDevelopmentFeedback] | None = None,
     ) -> None:
         if not model_name_or_path.strip():
             raise ValueError("model name must not be empty")
@@ -200,6 +206,7 @@ class GitSWEbenchRuntime:
         self._model_name_or_path = model_name_or_path
         self._patch_agent = patch_agent
         self._runner = runner
+        self._development_feedback = dict(development_feedback or {})
 
     @property
     def model_name_or_path(self) -> str:
@@ -209,7 +216,12 @@ class GitSWEbenchRuntime:
         self, task: SWEbenchTask, ledger: UsageLedger
     ) -> SWEbenchPrediction:
         workspace = await self._materialize(task)
-        await self._patch_agent.run(task, workspace, ledger)
+        await self._patch_agent.run(
+            task,
+            workspace,
+            ledger,
+            self._development_feedback.get(task.instance_id),
+        )
         result = await self._runner.run(
             [
                 "git",
@@ -375,6 +387,29 @@ def _approve_generation_scope(state: GraphState) -> GraphState:
         ),
         "trace": [*state.get("trace", []), "generation_approval"],
     }
+
+
+def _attach_development_feedback(
+    state: GraphState,
+    feedback: SWEbenchDevelopmentFeedback,
+) -> GraphState:
+    task = state["task"]
+    if feedback.instance_id != task.task_id.removeprefix("swebench:"):
+        raise ValueError("development feedback does not match the SWE-bench task")
+    payload = feedback.model_dump(mode="json")
+    item = Evidence(
+        source="official-swebench-calibration",
+        locator=f"{feedback.source_run_id}#{feedback.official_report_digest}",
+        summary=json.dumps(payload, sort_keys=True),
+        content_hash=feedback.digest().removeprefix("sha256:"),
+    )
+    updated = task.model_copy(
+        update={
+            "evidence": (*task.evidence, item),
+            "repo_profile": task.repo_profile | {"development_feedback": payload},
+        }
+    )
+    return {"task": updated, "trace": [*state.get("trace", []), "development_feedback"]}
 
 
 def _defer_to_official_verifier(state: GraphState) -> GraphState:
