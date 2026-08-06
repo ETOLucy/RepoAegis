@@ -84,6 +84,8 @@ class RuntimeExecutor(Protocol):
     @property
     def model_name_or_path(self) -> str: ...
 
+    def development_feedback_digest(self, instance_id: str) -> str | None: ...
+
     async def execute(self, task: SWEbenchTask, ledger: UsageLedger) -> SWEbenchPrediction: ...
 
 
@@ -212,6 +214,10 @@ class GitSWEbenchRuntime:
     def model_name_or_path(self) -> str:
         return self._model_name_or_path
 
+    def development_feedback_digest(self, instance_id: str) -> str | None:
+        feedback = self._development_feedback.get(instance_id)
+        return feedback.digest() if feedback is not None else None
+
     async def execute(
         self, task: SWEbenchTask, ledger: UsageLedger
     ) -> SWEbenchPrediction:
@@ -313,6 +319,9 @@ async def run_predictions(
     evidence_directory.mkdir(parents=True, exist_ok=True)
     predictions: list[SWEbenchPrediction] = []
     for task in tasks:
+        development_feedback_digest = runtime.development_feedback_digest(
+            task.instance_id
+        )
         evidence_path = evidence_directory / (
             hashlib.sha256(task.instance_id.encode()).hexdigest() + ".json"
         )
@@ -326,6 +335,7 @@ async def run_predictions(
                 protocol_digest=protocol_digest,
                 arm=arm,
                 model_name_or_path=runtime.model_name_or_path,
+                development_feedback_digest=development_feedback_digest,
             )
             predictions.append(evidence.prediction)
             continue
@@ -341,6 +351,7 @@ async def run_predictions(
             prediction=prediction,
             usage=_usage_difference(ledger.snapshot(), before),
             latency_ms=int((monotonic() - started) * 1_000),
+            development_feedback_digest=development_feedback_digest,
         )
         _atomic_json(evidence_path, evidence)
         predictions.append(prediction)
@@ -444,6 +455,7 @@ def _validate_resume(
     protocol_digest: str,
     arm: str,
     model_name_or_path: str,
+    development_feedback_digest: str | None,
 ) -> None:
     if (
         evidence.protocol_digest != protocol_digest
@@ -452,6 +464,7 @@ def _validate_resume(
         or evidence.prediction.instance_id != task.instance_id
         or evidence.model_name_or_path != model_name_or_path
         or evidence.prediction.model_name_or_path != model_name_or_path
+        or evidence.development_feedback_digest != development_feedback_digest
     ):
         raise ValueError("saved SWE-bench evidence does not match this run")
 

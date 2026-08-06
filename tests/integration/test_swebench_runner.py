@@ -256,6 +256,63 @@ async def test_prediction_evidence_resumes_without_regenerating(tmp_path: Path) 
     assert output.read_text(encoding="utf-8").count("\n") == 1
 
 
+@pytest.mark.asyncio
+async def test_prediction_evidence_rejects_changed_development_feedback(
+    tmp_path: Path,
+) -> None:
+    repository, commit = _repository(tmp_path)
+    task = SWEbenchTask(
+        instance_id="owner__repo-1",
+        repo="owner/repo",
+        base_commit=commit,
+        problem_statement="Change VALUE from 1 to 2.",
+    )
+    evidence = tmp_path / "evidence"
+    output = tmp_path / "predictions.jsonl"
+    first_feedback = _feedback(task.instance_id)
+    runtime = GitSWEbenchRuntime(
+        repository_locators={"owner/repo": str(repository)},
+        workspace_root=tmp_path / "workspaces",
+        model_name_or_path="fixture-model",
+        patch_agent=FixturePatchAgent(),
+        runner=ProcessRunner(allowed_executables={"git"}),
+        development_feedback={task.instance_id: first_feedback},
+    )
+    await run_predictions(
+        [task],
+        runtime=runtime,
+        ledger=_ledger(),
+        evidence_directory=evidence,
+        output_path=output,
+        protocol_digest="sha256:" + "a" * 64,
+        arm="baseline",
+    )
+    changed_feedback = first_feedback.model_copy(
+        update={"summary": "The target test failed for a different reason."}
+    )
+    resumed_runtime = GitSWEbenchRuntime(
+        repository_locators={"owner/repo": str(repository)},
+        workspace_root=tmp_path / "unused-workspaces",
+        model_name_or_path="fixture-model",
+        patch_agent=FailIfCalledAgent(),
+        runner=ProcessRunner(allowed_executables={"git"}),
+        development_feedback={task.instance_id: changed_feedback},
+    )
+
+    with pytest.raises(
+        ValueError, match="saved SWE-bench evidence does not match this run"
+    ):
+        await run_predictions(
+            [task],
+            runtime=resumed_runtime,
+            ledger=_ledger(),
+            evidence_directory=evidence,
+            output_path=output,
+            protocol_digest="sha256:" + "a" * 64,
+            arm="baseline",
+        )
+
+
 def test_swebench_task_rejects_answer_and_hidden_test_fields() -> None:
     safe = {
         "instance_id": "owner__repo-1",
