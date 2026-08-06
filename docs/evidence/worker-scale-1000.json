@@ -1,0 +1,23 @@
+{
+  "dead_letter_jobs": 0,
+  "duration_ms": 17139,
+  "evidence_kind": "synthetic-infrastructure-load-not-model-quality",
+  "job_count": 1000,
+  "lost_terminal_jobs": 0,
+  "pending_jobs": 0,
+  "retried_jobs": 50,
+  "runtime": {
+    "logical_cpu_count": 8,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel",
+    "python": "3.12.10",
+    "storage": "sqlite"
+  },
+  "schema_version": "repoaegis-synthetic-load/v1",
+  "seed": 17,
+  "stale_lease_jobs": 20,
+  "stale_write_rejections": 30,
+  "success_jobs": 920,
+  "terminal_jobs": 1000,
+  "worker_restart_jobs": 10
+}
