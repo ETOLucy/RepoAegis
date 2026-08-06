@@ -27,6 +27,23 @@ def test_render_patch_replaces_unique_exact_text() -> None:
     )
 
 
+def test_render_patch_adapts_lf_model_edit_to_crlf_source() -> None:
+    rendered = render_patch(
+        proposal(
+            PatchEdit(
+                path="app.py",
+                old_text="first = 1\nsecond = 2",
+                new_text="first = 1\nsecond = 3",
+            )
+        ),
+        current_files={"app.py": "first = 1\r\nsecond = 2\r\n"},
+        declared_files=("app.py",),
+    )
+
+    assert b"-second = 2\r\n" in rendered.data
+    assert b"+second = 3\r\n" in rendered.data
+
+
 def test_render_patch_creates_a_missing_text_file() -> None:
     rendered = render_patch(
         proposal(PatchEdit(path="new.py", old_text=None, new_text="VALUE = 1\n")),

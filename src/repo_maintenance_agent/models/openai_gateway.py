@@ -118,12 +118,20 @@ class OpenAIModelGateway:
                     + "\n\n[Your previous response was invalid and will not be used. "
                     + "Correct it and return valid JSON matching the required schema. "
                     + "Validation error: "
-                    + str(error).splitlines()[0]
+                    + _validation_feedback(error)
                     + "]"
                 )
                 continue
         assert last_error is not None
         raise last_error
+
+
+def _validation_feedback(error: ValidationError) -> str:
+    issues = [
+        {"loc": list(issue["loc"]), "type": issue["type"], "msg": issue["msg"]}
+        for issue in error.errors(include_url=False, include_input=False)[:10]
+    ]
+    return json.dumps(issues, ensure_ascii=False, separators=(",", ":"))
 
 
 def _json_system_prompt(system: str, schema: type[BaseModel]) -> str:

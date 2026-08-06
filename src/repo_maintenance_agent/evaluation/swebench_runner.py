@@ -328,7 +328,14 @@ class GitSWEbenchRuntime:
 
     async def _current_commit(self, workspace: Path) -> str | None:
         result = await self._runner.run(
-            ["git", "rev-parse", "--verify", "HEAD"],
+            [
+                "git",
+                f"--git-dir={workspace / '.git'}",
+                f"--work-tree={workspace}",
+                "rev-parse",
+                "--verify",
+                "HEAD",
+            ],
             cwd=workspace,
             check=False,
         )

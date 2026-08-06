@@ -64,21 +64,36 @@ def _locate_replacements(
     edits: list[PatchEdit],
 ) -> list[tuple[int, int, str]]:
     replacements: list[tuple[int, int, str]] = []
+    newline = _source_newline(current)
     for edit in edits:
         assert edit.old_text is not None
-        positions = _all_positions(current, edit.old_text)
+        old_text = _with_newline(edit.old_text, newline)
+        new_text = _with_newline(edit.new_text, newline)
+        positions = _all_positions(current, old_text)
         if not positions:
             raise ValueError(f"patch old_text was not found in {path}")
         if len(positions) > 1:
             raise ValueError(f"patch old_text occurs more than once in {path}")
         start = positions[0]
-        replacements.append((start, start + len(edit.old_text), edit.new_text))
+        replacements.append((start, start + len(old_text), new_text))
 
     replacements.sort(key=lambda item: item[0])
     for previous, current_edit in pairwise(replacements):
         if current_edit[0] < previous[1]:
             raise ValueError(f"patch edits overlap in {path}")
     return replacements
+
+
+def _source_newline(content: str) -> str:
+    if "\r\n" in content:
+        return "\r\n"
+    if "\r" in content:
+        return "\r"
+    return "\n"
+
+
+def _with_newline(value: str, newline: str) -> str:
+    return value.replace("\r\n", "\n").replace("\r", "\n").replace("\n", newline)
 
 
 def _all_positions(content: str, needle: str) -> list[int]:

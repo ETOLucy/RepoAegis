@@ -134,7 +134,14 @@ async def test_gateway_retry_includes_validation_feedback() -> None:
             self.inputs.append(kwargs["input"])
             if self.calls == 1:
                 raise ValidationError.from_exception_data(
-                    "Answer", [{"type": "missing", "loc": ("summary",), "input": {}}]
+                    "Answer",
+                    [
+                        {
+                            "type": "missing",
+                            "loc": ("summary",),
+                            "input": {"secret": "do-not-echo"},
+                        }
+                    ],
                 )
             return SimpleNamespace(output_parsed=Answer(summary="retried"))
 
@@ -149,6 +156,9 @@ async def test_gateway_retry_includes_validation_feedback() -> None:
     assert result == Answer(summary="retried")
     assert gateway._client.responses.calls == 2
     assert "previous response" in gateway._client.responses.inputs[1]
+    assert '"loc":["summary"]' in gateway._client.responses.inputs[1]
+    assert '"type":"missing"' in gateway._client.responses.inputs[1]
+    assert "do-not-echo" not in gateway._client.responses.inputs[1]
 
 
 @pytest.mark.asyncio
