@@ -50,6 +50,25 @@ class SWEbenchTask(BaseModel):
     problem_statement: str = Field(min_length=1, max_length=100_000)
 
 
+class SWEbenchDevelopmentFeedback(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    instance_id: str = Field(min_length=1, max_length=256)
+    source_run_id: str = Field(min_length=1, max_length=256)
+    prediction_digest: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    official_report_digest: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    failing_tests: tuple[str, ...] = Field(min_length=1, max_length=100)
+    summary: str = Field(min_length=1, max_length=10_000)
+
+    def digest(self) -> str:
+        canonical = json.dumps(
+            self.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
 class PatchAgent(Protocol):
     async def run(
         self,
@@ -80,6 +99,9 @@ class SWEbenchGenerationEvidence(BaseModel):
     prediction: SWEbenchPrediction
     usage: ModelUsage
     latency_ms: int = Field(ge=0)
+    development_feedback_digest: str | None = Field(
+        default=None, pattern=r"^sha256:[a-f0-9]{64}$"
+    )
 
 
 class RepoAegisPatchAgent:

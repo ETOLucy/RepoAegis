@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import subprocess
 from decimal import Decimal
 from pathlib import Path
@@ -18,6 +20,7 @@ from repo_maintenance_agent.domain.models import RiskLevel
 from repo_maintenance_agent.evaluation.swebench_runner import (
     GitSWEbenchRuntime,
     RepoAegisPatchAgent,
+    SWEbenchDevelopmentFeedback,
     SWEbenchTask,
     generate_prediction,
     run_predictions,
@@ -222,6 +225,30 @@ def test_swebench_task_rejects_answer_and_hidden_test_fields() -> None:
     for forbidden in ("patch", "test_patch", "FAIL_TO_PASS", "PASS_TO_PASS"):
         with pytest.raises(ValidationError, match="extra_forbidden"):
             SWEbenchTask.model_validate(safe | {forbidden: "must not reach the agent"})
+
+
+def test_development_feedback_has_stable_digest_and_rejects_benchmark_answers() -> None:
+    payload = {
+        "instance_id": "owner__repo-1",
+        "source_run_id": "repoaegis-smoke-v3b",
+        "prediction_digest": "sha256:" + "a" * 64,
+        "official_report_digest": "sha256:" + "b" * 64,
+        "failing_tests": ["tests/test_value.py::test_value"],
+        "summary": "The target test still observed VALUE = 1.",
+    }
+    feedback = SWEbenchDevelopmentFeedback.model_validate(payload)
+    canonical = json.dumps(
+        feedback.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+
+    assert feedback.digest() == "sha256:" + hashlib.sha256(canonical).hexdigest()
+    for forbidden in ("patch", "test_patch", "FAIL_TO_PASS", "PASS_TO_PASS"):
+        with pytest.raises(ValidationError, match="extra_forbidden"):
+            SWEbenchDevelopmentFeedback.model_validate(
+                payload | {forbidden: "must not reach the agent"}
+            )
 
 
 def _ledger() -> UsageLedger:
