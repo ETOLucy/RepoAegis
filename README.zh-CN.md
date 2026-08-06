@@ -1,21 +1,20 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/repo-aegis-lockup-dark.svg">
-    <img src="docs/repo-aegis-lockup.svg" width="480" alt="RepoAegis single-wing seed logo and wordmark">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/repo-aegis-mark-reversed.svg">
+    <img src="docs/repo-aegis-mark.svg" width="112" alt="RepoAegis 单翼种子图形标志">
   </picture>
 </p>
 
 <h1 align="center">RepoAegis</h1>
 
 <p align="center">
-  <a href="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml"><img src="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-245dcc.svg" alt="Python 3.12"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-177245.svg" alt="License: Apache-2.0"></a>
+  面向证据化补丁与可审查交付的策略受控仓库维护 Agent。
 </p>
 
 <p align="center">
-  一个受策略控制的 Agent 系统：把仓库 issue 变成有证据支撑的补丁、沙箱验证结果和可审查的草稿
-  Pull Request。
+  <a href="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml"><img src="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-245dcc.svg" alt="Python 3.12"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-177245.svg" alt="License: Apache-2.0"></a>
 </p>
 
 RepoAegis 是 AI 控制面（control plane）而不是聊天包装器。每一次模型决策到任何副作用之间，都隔着
@@ -306,16 +305,17 @@ RepoAegis 与 AegisEvo 构成一条受治理的流水线。RepoAegis 是仓库�
 flowchart LR
     RA[RepoAegis runtime] -->|exports immutable| TP[Target pack / v2]
     TP --> AE[AegisEvo search + evaluation]
-    AE -->|equal-budget candidate runs| RA
-    RA -->|resolution + evidence| AE
+    AE -->|equal-budget generation| RA
+    RA -->|patch + runtime evidence| Official[Official SWE-bench harness]
+    Official -->|structured verdict| AE
     AE -->|aggregate + gates| Report[Report]
     Report -->|human approval| Promotion[Controlled Promotion]
 ```
 
 - **RepoAegis** 执行真实仓库任务：物化固定 commit -> 计划 -> 审批 -> 补丁 -> 容器验证 -> 审查 ->
   commit/push -> 草稿 PR。
-- **Target pack** 冻结 RepoAegis commit、运行时契约、候选映射、基线基因组、镜像、评测器、基准、
-  工具与策略摘要（`repoaegis-target-pack/v2`）。
+- **Target pack** 冻结 RepoAegis commit、运行时源码、镜像与策略摘要
+  （`repoaegis-target-pack/v2`）；独立的 SWE-bench 协议再绑定任务 ID、模型、seed 与成本策略。
 - **AegisEvo** 通过版本化 `repoaegis-http-v1` 适配器消费 target pack，运行等预算的 baseline /
   random / evolution 搜索，并报告 resolution、安全、成本与延迟证据（`evaluation-observation/v1`）。
 - **受控晋升** 要求绝对质量、统计显著、零安全回归、预算合规与人工审批。新的 RepoAegis 发布创建
@@ -327,8 +327,9 @@ flowchart LR
 |---|---|---|---|
 | `0.1.0`（当前 main） | `repoaegis-target-pack/v2`（`repoaegis-v2`） | `0.1.0`（当前 main） | `repoaegis-http-v1` 适配器 + `evaluation-observation/v1` |
 
-跨语言摘要校验与真实联合演示（AegisEvo 驱动真实 RepoAegis 任务到 `completed`、`resolution=true`）
-验证该兼容性。评测侧见 [AegisEvo](https://github.com/ETOLucy/AegisEvo)。
+跨语言摘要校验与真实联合演示只验证运行时兼容性：AegisEvo 能驱动真实 RepoAegis 任务到
+`completed`。该历史演示不证明任务已解决；只有官方 verifier 报告可以建立 `resolved`。评测侧见
+[AegisEvo](https://github.com/ETOLucy/AegisEvo)。
 
 ## License
 

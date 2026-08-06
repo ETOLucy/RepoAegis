@@ -1,21 +1,20 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/repo-aegis-lockup-dark.svg">
-    <img src="docs/repo-aegis-lockup.svg" width="480" alt="RepoAegis single-wing seed logo and wordmark">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/repo-aegis-mark-reversed.svg">
+    <img src="docs/repo-aegis-mark.svg" width="112" alt="RepoAegis single-wing seed mark">
   </picture>
 </p>
 
 <h1 align="center">RepoAegis</h1>
 
 <p align="center">
-  <a href="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml"><img src="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-245dcc.svg" alt="Python 3.12"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-177245.svg" alt="License: Apache-2.0"></a>
+  A policy-controlled repository maintenance agent for evidence-backed patches and reviewable delivery.
 </p>
 
 <p align="center">
-  A policy-controlled agent system that turns repository issues into evidence-backed patches,
-  sandbox verification, and reviewable draft pull requests.
+  <a href="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml"><img src="https://github.com/ETOLucy/RepoAegis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-245dcc.svg" alt="Python 3.12"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-177245.svg" alt="License: Apache-2.0"></a>
 </p>
 
 RepoAegis is built as an AI control plane rather than a chat wrapper. Typed state,
@@ -321,16 +320,18 @@ content-addressed target pack.
 flowchart LR
     RA[RepoAegis runtime] -->|exports immutable| TP[Target pack / v2]
     TP --> AE[AegisEvo search + evaluation]
-    AE -->|equal-budget candidate runs| RA
-    RA -->|resolution + evidence| AE
+    AE -->|equal-budget generation| RA
+    RA -->|patch + runtime evidence| Official[Official SWE-bench harness]
+    Official -->|structured verdict| AE
     AE -->|aggregate + gates| Report[Report]
     Report -->|human approval| Promotion[Controlled Promotion]
 ```
 
 - **RepoAegis** executes real repository tasks: materialize the pinned commit -> plan -> approve ->
   patch -> container verification -> review -> commit/push -> draft PR.
-- **Target pack** freezes the RepoAegis commit, runtime contract, candidate mapping, baseline
-  genome, images, evaluator, benchmark, tools, and policy digests (`repoaegis-target-pack/v2`).
+- **Target pack** freezes the RepoAegis commit, runtime source, images, and policy digests
+  (`repoaegis-target-pack/v2`). The separate SWE-bench protocol binds task IDs, model, seed, and
+  cost policy.
 - **AegisEvo** consumes the target pack through the versioned `repoaegis-http-v1` adapter, runs
   equal-budget baseline / random / evolution search, and reports resolution, safety, cost, and
   latency evidence (`evaluation-observation/v1`).
@@ -344,8 +345,9 @@ flowchart LR
 |---|---|---|---|
 | `0.1.0` (current main) | `repoaegis-target-pack/v2` (`repoaegis-v2`) | `0.1.0` (current main) | `repoaegis-http-v1` adapter + `evaluation-observation/v1` |
 
-Cross-language digest checks and the live joint demo (AegisEvo drives a real RepoAegis task to
-`completed` with `resolution=true`) verify this compatibility. See
+Cross-language digest checks and the live joint demo verify runtime compatibility: AegisEvo drives
+a real RepoAegis task to `completed`. That historical demo did not prove task resolution; only an
+official verifier report may establish `resolved`. See
 [AegisEvo](https://github.com/ETOLucy/AegisEvo) for the evaluation side.
 
 ## License

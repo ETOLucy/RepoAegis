@@ -1,7 +1,8 @@
 import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from scripts.build_brand_assets import CARBON, build, render_social_preview
+from scripts.build_brand_assets import CARBON, build, render_mark, render_social_preview
 from scripts.validate_logo_assets import validate
 
 ROOT = Path(__file__).parents[3]
@@ -55,3 +56,16 @@ def test_dark_social_preview_keeps_repo_prefix_and_seed_visible() -> None:
 
     assert has_non_background_pixel(500, 205, 735, 310)
     assert has_non_background_pixel(145, 315, 270, 445)
+
+
+def test_seed_is_closed_and_has_no_connector_protrusion() -> None:
+    root = ET.parse(  # noqa: S314 - parses a committed local SVG fixture
+        ROOT / "docs" / "repo-aegis-mark.svg"
+    ).getroot()
+    paths = [element for element in root if element.tag.endswith("path")]
+    assert paths
+    assert all(path.attrib["d"].rstrip().endswith("Z") for path in paths)
+
+    mark = render_mark(240, small=False)
+    offset = (142 * mark.width + 75) * 4
+    assert mark.pixels[offset + 3] == 0

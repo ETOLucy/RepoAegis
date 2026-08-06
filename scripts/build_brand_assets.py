@@ -94,9 +94,6 @@ SMALL_SEED = curved_polygon(
         ((51, 216), (39, 205), (38, 185)),
     ],
 )
-CONNECTOR = [(65, 151), *cubic((65, 151), (80, 138), (93, 126), (104, 112))]
-
-
 @dataclass
 class Canvas:
     width: int
@@ -181,8 +178,6 @@ def draw_mark(
         return
     canvas.fill_polygon(transform(WING, x, y, scale), wing_color)
     canvas.fill_polygon(transform(WING_OPENING, x, y, scale), background)
-    connector = transform(CONNECTOR, x, y, scale)
-    canvas.polyline(connector, 8 * scale, seed_color)
     canvas.fill_polygon(transform(SEED, x, y, scale), seed_color)
 
 
