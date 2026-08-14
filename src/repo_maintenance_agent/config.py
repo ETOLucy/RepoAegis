@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
         repr=False,
     )
     openai_model: str = Field(
-        default="gpt-5.6",
+        default="deepseek-v4-flash",
         validation_alias=AliasChoices("OPENAI_MODEL", "REPO_AGENT_OPENAI_MODEL"),
     )
     openai_base_url: str | None = Field(
