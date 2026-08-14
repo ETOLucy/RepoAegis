@@ -1,0 +1,8 @@
+{"instance_id": "django__django-11299", "failure_reason": "generated patch failed self-consistency check", "category": "generation"}
+{"instance_id": "django__django-12741", "failure_reason": "patch parsing failed after generation (unexpected diff format)", "category": "generation"}
+{"instance_id": "django__django-13837", "failure_reason": "context window exceeded during repository analysis", "category": "generation"}
+{"instance_id": "django__django-15732", "failure_reason": "generated patch failed to apply cleanly to base commit", "category": "generation"}
+{"instance_id": "matplotlib__matplotlib-26208", "failure_reason": "agent could not locate the correct modification site", "category": "generation"}
+{"instance_id": "pylint-dev__pylint-6903", "failure_reason": "context window exceeded during repository analysis", "category": "generation"}
+{"instance_id": "sphinx-doc__sphinx-11445", "failure_reason": "patch parsing failed after generation (unexpected diff format)", "category": "generation"}
+{"instance_id": "sympy__sympy-14531", "failure_reason": "generated patch failed to apply cleanly to base commit", "category": "generation"}

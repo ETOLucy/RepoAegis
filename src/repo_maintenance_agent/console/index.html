@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Evaluation operations | RepoAegis</title>
+  <link rel="stylesheet" href="/console/app.css">
+  <script src="/console/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">RM</span>
+        <div>
+          <strong>Repo Maintenance</strong>
+          <span>Evaluation operations</span>
+        </div>
+      </div>
+      <nav aria-label="Workspace">
+        <button class="nav-item active" type="button" data-view="runs">
+          <span class="nav-glyph" aria-hidden="true">R</span>
+          Runs
+        </button>
+        <button class="nav-item" type="button" data-view="tasks">
+          <span class="nav-glyph" aria-hidden="true">T</span>
+          Tasks
+        </button>
+      </nav>
+      <div class="connection-state">
+        <span class="state-dot" id="connection-dot" aria-hidden="true"></span>
+        <div>
+          <span id="connection-label">Not connected</span>
+          <small id="connection-detail">Identity required</small>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="context-label" id="view-context">Evaluation / Runs</p>
+          <h1 id="view-title">Candidate runs</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="last-updated" id="last-updated">Not synchronized</span>
+          <button class="icon-button" id="refresh-button" type="button"
+                  title="Refresh data" aria-label="Refresh data">&#8635;</button>
+          <button class="secondary-button" id="identity-button" type="button">Identity</button>
+        </div>
+      </header>
+
+      <section id="runs-view" class="view">
+        <div class="run-workspace">
+          <section class="run-index" aria-labelledby="runs-heading">
+            <div class="section-heading">
+              <div>
+                <h2 id="runs-heading">Recent runs</h2>
+                <p id="run-count">0 runs</p>
+              </div>
+              <label class="filter-control">
+                <span>Gate</span>
+                <select id="gate-filter">
+                  <option value="all">All</option>
+                  <option value="pass">Pass</option>
+                  <option value="fail">Fail</option>
+                </select>
+              </label>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table run-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Candidate</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Resolution</th>
+                    <th scope="col">Safety</th>
+                    <th scope="col">Duration</th>
+                  </tr>
+                </thead>
+                <tbody id="run-table-body"></tbody>
+              </table>
+              <div class="empty-state" id="runs-empty">
+                <strong>No evaluation runs</strong>
+                <span>Connect an identity or submit a run through the API.</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="run-detail" aria-labelledby="detail-title">
+            <div class="detail-empty" id="detail-empty">
+              <div class="empty-rail" aria-hidden="true"></div>
+              <strong>Select a run</strong>
+              <span>Evidence, gates, and case outcomes appear here.</span>
+            </div>
+            <div id="detail-content" hidden>
+              <div class="detail-heading">
+                <div>
+                  <div class="title-line">
+                    <h2 id="detail-title"></h2>
+                    <span id="detail-status" class="status-badge"></span>
+                  </div>
+                  <p class="mono" id="detail-run-id"></p>
+                </div>
+                <div class="detail-actions">
+                  <button class="secondary-button" id="download-button" type="button">
+                    Report
+                  </button>
+                  <button class="primary-button" id="replay-button" type="button">
+                    Replay failed
+                  </button>
+                </div>
+              </div>
+
+              <div class="provenance-strip" id="provenance-strip"></div>
+
+              <section class="metric-band" aria-label="Run metrics">
+                <div>
+                  <span>Resolution</span>
+                  <strong id="metric-resolution">--</strong>
+                  <small id="delta-resolution">No baseline</small>
+                </div>
+                <div>
+                  <span>Recall@10</span>
+                  <strong id="metric-recall">--</strong>
+                  <small id="delta-recall">No baseline</small>
+                </div>
+                <div>
+                  <span>MRR</span>
+                  <strong id="metric-mrr">--</strong>
+                  <small id="delta-mrr">No baseline</small>
+                </div>
+                <div>
+                  <span>Latency p95</span>
+                  <strong id="metric-latency">--</strong>
+                  <small id="delta-latency">No baseline</small>
+                </div>
+              </section>
+
+              <section class="evidence-section">
+                <div class="section-heading">
+                  <div>
+                    <h3>Release gates</h3>
+                    <p id="gate-summary"></p>
+                  </div>
+                </div>
+                <div class="gate-matrix" id="gate-matrix"></div>
+              </section>
+
+              <section class="evidence-section">
+                <div class="section-heading">
+                  <div>
+                    <h3>Case execution</h3>
+                    <p>Ordered by suite manifest</p>
+                  </div>
+                </div>
+                <div class="execution-rail" id="case-rail"></div>
+              </section>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="tasks-view" class="view" hidden>
+        <div class="tasks-workspace">
+          <div class="section-heading">
+            <div>
+              <h2>Repository tasks</h2>
+              <p id="task-count">0 tasks</p>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Repository</th>
+                  <th scope="col">Task</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Iteration</th>
+                  <th scope="col">Updated</th>
+                </tr>
+              </thead>
+              <tbody id="task-table-body"></tbody>
+            </table>
+            <div class="empty-state" id="tasks-empty">
+              <strong>No repository tasks</strong>
+              <span>Newly enqueued tasks appear in this workspace.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
+    </main>
+  </div>
+
+  <dialog id="identity-dialog">
+    <form method="dialog" id="identity-form">
+      <div class="dialog-heading">
+        <span class="brand-mark" aria-hidden="true">RM</span>
+        <div>
+          <h2>Connect identity</h2>
+          <p>Use a tenant-scoped control-plane credential.</p>
+        </div>
+      </div>
+      <label>
+        API token
+        <input id="api-token" name="api-token" type="password" autocomplete="off"
+               spellcheck="false" required>
+      </label>
+      <p class="field-note">Held in memory until this page is closed.</p>
+      <div class="dialog-actions">
+        <button class="secondary-button" id="dialog-cancel" type="button">Cancel</button>
+        <button class="primary-button" type="submit">Connect</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

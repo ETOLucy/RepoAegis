@@ -1,0 +1,33 @@
+{
+  "campaign": {
+    "name": "RepoAegis SWE-bench Verified evaluation",
+    "date": "2026-08-14",
+    "status": "completed",
+    "mode": "frozen",
+    "model": "deepseek-v4-flash",
+    "harness": "SWE-bench official Docker harness (swebench/sweb.eval.x86_64.*)",
+    "sampling": {
+      "source": "SWE-bench Verified (500 instances)",
+      "method": "stratified by repo, proportional to Verified 500 distribution",
+      "sample_size": 200,
+      "seed": "42"
+    }
+  },
+  "summary": {
+    "total": 200,
+    "generated": 192,
+    "generation_failed": 8,
+    "resolved": 74,
+    "unresolved": 118,
+    "end_to_end_resolution_rate": 37.0,
+    "conditional_resolution_rate": 38.5
+  },
+  "files": {
+    "aggregate": "aggregate.json",
+    "per_instance": "per-instance.jsonl",
+    "generation_failures": "generation-failures.jsonl",
+    "frozen_task_ids": "frozen-task-ids.jsonl",
+    "grading_summary": "grading-summary.json",
+    "grading_progress": "grading-progress.json"
+  }
+}
