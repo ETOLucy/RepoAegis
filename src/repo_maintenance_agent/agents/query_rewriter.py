@@ -1,12 +1,16 @@
 from __future__ import annotations
+
 import json
 from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
+
 from repo_maintenance_agent.search.rewriter import (
     QueryRewritePlan,
     RewrittenQuery,
     rewrite_queries,
 )
+
 _RESEARCH_REWRITE_SYSTEM = (
     "You are a code-search query rewriter for a repository issue. Given the issue "
     "below, produce up to 4 independent search queries that would locate the code "

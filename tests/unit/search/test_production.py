@@ -1,8 +1,13 @@
 from __future__ import annotations
+
 from pathlib import Path
+
 import pytest
+
 from repo_maintenance_agent.domain.models import SearchQuery
 from repo_maintenance_agent.search.production import WorkspaceIndex
+
+
 def _make_repo(tmp_path: Path) -> Path:
     src = tmp_path / "src"
     src.mkdir(parents=True)
@@ -55,7 +60,7 @@ async def test_workspace_index_caches_index_per_commit(tmp_path: Path) -> None:
     first = await index.search(_query("load_config"))
     second = await index.search(_query("load_config"))
     assert first == second
-    assert len(index._bundles) == 1  # noqa: SLF001 - test asserts internal cache size
+    assert len(index._bundles) == 1
 @pytest.mark.asyncio
 async def test_workspace_index_uses_lexical_channel_when_provided(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)

@@ -1,10 +1,14 @@
 from __future__ import annotations
+
 import pytest
+
 from repo_maintenance_agent.agents.query_rewriter import (
     QueryRewriterOutput,
     RewrittenQueryOutput,
     rewrite_queries_with_model,
 )
+
+
 class FakeRewriterModel:
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail

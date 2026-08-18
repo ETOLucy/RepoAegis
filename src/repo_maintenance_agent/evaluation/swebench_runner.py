@@ -15,7 +15,6 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from repo_maintenance_agent.agents.nodes import AgentRuntime, build_agent_nodes
-from repo_maintenance_agent.policies.risk import deterministic_risk
 from repo_maintenance_agent.domain.models import (
     ApprovalDecision,
     ApprovalEnvelope,
@@ -33,6 +32,7 @@ from repo_maintenance_agent.evaluation.swebench import (
 from repo_maintenance_agent.graph.state import GraphState
 from repo_maintenance_agent.models.usage import UsageLedger
 from repo_maintenance_agent.policies.permissions import PermissionPolicy
+from repo_maintenance_agent.policies.risk import deterministic_risk
 from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
 from repo_maintenance_agent.storage.artifacts import FileArtifactStore
 from repo_maintenance_agent.tools.agent_actions import (

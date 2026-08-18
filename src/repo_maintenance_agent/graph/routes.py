@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from repo_maintenance_agent.domain.models import ErrorKind, TaskStatus, ToolPermission
-from repo_maintenance_agent.policies.risk import deterministic_risk
 from repo_maintenance_agent.graph.state import GraphState
+from repo_maintenance_agent.policies.risk import deterministic_risk
 
 
 def route_entry(state: GraphState) -> str:

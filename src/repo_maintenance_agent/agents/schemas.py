@@ -120,9 +120,7 @@ class PatchProposal(AgentOutput):
         # Drop them here so a proposal that still has at least one real edit survives.
         kept: list[PatchEdit] = []
         for edit in self.edits:
-            if edit.old_text is None:
-                kept.append(edit)
-            elif edit.old_text and edit.old_text != edit.new_text:
+            if edit.old_text is None or (edit.old_text and edit.old_text != edit.new_text):
                 kept.append(edit)
         if not kept:
             raise ValueError("patch proposal contains no effective edits")

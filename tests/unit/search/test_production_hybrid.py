@@ -1,10 +1,15 @@
 from __future__ import annotations
+
+import hashlib
 from pathlib import Path
+
 import pytest
+
 from repo_maintenance_agent.domain.models import SearchQuery
 from repo_maintenance_agent.search.index import EmbeddingBatch
 from repo_maintenance_agent.search.production import WorkspaceIndex
-import hashlib
+
+
 def _fake_vector(text: str, dim: int = 8) -> tuple[float, ...]:
     digest = hashlib.sha256(text.encode()).digest()
     values = [float(byte / 255.0) for byte in digest[:dim]]

@@ -1,5 +1,8 @@
 from __future__ import annotations
+
 from repo_maintenance_agent.search.rewriter import rewrite_queries
+
+
 def test_rewrite_queries_extracts_quoted_exact_strings() -> None:
     plan = rewrite_queries(
         'Crash with "NoSuchKey" when load_config returns an empty dict in `src/config.py`.',

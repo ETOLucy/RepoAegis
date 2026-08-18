@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 import asyncio
 import hashlib
 import shutil
 from pathlib import Path
+
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
+
 _IGNORED_PARTS = frozenset({".git", ".venv", "node_modules", "dist", "build"})
 class RipgrepSearch:
     """Exact-substring channel backed by `rg` (ripgrep).

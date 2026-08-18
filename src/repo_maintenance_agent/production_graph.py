@@ -16,7 +16,7 @@ from repo_maintenance_agent.sandbox.remote import RemoteSandbox
 from repo_maintenance_agent.sandbox.verifier import SandboxVerifier
 from repo_maintenance_agent.search.adapters.ripgrep import default_lexical_search
 from repo_maintenance_agent.search.embeddings import OpenAIEmbeddingClient
-from repo_maintenance_agent.search.product import WorkspaceIndex
+from repo_maintenance_agent.search.production import WorkspaceIndex
 from repo_maintenance_agent.tools.agent_actions import (
     PatchArtifactAdapter,
     SearchAdapter,

@@ -1,17 +1,21 @@
 from __future__ import annotations
+
 from pathlib import Path
+
 import pytest
+
 from repo_maintenance_agent.agents.nodes import AgentRuntime, build_agent_nodes
 from repo_maintenance_agent.agents.schemas import (
     ContextRequest,
     PatchProposal,
     PlanOutput,
     PullRequestDraft,
-    ReviewOutput,
     TaskSpecOutput,
 )
 from repo_maintenance_agent.domain.models import RepoTaskState, SearchHit, ToolResult
 from repo_maintenance_agent.storage.artifacts import FileArtifactStore
+
+
 class EnhancedIntakeModel:
     def __init__(self) -> None:
         self.intake_payload = None

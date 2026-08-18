@@ -1,12 +1,16 @@
 from __future__ import annotations
+
 import shutil
 from pathlib import Path
+
 import pytest
+
 from repo_maintenance_agent.domain.models import SearchQuery
 from repo_maintenance_agent.search.adapters.ripgrep import (
     RipgrepSearch,
     default_lexical_search,
 )
+
 _HAVE_RG = shutil.which("rg") is not None
 pytestmark = pytest.mark.skipif(not _HAVE_RG, reason="ripgrep binary not installed")
 def _make_repo(tmp_path: Path) -> Path:

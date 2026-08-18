@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
+
 _QUOTE = re.compile(r"[\"'`]([^\"'`]{3,})[\"'`]")
 _PATH_HINT = re.compile(
     r"\b([\w./-]+\.(?:py|ts|js|tsx|jsx|go|rs|java|md|toml|yml|yaml|json))\b",

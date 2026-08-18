@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import asyncio
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
+
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
 from repo_maintenance_agent.domain.ports import SearchPort
 from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
@@ -16,6 +18,7 @@ from repo_maintenance_agent.search.index import (
 )
 from repo_maintenance_agent.search.router import QueryKind
 from repo_maintenance_agent.search.service import HybridSearchService
+
 _MAX_CACHED_COMMITS = 3
 @dataclass(frozen=True, slots=True)
 class _IndexBundle:
