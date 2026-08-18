@@ -15,10 +15,14 @@ class OpenAIEmbeddingClient:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> OpenAIEmbeddingClient:
-        if settings.openai_api_key is None:
+        api_key = settings.openai_embedding_api_key or settings.openai_api_key
+        if api_key is None:
             raise ValueError("embedding client requires model credentials")
         return cls(
-            AsyncOpenAI(api_key=settings.openai_api_key.get_secret_value()),
+            AsyncOpenAI(
+                api_key=api_key.get_secret_value(),
+                base_url=settings.openai_embedding_base_url,
+            ),
             model=settings.openai_embedding_model,
         )
 

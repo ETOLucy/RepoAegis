@@ -18,6 +18,31 @@ class TaskSpecOutput(AgentOutput):
     acceptance_criteria: list[str] = Field(min_length=1, max_length=20)
     constraints: list[str] = Field(default_factory=list, max_length=20)
     unknowns: list[str] = Field(default_factory=list, max_length=20)
+    # M3: structured issue understanding.
+    issue_classification: str = Field(
+        default="bugfix",
+        description=(
+            "High-level classification of the issue: bugfix, feature, test, "
+            "documentation, dependency, refactor."
+        ),
+        max_length=50,
+    )
+    search_hints: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description=(
+            "Exact identifiers, file paths, error strings and CamelCase symbols "
+            "that would locate the relevant code. Used to build search queries."
+        ),
+    )
+    key_paths: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description=(
+            "Repository paths that most likely contain the code that must change. "
+            "Use paths as they appear in the repository (e.g. 'src/config.py')."
+        ),
+    )
 
 
 class PlanStep(AgentOutput):

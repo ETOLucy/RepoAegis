@@ -49,6 +49,19 @@ class Settings(BaseSettings):
         }
     )
     openai_embedding_model: str = "text-embedding-3-small"
+    openai_embedding_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "OPENAI_EMBEDDING_API_KEY", "REPO_AGENT_OPENAI_EMBEDDING_API_KEY"
+        ),
+        repr=False,
+    )
+    openai_embedding_base_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "OPENAI_EMBEDDING_BASE_URL", "REPO_AGENT_OPENAI_EMBEDDING_BASE_URL"
+        ),
+    )
     chat_repo_root: str | None = None
     github_token: SecretStr | None = Field(default=None, repr=False)
     sandbox_seccomp_profile: Path = Path("sandbox/seccomp.json")

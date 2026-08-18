@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import difflib
+import re  # 新增
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass

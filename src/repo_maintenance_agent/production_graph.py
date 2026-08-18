@@ -14,7 +14,9 @@ from repo_maintenance_agent.sandbox.docker import DockerSandbox
 from repo_maintenance_agent.sandbox.profiles import EnvironmentProfiler
 from repo_maintenance_agent.sandbox.remote import RemoteSandbox
 from repo_maintenance_agent.sandbox.verifier import SandboxVerifier
-from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
+from repo_maintenance_agent.search.adapters.ripgrep import default_lexical_search
+from repo_maintenance_agent.search.embeddings import OpenAIEmbeddingClient
+from repo_maintenance_agent.search.product import WorkspaceIndex
 from repo_maintenance_agent.tools.agent_actions import (
     PatchArtifactAdapter,
     SearchAdapter,
@@ -52,6 +54,16 @@ class ProductionGraphFactory:
             )
         )
 
+    def _build_index(self, workspace: Path) -> WorkspaceIndex:
+        embeddings = None
+        if self.settings.openai_embedding_api_key is not None:
+            embeddings = OpenAIEmbeddingClient.from_settings(self.settings)
+        return WorkspaceIndex(
+            workspace,
+            embeddings=embeddings,
+            lexical=default_lexical_search(workspace),
+        )
+
     def build_adapters(self, workspace: Path) -> dict[str, ToolAdapter]:
         patch_runner = ProcessRunner(allowed_executables={"git"})
         sandbox = (
@@ -83,7 +95,7 @@ class ProductionGraphFactory:
             else LocalDraftRecordAdapter(self.artifacts)
         )
         return {
-            "search_code": SearchAdapter(LocalLexicalSearch(workspace)),
+            "search_code": SearchAdapter(self._build_index(workspace)),
             "apply_patch": PatchArtifactAdapter(
                 artifacts=self.artifacts,
                 applier=GitPatchApplier(patch_runner),
