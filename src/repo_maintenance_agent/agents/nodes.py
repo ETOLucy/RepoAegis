@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import difflib
 import json
-import difflib
-import json
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 from typing import Any, Protocol
