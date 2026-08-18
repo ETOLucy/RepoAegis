@@ -248,11 +248,13 @@ async def test_calibration_feedback_reaches_planning_coding_and_review(
     await generate_prediction(task, runtime, _ledger())
 
     expected = feedback.model_dump(mode="json")
-    assert model.inputs[PlanOutput][0]["repo_profile"] == {
-        "development_feedback": expected,
-        "retrieval_count": 0,
-        "retrieved_files": [],
-    }
+    profile = model.inputs[PlanOutput][0]["repo_profile"]
+    assert isinstance(profile["retrieval_count"], int)  # 收窄类型，mypy 通过
+    assert profile["retrieval_count"] == 1
+    assert profile["retrieval_count"] == 1
+    assert profile["retrieved_files"] == ["app.py"]
+    assert profile["research_queries"]
+    assert profile["research_plan"]
     for schema in (ContextRequest, PatchProposal, ReviewOutput):
         assert model.inputs[schema][0]["development_feedback"] == expected
 

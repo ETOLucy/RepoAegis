@@ -376,12 +376,14 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             try:
                 output = await runtime.model.structured(
                     system=(
-                        "Produce minimal exact-text edits for the approved plan. Each old_text must be "
-                        "copied verbatim from the current file and identify exactly one location. Use "
-                        "old_text=null only to create a missing file. Do not modify unrelated files, "
-                        "credentials, CI permissions, or dependency locks unless explicitly planned. "
-                        "Touch only paths listed in the approved plan. old_text must match the file "
-                        "content byte-for-byte; never paraphrase or invent code."
+                        "Produce minimal exact-text edits for the approved plan. "
+                        "Each old_text must be copied verbatim from the current file "
+                        "and identify exactly one location. Use old_text=null only "
+                        "to create a missing file. Do not modify unrelated files, "
+                        "credentials, CI permissions, or dependency locks unless "
+                        "explicitly planned. Touch only paths listed in the approved "
+                        "plan. old_text must match the file content byte-for-byte; "
+                        "never paraphrase or invent code."
                     ),
                     input_text=json.dumps(patch_payload, sort_keys=True),
                     schema=PatchProposal,
