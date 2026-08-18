@@ -249,7 +249,6 @@ async def test_calibration_feedback_reaches_planning_coding_and_review(
 
     expected = feedback.model_dump(mode="json")
     profile = model.inputs[PlanOutput][0]["repo_profile"]
-    assert isinstance(profile["retrieval_count"], int)  # 收窄类型，mypy 通过
     assert profile["retrieval_count"] == 1
     assert profile["retrieval_count"] == 1
     assert profile["retrieved_files"] == ["app.py"]
