@@ -389,8 +389,8 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 )
             except ValidationError as error:
                 patch_feedback = (
-                    "Your previous proposal did not match the required JSON schema. Validation error: "
-                    + str(error)
+                    "Your previous proposal did not match the required JSON schema. "
+                    "Validation error: " + str(error)
                 )
                 if patch_attempt == runtime.max_patch_attempts - 1:
                     raise

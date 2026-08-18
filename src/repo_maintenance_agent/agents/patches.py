@@ -136,11 +136,10 @@ def _trim_blank_lines(text: str) -> str:
 def _approx_positions(content: str, needle: str) -> list[int]:
     """Approximate match using first and last non-blank lines as anchors."""
     n_lines = needle.splitlines(keepends=True)
-    first_sig = next((i, l) for i, l in enumerate(n_lines) if l.strip())
-    last_sig = next((i, l) for i, l in reversed(list(enumerate(n_lines))) if l.strip())
+    first_sig = next((i, line) for i, line in enumerate(n_lines) if line.strip())
+    last_sig = next((i, line) for i, line in reversed(list(enumerate(n_lines))) if line.strip())
     if first_sig is None or last_sig is None:
         return []
-
     c_lines = content.splitlines(keepends=True)
     # Find first significant line of needle in content
     candidates = []
@@ -148,10 +147,8 @@ def _approx_positions(content: str, needle: str) -> list[int]:
         ratio = difflib.SequenceMatcher(None, first_sig[1].strip(), line.strip()).ratio()
         if ratio >= 0.6:
             candidates.append(i)
-
     if not candidates:
         return []
-
     # For each candidate, check if the last significant line matches nearby
     for cand_start in candidates:
         end_idx = cand_start + (last_sig[0] - first_sig[0])
@@ -164,9 +161,8 @@ def _approx_positions(content: str, needle: str) -> list[int]:
                 window = "".join(c_lines[cand_start:cand_start + len(n_lines)])
                 ratio = difflib.SequenceMatcher(None, needle, window).ratio()
                 if ratio >= 0.6:
-                    start_char = sum(len(l) for l in c_lines[:cand_start])
+                    start_char = sum(len(line) for line in c_lines[:cand_start])
                     return [start_char]
-
     return []
 
 

@@ -699,7 +699,13 @@ class LowRiskUndeclaredModel(FakeModel):
         if schema is PatchProposal:
             return PatchProposal(
                 summary="Add a regression test.",
-                edits=[PatchEdit(path="tests/test_demo.py", old_text=None, new_text="def test_x(): pass\n")],
+                edits=[
+                    PatchEdit(
+                        path="tests/test_demo.py", 
+                        old_text=None, 
+                        new_text="def test_x(): pass\n"
+                    )
+                ],
             )
         return await super().structured(system=system, input_text=input_text, schema=schema)
 
