@@ -354,6 +354,43 @@ sandbox/          不可变 worker 镜像与 seccomp profile
 tests/            单元与集成契约
 ```
 
+# 搜索模块
+```markdown
+用户 issue 文本
+      │
+      ▼
+┌──────────────┐     ┌──────────────────┐
+│ SearchRouter │ ──► │ HybridSearchService │
+│ (路由分层)    │     │ (并行调用选中通道) │
+└──────────────┘     └──────────────────┘
+      │                      │
+      │        ┌─────────────┼──────────────┐
+      │        ▼             ▼              ▼
+      │   BM25Search     SymbolSearch   VectorSearch
+      │   (词频)         (符号定义/引用)  (语义向量)
+      │        │             │              │
+      │        └──────┬──────┘              │
+      │               ▼                     │
+      │      RipgrepSearch              GitHistorySearch
+      │      (精确子串)                   (git 历史)
+      │               │                     │
+      │               ▼                     ▼
+      │        ┌──────────────────┐
+      │        │ reciprocal_rank_fusion │  ← RRF 融合
+      │        └──────────────────┘
+      │               │
+      │               ▼
+      │        ┌──────────────┐
+      │        │ LLMReranker  │  ← 可选：LLM 二段精排
+      │        └──────────────┘
+      │               │
+      │               ▼
+      │        去重 (dedupe by location)
+      │               │
+      │               ▼
+      │       最终 SearchHit 列表（供 research 节点做证据）
+```
+
 ## 文档
 
 - [权威系统设计](RepoAegis_Design.md)
