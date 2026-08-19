@@ -17,6 +17,7 @@ class GitToolAdapter:
             "git_log": self._log,
             "git_diff": self._diff,
             "git_show": self._show,
+            "git_blame": self._blame,
             "git_commit": self._commit,
             "git_push": self._push,
         }
@@ -145,6 +146,22 @@ class GitToolAdapter:
             cwd=workspace,
         )
         return {"pushed": True, "branch": branch}
+
+    async def _blame(self, call: ToolCall, workspace: Path) -> dict[str, object]:
+        path = call.arguments.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError("git blame path is required")
+        candidate = (workspace / path).resolve()
+        if not candidate.is_relative_to(workspace.resolve()):
+            raise ValueError("git blame path resolves outside workspace")
+        result = await self._runner.run(
+            ["git", "blame", "--", path],
+            cwd=workspace,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise ToolExecutionError(f"git blame failed: {result.stderr[-500:].strip()}")
+        return {"blame": result.stdout}
 
 
 def _required_text(value: object, label: str, maximum: int) -> str:

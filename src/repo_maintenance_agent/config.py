@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     sandbox_docker_host: str = "unix:///run/repoaegis-docker/docker.sock"
     allowed_hosts: tuple[str, ...] = ("localhost", "127.0.0.1")
     max_iterations: int = Field(default=3, ge=1, le=10)
+    # M4: verification summaries are truncated to this many characters before
+    # being fed back into the coding loop. Large enough to keep pytest
+    # tracebacks and assertion diffs, small enough to bound prompt size.
+    verification_summary_limit: int = Field(default=8_000, ge=1_000, le=100_000)
     worker_id: str = Field(default="repoaegis-worker", min_length=1, max_length=128)
     worker_tenant_ids: tuple[str, ...] = ()
     worker_poll_seconds: float = Field(default=1.0, gt=0, le=60)

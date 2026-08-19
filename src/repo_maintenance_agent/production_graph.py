@@ -16,6 +16,7 @@ from repo_maintenance_agent.sandbox.remote import RemoteSandbox
 from repo_maintenance_agent.sandbox.verifier import SandboxVerifier
 from repo_maintenance_agent.search.adapters.ripgrep import default_lexical_search
 from repo_maintenance_agent.search.embeddings import OpenAIEmbeddingClient
+from repo_maintenance_agent.search.history import GitHistorySearch
 from repo_maintenance_agent.search.production import WorkspaceIndex
 from repo_maintenance_agent.tools.agent_actions import (
     PatchArtifactAdapter,
@@ -28,7 +29,7 @@ from repo_maintenance_agent.tools.git import GitToolAdapter
 from repo_maintenance_agent.tools.github import GitHubCliAdapter, LocalDraftRecordAdapter
 from repo_maintenance_agent.tools.patch import GitPatchApplier
 from repo_maintenance_agent.tools.process import ProcessRunner
-
+from repo_maintenance_agent.search.reranker import LLMReranker
 
 @dataclass(frozen=True, slots=True)
 class ProductionGraphFactory:
@@ -65,8 +66,15 @@ class ProductionGraphFactory:
                 "to build the hybrid index (Vector channel). Set at least one key."
             )
         embeddings = OpenAIEmbeddingClient.from_settings(self.settings)
-        return WorkspaceIndex(workspace, embeddings=embeddings,
-                            lexical=default_lexical_search(workspace))
+        return WorkspaceIndex(
+            workspace,
+            embeddings=embeddings,
+            lexical=default_lexical_search(workspace),
+            history=GitHistorySearch(
+                workspace, ProcessRunner(allowed_executables={"git"})
+            ),
+            reranker=LLMReranker(model=model, candidate_pool=20, final_k=10),
+        )
 
     def build_adapters(self, workspace: Path) -> dict[str, ToolAdapter]:
         patch_runner = ProcessRunner(allowed_executables={"git"})
@@ -88,6 +96,7 @@ class ProductionGraphFactory:
             profiler=EnvironmentProfiler(),
             sandbox=sandbox,
             image_digests=self.settings.sandbox_image_digests,
+            summary_limit=self.settings.verification_summary_limit,
         )
         git_adapter = GitToolAdapter(patch_runner)
         draft_adapter: ToolAdapter = (
@@ -99,7 +108,7 @@ class ProductionGraphFactory:
             else LocalDraftRecordAdapter(self.artifacts)
         )
         return {
-            "search_code": SearchAdapter(self._build_index(workspace)),
+            "search_code": SearchAdapter(self._build_index(workspace, model=model)),
             "apply_patch": PatchArtifactAdapter(
                 artifacts=self.artifacts,
                 applier=GitPatchApplier(patch_runner),

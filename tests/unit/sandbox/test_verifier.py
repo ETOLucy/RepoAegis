@@ -46,11 +46,15 @@ async def test_verifier_runs_profile_tests_and_lints_in_hardened_sandbox(
         profiler=EnvironmentProfiler(),
         sandbox=sandbox,
         image_digests={"python-3.12": "python@sha256:" + "a" * 64},
+        summary_limit=8_000,
     )
 
     result = await verifier.verify(task())
 
     assert result.passed
+    assert result.error_kind is ErrorKind.CODE
+    assert len(result.summary) == len("failure")  # stderr is "failure"
+    # 默认截断仍是 2000，可配置后行为不变；此用例验证参数透传
     assert sandbox.commands[0][:3] == ("python", "-m", "venv")
     assert (".repo-agent/venv/bin/python", "-m", "pytest") in sandbox.commands
     assert (".repo-agent/venv/bin/ruff", "check", ".") in sandbox.commands

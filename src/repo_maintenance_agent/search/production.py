@@ -8,6 +8,7 @@ from pathlib import Path
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
 from repo_maintenance_agent.domain.ports import SearchPort
 from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
+from repo_maintenance_agent.search.history import GitHistorySearch
 from repo_maintenance_agent.search.index import (
     BM25Search,
     CodeChunk,
@@ -18,6 +19,7 @@ from repo_maintenance_agent.search.index import (
 )
 from repo_maintenance_agent.search.router import QueryKind
 from repo_maintenance_agent.search.service import HybridSearchService
+from repo_maintenance_agent.search.reranker import LLMReranker
 
 _MAX_CACHED_COMMITS = 3
 @dataclass(frozen=True, slots=True)
@@ -50,12 +52,16 @@ class WorkspaceIndex:
         repo_id: str | None = None,
         embeddings: EmbeddingPort | None = None,
         lexical: SearchPort | None = None,
+        history: SearchPort | None = None,
+        reranker: LLMReranker | None = None,
     ) -> None:
         self._workspace = workspace.resolve()
         self._tenant_id = tenant_id
         self._repo_id = repo_id
         self._embeddings = embeddings
         self._lexical = lexical or LocalLexicalSearch(workspace)
+        self._history = history
+        self._reranker = reranker
         self._bundles: OrderedDict[str, _IndexBundle] = OrderedDict()
         self._lock = asyncio.Lock()
     async def search(self, query: SearchQuery) -> list[SearchHit]:
@@ -68,8 +74,12 @@ class WorkspaceIndex:
             retrievers[QueryKind.VECTOR] = bundle.vector
         if self._lexical is not None:
             retrievers[QueryKind.LEXICAL] = self._lexical
+        if self._history is not None:
+            retrievers[QueryKind.HISTORY] = self._history
         service = HybridSearchService(retrievers)
         fused = await service.search(query)
+        if self._reranker is not None:
+            fused = await self._reranker.rerank(query, fused)
         return _dedupe_by_location(fused, limit=query.top_k)
     async def _bundle_for(self, query: SearchQuery) -> _IndexBundle:
         if self._tenant_id is not None and query.tenant_id != self._tenant_id:

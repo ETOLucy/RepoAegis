@@ -35,7 +35,7 @@ from repo_maintenance_agent.domain.ports import ArtifactStore
 from repo_maintenance_agent.graph.builder import AgentNodes
 from repo_maintenance_agent.graph.state import GraphState
 from repo_maintenance_agent.policies.risk import deterministic_risk, higher_risk
-
+from repo_maintenance_agent.agents.localizer import Localizer
 
 class Gateway(Protocol):
     async def execute(self, call: ToolCall, state: RepoTaskState) -> ToolResult: ...
@@ -119,31 +119,19 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             )
             if result.success and isinstance(result.output.get("hits"), list):
                 hits.extend(_search_hits(result))
-        # S3: second, targeted round — search inside key paths the rewriter
-        # identified (file hints), which the router would otherwise scope out.
-        key_paths = sorted({path for q in plan.queries for path in q.key_paths})
-        for path in key_paths[:3]:
-            result = await runtime.gateway.execute(
-                ToolCall(
-                    task_id=task.task_id,
-                    tenant_id=task.tenant_id,
-                    repo_id=task.repo_id,
-                    commit_sha=task.commit_sha,
-                    agent="research",
-                    name="search_code",
-                    permission=ToolPermission.REPO_READ,
-                    arguments={
-                        "text": path,
-                        "allowed_paths": [path],
-                        "top_k": per_query_top_k,
-                    },
-                ),
-                task,
-            )
-            if result.success and isinstance(result.output.get("hits"), list):
-                hits.extend(_search_hits(result))
-        # Deduplicate by location; keep the highest-ranked hit per (path, line).
-        merged = _dedupe_hits(hits)
+        # S3b: Planner+Explorer localization loop refines the evidence.
+        localizer = Localizer(
+            model=runtime.model,
+            gateway=runtime.gateway,
+            max_rounds=3,
+        )
+        outcome = await localizer.localize(
+            issue_text=issue_text,
+            task=task,
+            initial_hits=tuple(hits),
+        )
+        queries.extend(outcome.queries)
+        merged = _dedupe_hits(list(outcome.evidence))
         evidence = tuple(
             Evidence(
                 source=hit.source,
@@ -160,6 +148,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                     "retrieval_count": len(merged),
                     "research_queries": queries,
                     "research_plan": [asdict(q) for q in plan.queries],
+                    "localizer_rounds": outcome.rounds,
                 },
             }
         )
@@ -357,6 +346,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             if context_tool_calls >= runtime.max_context_tool_calls:
                 break
         patch_feedback: str | None = None
+        last_rendered: str | None = None
         tool_result = None
         artifact_id: str | None = None
         for patch_attempt in range(runtime.max_patch_attempts):
@@ -371,6 +361,8 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             }
             if patch_feedback:
                 patch_payload["patch_feedback"] = patch_feedback
+            if last_rendered:
+                patch_payload["previous_diff"] = last_rendered
             if task.review.get("decision") == "request_changes":
                 patch_payload["review_feedback"] = task.review
             try:
@@ -457,6 +449,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                     )
                 except ValueError as error:
                     raise ToolExecutionError(str(error)) from error
+                last_rendered = rendered.data.decode("utf-8", errors="replace")
                 artifact_id = await runtime.artifacts.put(
                     task.tenant_id,
                     task.task_id,
@@ -483,7 +476,9 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 )
                 break
             except ToolExecutionError as error:
-                patch_feedback = _patch_retry_feedback(error, output, current_files)
+                patch_feedback = _patch_retry_feedback(
+                    error, output, current_files, previous_diff=last_rendered
+                )
                 if patch_attempt == runtime.max_patch_attempts - 1:
                     raise
                 if current_files:
@@ -741,6 +736,7 @@ def _patch_retry_feedback(
     error: ToolExecutionError,
     proposal: PatchProposal,
     current_files: dict[str, object],
+    previous_diff: str | None = None,
 ) -> str:
     feedback = str(error)
     if "old_text was not found" not in feedback:
@@ -751,7 +747,6 @@ def _patch_retry_feedback(
                 + "instead of creating it with old_text=null."
             )
         return feedback
-
     best_ratio = -1.0
     best_path = ""
     best_excerpt = ""
@@ -776,10 +771,15 @@ def _patch_retry_feedback(
         best_ratio = ratio
         best_path = edit.path
         best_excerpt = "\n".join(source_lines[start:end])[:600]
-
     if not best_excerpt:
         return feedback
-    return f"{feedback}. nearest source excerpt for {best_path}:\n{best_excerpt}"
+    message = f"{feedback}. nearest source excerpt for {best_path}:\n{best_excerpt}"
+    if previous_diff:
+        message += (
+            "\n\nYour previous patch (which failed to apply) was:\n"
+            + previous_diff[-4_000:]
+        )
+    return message
 
 
 def _changed_files(result: ToolResult) -> tuple[str, ...]:

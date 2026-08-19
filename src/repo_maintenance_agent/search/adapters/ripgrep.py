@@ -11,15 +11,20 @@ _IGNORED_PARTS = frozenset({".git", ".venv", "node_modules", "dist", "build"})
 class RipgrepSearch:
     """Exact-substring channel backed by `rg` (ripgrep).
     Registered in the hybrid retriever map under QueryKind.LEXICAL so that
-    error-string / quoted-identifier queries get a fast, precise match. Falls
-    back to the pure-Python LocalLexicalSearch when ripgrep is not installed.
+    error-string / quoted-identifier queries get a fast, precise match.
+    Ripgrep is a hard requirement: constructing without the binary raises so
+    the misconfiguration surfaces at startup, not as silently empty results.
     """
     def __init__(self, workspace: Path) -> None:
         self._workspace = workspace.resolve()
         self._binary = shutil.which("rg")
-    async def search(self, query: SearchQuery) -> list[SearchHit]:
         if self._binary is None:
-            return []
+            raise RuntimeError(
+                "ripgrep (rg) is required for the LEXICAL search channel; "
+                "install it (e.g. `apt-get install ripgrep` / `brew install ripgrep`) "
+                "or configure the pure-Python LocalLexicalSearch explicitly."
+            )
+    async def search(self, query: SearchQuery) -> list[SearchHit]:
         command = [
             self._binary,
             "--line-number",
@@ -104,8 +109,8 @@ class RipgrepSearch:
         except ValueError:
             return Path(path).as_posix()
 def default_lexical_search(workspace: Path) -> RipgrepSearch:
-    """Factory: ripgrep when available, otherwise the pure-Python fallback."""
-    from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
-    if shutil.which("rg") is not None:
-        return RipgrepSearch(workspace)
-    return LocalLexicalSearch(workspace)
+    """Factory for the exact-substring channel; fails fast when rg is absent.
+    Teams that cannot guarantee ripgrep on the runtime image should construct
+    LocalLexicalSearch explicitly instead of silently degrading quality.
+    """
+    return RipgrepSearch(workspace)

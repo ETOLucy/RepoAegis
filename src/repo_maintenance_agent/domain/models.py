@@ -108,6 +108,7 @@ class VerificationResult(StrictModel):
     commands: tuple[str, ...] = ()
     summary: str = ""
     artifact_ids: tuple[str, ...] = ()
+    failures: tuple[dict[str, str], ...] = ()
 
 
 class ToolCall(StrictModel):
