@@ -54,18 +54,19 @@ class ProductionGraphFactory:
             )
         )
 
+    # search/production_graph.py 的 _build_index，改动 3 行
     def _build_index(self, workspace: Path) -> WorkspaceIndex:
-        embeddings = None
         if (
-            self.settings.openai_embedding_api_key is not None
-            or self.settings.openai_api_key is not None
+            self.settings.openai_embedding_api_key is None
+            and self.settings.openai_api_key is None
         ):
-            embeddings = OpenAIEmbeddingClient.from_settings(self.settings)
-        return WorkspaceIndex(
-            workspace,
-            embeddings=embeddings,
-            lexical=default_lexical_search(workspace),
-        )
+            raise RuntimeError(
+                "OPENAI_API_KEY or OPENAI_EMBEDDING_API_KEY is required "
+                "to build the hybrid index (Vector channel). Set at least one key."
+            )
+        embeddings = OpenAIEmbeddingClient.from_settings(self.settings)
+        return WorkspaceIndex(workspace, embeddings=embeddings,
+                            lexical=default_lexical_search(workspace))
 
     def build_adapters(self, workspace: Path) -> dict[str, ToolAdapter]:
         patch_runner = ProcessRunner(allowed_executables={"git"})
