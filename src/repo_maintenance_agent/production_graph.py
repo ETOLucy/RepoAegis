@@ -56,7 +56,10 @@ class ProductionGraphFactory:
 
     def _build_index(self, workspace: Path) -> WorkspaceIndex:
         embeddings = None
-        if self.settings.openai_embedding_api_key is not None:
+        if (
+            self.settings.openai_embedding_api_key is not None
+            or self.settings.openai_api_key is not None
+        ):
             embeddings = OpenAIEmbeddingClient.from_settings(self.settings)
         return WorkspaceIndex(
             workspace,

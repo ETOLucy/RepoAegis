@@ -60,9 +60,8 @@ async def rewrite_queries_with_model(
         ]
         if queries:
             return QueryRewritePlan(queries=tuple(queries[:max_queries]))
-    except Exception:  # noqa: S110 - intentional degradation to rule-based rewriting
-        # Fall back to the deterministic splitter; never block research.
-        # The rule-based fallback is the intended degradation path and the
-        # exception is deliberately not surfaced to callers.
-        pass
-    return rewrite_queries(issue_text, max_queries=max_queries)
+    except Exception as exc:
+        raise RuntimeError(
+            "model unavailable: query rewrite failed; "
+            "research cannot proceed without the model"
+        ) from exc
