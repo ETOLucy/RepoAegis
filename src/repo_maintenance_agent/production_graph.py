@@ -54,7 +54,7 @@ class ProductionGraphFactory:
             )
         )
 
-    # search/production_graph.py 的 _build_index，改动 3 行
+    # search/production_graph.py 的 _build_index, 改动 3 行
     def _build_index(self, workspace: Path) -> WorkspaceIndex:
         if (
             self.settings.openai_embedding_api_key is None

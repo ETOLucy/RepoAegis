@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     def complete_sandbox_runner_configuration(self) -> Settings:
         if self.sandbox_runner_url is not None and self.sandbox_runner_token is None:
             raise ValueError("sandbox runner URL requires a matching token")
+        if self.openai_api_key is None: 
+            raise ValueError("OPENAI_API_KEY is required")
+        if self.openai_embedding_api_key is None:
+            raise ValueError("OPENAI_EMBEDDING_API_KEY is required")
         return self
 
     @property
