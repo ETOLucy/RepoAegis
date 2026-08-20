@@ -29,10 +29,7 @@ SCENARIOS: tuple[tuple[float, float], ...] = (
 
 def power_table(*, power: float = 0.80, alpha: float = 0.05) -> str:
     """Render the plan section 1.1 power table as a markdown string."""
-    header = (
-        "| p1 | p2 | ?? | Cohen's h | "
-        f"?? n?power={power:.2f}, alpha={alpha:.2f}? |"
-    )
+    header = f"| p1 | p2 | ?? | Cohen's h | ?? n?power={power:.2f}, alpha={alpha:.2f}? |"
     rows = ["|---|---|---|---|---|"]
     for p1, p2 in SCENARIOS:
         h = cohens_h(p1, p2)
@@ -52,9 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--p1", type=float, help="baseline pass rate in [0, 1]")
     parser.add_argument("--p2", type=float, help="candidate pass rate in [0, 1]")
-    parser.add_argument(
-        "--power", type=float, default=0.80, help="target power (default: 0.80)"
-    )
+    parser.add_argument("--power", type=float, default=0.80, help="target power (default: 0.80)")
     args = parser.parse_args(argv)
 
     if args.p1 is None and args.p2 is None:

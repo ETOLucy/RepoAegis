@@ -310,9 +310,7 @@ class SqlTaskQueue:
                 session.rollback()
                 raise LeaseConflict("queue lease is stale")
             session.commit()
-        return lease.model_copy(
-            update={"lease_id": new_lease_id, "lease_expires_at": new_expiry}
-        )
+        return lease.model_copy(update={"lease_id": new_lease_id, "lease_expires_at": new_expiry})
 
     async def ack(self, lease: QueueLease) -> None:
         await asyncio.to_thread(self._ack, lease)

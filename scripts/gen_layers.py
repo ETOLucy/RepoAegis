@@ -61,9 +61,7 @@ def _read_records(path: Path) -> list[dict[str, Any]]:
             try:
                 row = json.loads(line)
             except json.JSONDecodeError as exc:
-                raise ValueError(
-                    f"invalid JSON on line {line_number} of {path}: {exc}"
-                ) from exc
+                raise ValueError(f"invalid JSON on line {line_number} of {path}: {exc}") from exc
             if not isinstance(row, dict):
                 raise ValueError(f"line {line_number} of {path} is not a JSON object")
             if not row.get("instance_id"):
@@ -138,9 +136,7 @@ def _bucketize(
             if layer is None:
                 ratio = _ratio_of(row)
                 layer = (
-                    _classify_by_ratio(ratio)
-                    if ratio is not None
-                    else repo_layers[_repo_of(row)]
+                    _classify_by_ratio(ratio) if ratio is not None else repo_layers[_repo_of(row)]
                 )
             buckets[layer].append(dict(row))
         return buckets, "difficulty"
@@ -148,11 +144,7 @@ def _bucketize(
     if has_ratio:
         for row in records:
             ratio = _ratio_of(row)
-            layer = (
-                _classify_by_ratio(ratio)
-                if ratio is not None
-                else repo_layers[_repo_of(row)]
-            )
+            layer = _classify_by_ratio(ratio) if ratio is not None else repo_layers[_repo_of(row)]
             buckets[layer].append(dict(row))
         return buckets, "ratio"
 

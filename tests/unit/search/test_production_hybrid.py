@@ -14,15 +14,20 @@ def _fake_vector(text: str, dim: int = 8) -> tuple[float, ...]:
     digest = hashlib.sha256(text.encode()).digest()
     values = [float(byte / 255.0) for byte in digest[:dim]]
     return tuple(values)
+
+
 class FakeEmbeddingPort:
     def __init__(self) -> None:
         self.calls = 0
+
     async def embed(self, texts: list[str]) -> EmbeddingBatch:
         self.calls += 1
         return EmbeddingBatch(
             vectors=tuple(_fake_vector(text) for text in texts),
             input_tokens=sum(len(text.split()) for text in texts),
         )
+
+
 def _make_repo(tmp_path: Path) -> Path:
     src = tmp_path / "src"
     src.mkdir(parents=True)
@@ -35,6 +40,8 @@ def _make_repo(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return tmp_path
+
+
 def _query(text: str, *, top_k: int = 5) -> SearchQuery:
     return SearchQuery(
         tenant_id="tenant-a",
@@ -43,6 +50,8 @@ def _query(text: str, *, top_k: int = 5) -> SearchQuery:
         text=text,
         top_k=top_k,
     )
+
+
 @pytest.mark.asyncio
 async def test_hybrid_index_runs_with_fake_embeddings(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
@@ -51,12 +60,16 @@ async def test_hybrid_index_runs_with_fake_embeddings(tmp_path: Path) -> None:
     hits = await index.search(_query("load_config", top_k=5))
     assert hits, "hybrid index should return hits"
     assert embeddings.calls >= 1, "embedding provider should have been called"
+
+
 @pytest.mark.asyncio
 async def test_hybrid_index_falls_back_without_embeddings(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
     index = WorkspaceIndex(repo)  # no embeddings -> S1 BM25+Symbol only
     hits = await index.search(_query("load_config", top_k=5))
     assert hits
+
+
 @pytest.mark.asyncio
 async def test_hybrid_index_deduplicates_locations(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)

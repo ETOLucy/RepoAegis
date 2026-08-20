@@ -11,8 +11,7 @@ from repo_maintenance_agent.security.scanner import (
 def test_scanner_detects_secret_and_personal_absolute_path(tmp_path: Path) -> None:
     source = tmp_path / "bad.txt"
     source.write_text(
-        "OPENAI_API_KEY=" + "sk-" + "a" * 32 + "\n"
-        "workspace=C:\\Users\\alice\\private-project\n",
+        "OPENAI_API_KEY=" + "sk-" + "a" * 32 + "\nworkspace=C:\\Users\\alice\\private-project\n",
         encoding="utf-8",
     )
 

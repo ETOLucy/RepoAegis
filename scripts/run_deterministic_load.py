@@ -104,9 +104,7 @@ async def run_load_scenario(
         pending = session.scalar(select(func.count()).select_from(QueueRow)) or 0
         dead_letter = (
             session.scalar(
-                select(func.count())
-                .select_from(QueueRow)
-                .where(QueueRow.dead_lettered.is_(True))
+                select(func.count()).select_from(QueueRow).where(QueueRow.dead_lettered.is_(True))
             )
             or 0
         )

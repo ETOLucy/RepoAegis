@@ -32,4 +32,3 @@ class SearchRouter:
         if _EXACT.search(text):
             return frozenset({QueryKind.LEXICAL, QueryKind.BM25})
         return frozenset({QueryKind.BM25, QueryKind.VECTOR})
-

@@ -62,10 +62,7 @@ def test_dark_social_preview_keeps_repo_prefix_and_seed_visible() -> None:
 
 def _opaque_component_count(*, pixels: bytearray, width: int, height: int) -> int:
     opaque = {
-        (x, y)
-        for y in range(height)
-        for x in range(width)
-        if pixels[(y * width + x) * 4 + 3] > 0
+        (x, y) for y in range(height) for x in range(width) if pixels[(y * width + x) * 4 + 3] > 0
     }
     components = 0
     while opaque:

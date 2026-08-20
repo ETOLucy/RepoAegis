@@ -94,6 +94,8 @@ SMALL_SEED = curved_polygon(
         ((44, 191), (57, 181), (76, 181)),
     ],
 )
+
+
 @dataclass
 class Canvas:
     width: int

@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from langgraph.types import interrupt
 from pydantic import ValidationError
 
+from repo_maintenance_agent.agents.localizer import Localizer
 from repo_maintenance_agent.agents.patches import render_patch
 from repo_maintenance_agent.agents.query_rewriter import rewrite_queries_with_model
 from repo_maintenance_agent.agents.schemas import (
@@ -35,7 +36,7 @@ from repo_maintenance_agent.domain.ports import ArtifactStore
 from repo_maintenance_agent.graph.builder import AgentNodes
 from repo_maintenance_agent.graph.state import GraphState
 from repo_maintenance_agent.policies.risk import deterministic_risk, higher_risk
-from repo_maintenance_agent.agents.localizer import Localizer
+
 
 class Gateway(Protocol):
     async def execute(self, call: ToolCall, state: RepoTaskState) -> ToolResult: ...
@@ -89,9 +90,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             if isinstance(raw_hints, list):
                 hints = [str(hint) for hint in raw_hints if str(hint).strip()]
         rewrite_input = (
-            issue_text
-            if not hints
-            else f"{issue_text}\nSearch hints: {'; '.join(hints)}"
+            issue_text if not hints else f"{issue_text}\nSearch hints: {'; '.join(hints)}"
         )
         plan = await rewrite_queries_with_model(
             runtime.model,
@@ -286,9 +285,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                         "research_evidence": [
                             item.model_dump(mode="json") for item in task.evidence
                         ],
-                        "development_feedback": task.repo_profile.get(
-                            "development_feedback"
-                        ),
+                        "development_feedback": task.repo_profile.get("development_feedback"),
                         "controlled_context": controlled_context,
                         "remaining_tool_calls": (
                             runtime.max_context_tool_calls - context_tool_calls
@@ -545,9 +542,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
         if not tool_result.success:
             raise ToolExecutionError("verification tool failed")
         result = VerificationResult.model_validate(tool_result.output.get("verification"))
-        updated = task.transition(TaskStatus.VERIFYING).model_copy(
-            update={"verification": result}
-        )
+        updated = task.transition(TaskStatus.VERIFYING).model_copy(update={"verification": result})
         return {"task": updated, "trace": ["verification"]}
 
     async def review(state: GraphState) -> dict[str, Any]:
@@ -606,9 +601,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                     "risk_level": review_risk,
                     "diff": diff,
                     "changed_source": changed_source,
-                    "development_feedback": task.repo_profile.get(
-                        "development_feedback"
-                    ),
+                    "development_feedback": task.repo_profile.get("development_feedback"),
                     "verification": (
                         task.verification.model_dump(mode="json") if task.verification else None
                     ),
@@ -641,11 +634,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             schema=PullRequestDraft,
         )
         branch = task.repo_profile.get("workspace_branch")
-        if (
-            not isinstance(branch, str)
-            or output.head != branch
-            or output.base != task.base_branch
-        ):
+        if not isinstance(branch, str) or output.head != branch or output.base != task.base_branch:
             raise ToolExecutionError("pull request branches do not match the task workspace")
         commit = await runtime.gateway.execute(
             ToolCall(
@@ -729,6 +718,7 @@ def _hit_locator(path: str, line_start: int | None, line_end: int | None) -> str
         return path
     return f"{path}:{line_start}-{line_end or line_start}"
 
+
 def _dedupe_hits(hits: list[SearchHit]) -> list[SearchHit]:
     """Collapse hits at the same (path, line_start) across multiple queries."""
     best: dict[tuple[str, int | None], SearchHit] = {}
@@ -741,6 +731,7 @@ def _dedupe_hits(hits: list[SearchHit]) -> list[SearchHit]:
         best.values(),
         key=lambda hit: (-hit.score, hit.path, hit.line_start or 0),
     )
+
 
 def _patch_retry_feedback(
     error: ToolExecutionError,
@@ -785,10 +776,7 @@ def _patch_retry_feedback(
         return feedback
     message = f"{feedback}. nearest source excerpt for {best_path}:\n{best_excerpt}"
     if previous_diff:
-        message += (
-            "\n\nYour previous patch (which failed to apply) was:\n"
-            + previous_diff[-4_000:]
-        )
+        message += "\n\nYour previous patch (which failed to apply) was:\n" + previous_diff[-4_000:]
     return message
 
 
@@ -821,5 +809,3 @@ def _commit_sha(result: ToolResult) -> str:
     if not isinstance(value, str) or len(value) not in {40, 64}:
         raise ToolExecutionError("git commit returned an invalid commit SHA")
     return value
-
-

@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
 from typing import Protocol
+
 from repo_maintenance_agent.domain.errors import ToolExecutionError
 from repo_maintenance_agent.domain.models import (
     ErrorKind,
@@ -13,8 +15,12 @@ from repo_maintenance_agent.sandbox.docker import SandboxSpec
 from repo_maintenance_agent.sandbox.failure_parser import parse_failures
 from repo_maintenance_agent.sandbox.profiles import EnvironmentProfiler, Language
 from repo_maintenance_agent.tools.process import ProcessResult
+
+
 class SandboxExecutor(Protocol):
     async def execute(self, spec: SandboxSpec) -> ProcessResult: ...
+
+
 class SandboxVerifier:
     def __init__(
         self,
@@ -32,8 +38,10 @@ class SandboxVerifier:
         self._image_digests = dict(image_digests)
         self._redactor = redactor or Redactor()
         self._summary_limit = summary_limit
+
     async def verify(self, task: RepoTaskState) -> VerificationResult:
         return await self.verify_task(task.task_id)
+
     async def verify_task(self, task_id: str) -> VerificationResult:
         profile = self._profiler.inspect(self._workspace)
         image = self._image_digests.get(profile.image_key)
@@ -128,11 +136,16 @@ class SandboxVerifier:
             commands=tuple(rendered),
             summary=f"{len(profile.setup_commands)} setup and {len(commands)} checks passed",
         )
+
     def _safe_summary(self, value: str) -> str:
         redacted = self._redactor.redact({"message": value})
         return str(redacted["message"])[-self._summary_limit :]
+
+
 def _setup_needs_network(command: tuple[str, ...]) -> bool:
     return any(token in {"pip", "npm", "mvn", "gradle", "go", "cargo"} for token in command)
+
+
 def _runtime_command(
     language: Language,
     command: tuple[str, ...],

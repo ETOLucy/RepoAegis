@@ -8,7 +8,6 @@ from pathlib import Path
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
 from repo_maintenance_agent.domain.ports import SearchPort
 from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
-from repo_maintenance_agent.search.history import GitHistorySearch
 from repo_maintenance_agent.search.index import (
     BM25Search,
     CodeChunk,
@@ -17,17 +16,21 @@ from repo_maintenance_agent.search.index import (
     VectorSearch,
     ingest_workspace,
 )
+from repo_maintenance_agent.search.reranker import LLMReranker
 from repo_maintenance_agent.search.router import QueryKind
 from repo_maintenance_agent.search.service import HybridSearchService
-from repo_maintenance_agent.search.reranker import LLMReranker
 
 _MAX_CACHED_COMMITS = 3
+
+
 @dataclass(frozen=True, slots=True)
 class _IndexBundle:
     chunks: tuple[CodeChunk, ...]
     bm25: BM25Search
     symbol: SymbolSearch
     vector: VectorSearch | None
+
+
 class WorkspaceIndex:
     """Production-ready code index over a workspace checkout.
     S1 (default): BM25 + Symbol — both already implemented in search/index.py,
@@ -44,6 +47,7 @@ class WorkspaceIndex:
     front, so it constructs the index without them and scoping is enforced by
     the per-query fields inside ``ingest_workspace``.
     """
+
     def __init__(
         self,
         workspace: Path,
@@ -64,6 +68,7 @@ class WorkspaceIndex:
         self._reranker = reranker
         self._bundles: OrderedDict[str, _IndexBundle] = OrderedDict()
         self._lock = asyncio.Lock()
+
     async def search(self, query: SearchQuery) -> list[SearchHit]:
         bundle = await self._bundle_for(query)
         retrievers: dict[QueryKind, SearchPort] = {
@@ -81,6 +86,7 @@ class WorkspaceIndex:
         if self._reranker is not None:
             fused = await self._reranker.rerank(query, fused)
         return _dedupe_by_location(fused, limit=query.top_k)
+
     async def _bundle_for(self, query: SearchQuery) -> _IndexBundle:
         if self._tenant_id is not None and query.tenant_id != self._tenant_id:
             raise ValueError("search scope does not match the indexed workspace")
@@ -101,9 +107,7 @@ class WorkspaceIndex:
                 bm25=BM25Search(chunks),
                 symbol=SymbolSearch(chunks),
                 vector=(
-                    VectorSearch(chunks, self._embeddings)
-                    if self._embeddings is not None
-                    else None
+                    VectorSearch(chunks, self._embeddings) if self._embeddings is not None else None
                 ),
             )
             self._bundles[query.commit_sha] = bundle
@@ -111,6 +115,8 @@ class WorkspaceIndex:
             while len(self._bundles) > _MAX_CACHED_COMMITS:
                 self._bundles.popitem(last=False)
             return bundle
+
+
 def _dedupe_by_location(hits: list[SearchHit], *, limit: int) -> list[SearchHit]:
     """Collapse hits that point at the same (path, line_start) location.
     Symbol chunks and line chunks are separate index entries with different

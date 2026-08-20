@@ -23,9 +23,7 @@ _AGENT_PERMISSIONS: dict[str, frozenset[ToolPermission]] = {
             ToolPermission.SANDBOX_EXECUTE,
         }
     ),
-    "verification": frozenset(
-        {ToolPermission.REPO_READ, ToolPermission.SANDBOX_EXECUTE}
-    ),
+    "verification": frozenset({ToolPermission.REPO_READ, ToolPermission.SANDBOX_EXECUTE}),
     "review": frozenset({ToolPermission.REPO_READ}),
     "pr": frozenset(
         {
@@ -78,16 +76,15 @@ class PermissionPolicy:
             ):
                 raise AuthorizationDenied("matching human approval is required")
 
-        if (
-            call.permission in {ToolPermission.SANDBOX_WRITE, ToolPermission.SANDBOX_EXECUTE}
-            and state.status
-            not in {
-                TaskStatus.CODING,
-                TaskStatus.VERIFYING,
-                TaskStatus.REVIEWING,
-            }
-        ):
-                raise AuthorizationDenied("task stage does not allow sandbox mutation")
+        if call.permission in {
+            ToolPermission.SANDBOX_WRITE,
+            ToolPermission.SANDBOX_EXECUTE,
+        } and state.status not in {
+            TaskStatus.CODING,
+            TaskStatus.VERIFYING,
+            TaskStatus.REVIEWING,
+        }:
+            raise AuthorizationDenied("task stage does not allow sandbox mutation")
 
         self._validate_paths(call.arguments, workspace_root.resolve())
 

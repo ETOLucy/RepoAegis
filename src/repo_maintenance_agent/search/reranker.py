@@ -5,10 +5,15 @@ ranking that replaces the RRF order for the final top-k. Falls back to the
 fused order when the model call fails (retrieval must not break because a
 rank call did), and fails fast at construction when credentials are missing.
 """
+
 from __future__ import annotations
+
 from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
+
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
+
 _RERANK_SYSTEM = (
     "You are a code-search relevance reranker. Given a search query and a list "
     "of candidate code locations, return the candidates ordered by relevance to "
@@ -17,9 +22,13 @@ _RERANK_SYSTEM = (
     "Return the JSON object for the requested schema: "
     '{"ranked_ids": ["hit_id_1", "hit_id_2", ...]} including every candidate id exactly once.'
 )
+
+
 class _RankedIds(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     ranked_ids: list[str] = Field(min_length=1)
+
+
 class LLMReranker:
     """Structured-output reranker over fused search hits.
     Args:
@@ -27,6 +36,7 @@ class LLMReranker:
         candidate_pool: how many fused hits to re-rank (default 20).
         final_k: how many hits to return after re-ranking (default 10).
     """
+
     def __init__(
         self,
         *,
@@ -41,6 +51,7 @@ class LLMReranker:
         self._model = model
         self._candidate_pool = candidate_pool
         self._final_k = final_k
+
     async def rerank(self, query: SearchQuery, hits: list[SearchHit]) -> list[SearchHit]:
         """Return the best ``final_k`` hits by LLM relevance order.
         Falls back to the fused order (truncated) on any model failure so the
@@ -65,9 +76,7 @@ class LLMReranker:
         try:
             output = await self._model.structured(
                 system=_RERANK_SYSTEM,
-                input_text=__import__("json").dumps(
-                    payload, sort_keys=True, ensure_ascii=False
-                ),
+                input_text=__import__("json").dumps(payload, sort_keys=True, ensure_ascii=False),
                 schema=_RankedIds,
                 max_attempts=2,
             )

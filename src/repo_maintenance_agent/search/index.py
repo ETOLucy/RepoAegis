@@ -77,14 +77,10 @@ def ingest_workspace(
             continue
         lines = content.splitlines()
         relative_text = relative.as_posix()
-        chunks.extend(
-            _line_chunks(lines, tenant_id, repo_id, commit_sha, relative_text)
-        )
+        chunks.extend(_line_chunks(lines, tenant_id, repo_id, commit_sha, relative_text))
         if path.suffix.lower() == ".py":
             chunks.extend(
-                _python_symbol_chunks(
-                    content, lines, tenant_id, repo_id, commit_sha, relative_text
-                )
+                _python_symbol_chunks(content, lines, tenant_id, repo_id, commit_sha, relative_text)
             )
     return tuple(chunks)
 
@@ -104,9 +100,7 @@ class BM25Search:
         if not terms:
             return []
         average_length = sum(len(tokens) for tokens in tokenized) / len(tokenized)
-        document_frequency = {
-            term: sum(term in tokens for tokens in tokenized) for term in terms
-        }
+        document_frequency = {term: sum(term in tokens for tokens in tokenized) for term in terms}
         scored: list[tuple[float, CodeChunk]] = []
         for chunk, tokens in zip(candidates, tokenized, strict=True):
             frequencies = Counter(tokens)
@@ -133,8 +127,15 @@ class SymbolSearch:
 
     async def search(self, query: SearchQuery) -> list[SearchHit]:
         query_tokens = set(_tokens(query.text)) - {
-            "callers", "callee", "callees", "definition", "implements", "inherits",
-            "reference", "references", "symbol",
+            "callers",
+            "callee",
+            "callees",
+            "definition",
+            "implements",
+            "inherits",
+            "reference",
+            "references",
+            "symbol",
         }
         scored: list[tuple[float, CodeChunk]] = []
         for chunk in _scoped_chunks(self._chunks, query):
@@ -177,8 +178,7 @@ class VectorSearch:
             raise ValueError("embedding provider returned the wrong query vector count")
         query_vector = query_batch.vectors[0]
         scored = [
-            (_cosine(query_vector, self._vectors[chunk.chunk_id]), chunk)
-            for chunk in candidates
+            (_cosine(query_vector, self._vectors[chunk.chunk_id]), chunk) for chunk in candidates
         ]
         scored = [item for item in scored if item[0] > 0]
         scored.sort(key=lambda item: (-item[0], item[1].path, item[1].line_start))
@@ -207,9 +207,7 @@ def _line_chunks(
         selected = lines[offset : offset + _CHUNK_LINES]
         if not selected:
             continue
-        chunks.append(
-            _chunk(tenant_id, repo_id, commit_sha, path, selected, offset + 1, None)
-        )
+        chunks.append(_chunk(tenant_id, repo_id, commit_sha, path, selected, offset + 1, None))
         if offset + _CHUNK_LINES >= len(lines):
             break
     return chunks

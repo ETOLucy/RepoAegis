@@ -102,9 +102,7 @@ class Worker:
             return WorkerOutcome.IDLE
         lease_state = _LeaseState(lease)
         stop_heartbeat = asyncio.Event()
-        heartbeat = asyncio.create_task(
-            self._renew_lease(lease_state, stop_heartbeat)
-        )
+        heartbeat = asyncio.create_task(self._renew_lease(lease_state, stop_heartbeat))
         try:
             task = await self._repository.get(lease.tenant_id, lease.task_id)
             result = await self._executor.execute(task)
@@ -131,11 +129,7 @@ class Worker:
                 )
             except LeaseConflict:
                 return WorkerOutcome.LEASE_LOST
-            return (
-                WorkerOutcome.RETRY_SCHEDULED
-                if retrying
-                else WorkerOutcome.DEAD_LETTERED
-            )
+            return WorkerOutcome.RETRY_SCHEDULED if retrying else WorkerOutcome.DEAD_LETTERED
         if result.status is TaskStatus.NEEDS_APPROVAL:
             return WorkerOutcome.AWAITING_APPROVAL
         return WorkerOutcome.COMPLETED

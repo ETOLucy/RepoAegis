@@ -26,9 +26,7 @@ def test_public_swebench_evidence_token_total_matches_categories() -> None:
     evidence = json.loads(EVIDENCE.read_text(encoding="utf-8"))
     usage = evidence["generation"]["usage"]
     expected = (
-        usage["cache_hit_input_tokens"]
-        + usage["cache_miss_input_tokens"]
-        + usage["output_tokens"]
+        usage["cache_hit_input_tokens"] + usage["cache_miss_input_tokens"] + usage["output_tokens"]
     )
 
     assert expected == usage["total_tokens"] == 387775

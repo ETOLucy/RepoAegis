@@ -63,7 +63,6 @@ async def test_gateway_rejects_empty_parsed_response() -> None:
         await gateway.structured(system="system", input_text="input", schema=Answer)
 
 
-
 def test_from_settings_passes_base_url_and_model(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -92,6 +91,7 @@ def test_from_settings_passes_base_url_and_model(monkeypatch) -> None:
     assert gateway._model == "deepseek-chat"
     assert gateway._api_style == "chat-json"
 
+
 @pytest.mark.asyncio
 async def test_gateway_retries_once_on_invalid_structured_output() -> None:
     from pydantic import ValidationError
@@ -114,12 +114,11 @@ async def test_gateway_retries_once_on_invalid_structured_output() -> None:
 
     gateway = OpenAIModelGateway(client=FlakyClient(), model="gpt-test-model")
 
-    result = await gateway.structured(
-        system="system", input_text="input", schema=Answer
-    )
+    result = await gateway.structured(system="system", input_text="input", schema=Answer)
 
     assert result == Answer(summary="retried")
     assert gateway._client.responses.calls == 2
+
 
 @pytest.mark.asyncio
 async def test_gateway_retry_includes_validation_feedback() -> None:
@@ -299,9 +298,7 @@ async def test_gateway_chat_json_mode_uses_deepseek_compatible_contract() -> Non
             self.arguments = kwargs
             return SimpleNamespace(
                 choices=[
-                    SimpleNamespace(
-                        message=SimpleNamespace(content='{"summary":"chat-json"}')
-                    )
+                    SimpleNamespace(message=SimpleNamespace(content='{"summary":"chat-json"}'))
                 ],
                 usage=SimpleNamespace(
                     prompt_tokens=100,

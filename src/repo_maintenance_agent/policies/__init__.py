@@ -1,2 +1,1 @@
 """Authorization and privacy policies."""
-

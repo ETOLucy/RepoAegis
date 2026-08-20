@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import difflib
 import re  # 新增
@@ -158,7 +158,7 @@ def _approx_positions(content: str, needle: str) -> list[int]:
             ).ratio()
             if end_ratio >= 0.6:
                 # Build approximate window
-                window = "".join(c_lines[cand_start:cand_start + len(n_lines)])
+                window = "".join(c_lines[cand_start : cand_start + len(n_lines)])
                 ratio = difflib.SequenceMatcher(None, needle, window).ratio()
                 if ratio >= 0.6:
                     start_char = sum(len(line) for line in c_lines[:cand_start])
@@ -239,7 +239,7 @@ def _fuzzy_positions(content: str, needle: str) -> list[int]:
     lo = max(0, best_line - 1)
     hi = min(len(content_lines) - window_len, best_line + 1)
     for start in range(lo, hi + 1):
-        window = "".join(content_lines[start:start + window_len])
+        window = "".join(content_lines[start : start + window_len])
         ratio = difflib.SequenceMatcher(None, needle, window).ratio()
         if ratio >= 0.7:
             start_char = sum(len(line) for line in content_lines[:start])
@@ -276,9 +276,3 @@ def _with_no_newline_markers(lines: Iterable[str]) -> list[str]:
         else:
             rendered.append(line)
     return rendered
-
-
-
-
-
-

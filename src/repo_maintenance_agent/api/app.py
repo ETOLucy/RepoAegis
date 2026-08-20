@@ -95,6 +95,7 @@ def create_app(
     allowed_hosts: tuple[str, ...] = ("localhost", "127.0.0.1", "testserver"),
 ) -> FastAPI:
     evaluation_runs = evaluation_repository or InMemoryEvaluationRepository()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         del app
@@ -132,9 +133,7 @@ def create_app(
         )
 
     @app.middleware("http")
-    async def request_context(
-        request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def request_context(request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = request.headers.get("X-Request-ID") or str(uuid4())
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
@@ -158,8 +157,6 @@ def create_app(
 
     principal_marker = Depends(principal_dependency)
     router = APIRouter(prefix="/v1", dependencies=[])
-
-
 
     @router.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
     async def create_task(

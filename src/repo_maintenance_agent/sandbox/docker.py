@@ -47,9 +47,7 @@ class DockerSandbox:
         network = "bridge" if spec.network_enabled else "none"
         security_options = ["--security-opt=no-new-privileges"]
         if self._seccomp_profile is not None:
-            security_options.append(
-                f"--security-opt=seccomp={self._seccomp_profile}"
-            )
+            security_options.append(f"--security-opt=seccomp={self._seccomp_profile}")
         return [
             "docker",
             "run",

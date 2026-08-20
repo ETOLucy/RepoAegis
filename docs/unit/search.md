@@ -109,9 +109,11 @@
 `search/router.py` 用三个正则决定本次查询走哪些通道：
 
 ```python
-_SYMBOL  = re.compile(r"\b(callers?|callees?|references?|definition|implements?|inherits?|symbol)\b")
+_SYMBOL = re.compile(r"\b(callers?|callees?|references?|definition|implements?|inherits?|symbol)\b")
 _HISTORY = re.compile(r"\b(why|history|commit|changed|introduced|blame)\b")
-_EXACT   = re.compile(r"(Traceback|Exception|Error:|[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*|[\"\'`][^\"\'`]{3,}[\"\'`])")
+_EXACT = re.compile(
+    r"(Traceback|Exception|Error:|[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*|[\"\'`][^\"\'`]{3,}[\"\'`])"
+)
 ```
 
 路由规则（优先级从上到下）：

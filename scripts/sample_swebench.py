@@ -60,9 +60,7 @@ def _read_records(path: Path) -> list[dict[str, Any]]:
             try:
                 row = json.loads(line)
             except json.JSONDecodeError as exc:
-                raise ValueError(
-                    f"invalid JSON on line {line_number} of {path}: {exc}"
-                ) from exc
+                raise ValueError(f"invalid JSON on line {line_number} of {path}: {exc}") from exc
             if not isinstance(row, dict):
                 raise ValueError(f"line {line_number} of {path} is not a JSON object")
             records.append(row)
@@ -262,8 +260,7 @@ def sample_swebench(
                 pool = [
                     row
                     for row in group
-                    if _row_value(row, difficulty_col, _DEFAULT_DIFFICULTY)
-                    == difficulty
+                    if _row_value(row, difficulty_col, _DEFAULT_DIFFICULTY) == difficulty
                 ]
                 count = difficulty_quotas[difficulty]
                 if count:

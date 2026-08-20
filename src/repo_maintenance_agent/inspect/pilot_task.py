@@ -10,6 +10,7 @@ previously generated official-format prediction; in generate mode it calls the
 real RepoAegis pipeline. The scorer is Inspect's official swe_bench_scorer,
 which runs the real SWE-bench tests inside the Docker sandbox.
 """
+
 from __future__ import annotations
 
 import platform

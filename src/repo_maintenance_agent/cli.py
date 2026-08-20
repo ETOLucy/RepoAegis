@@ -143,8 +143,7 @@ def doctor() -> None:
     typer.echo(f"version: {__version__}")
     typer.echo(f"environment: {settings.environment}")
     typer.echo(
-        "openai_credentials_available: "
-        + ("true" if settings.has_openai_credentials else "false")
+        "openai_credentials_available: " + ("true" if settings.has_openai_credentials else "false")
     )
     typer.echo(f"openai_model: {settings.openai_model}")
 
@@ -243,9 +242,7 @@ def cancel(task_id: str) -> None:
 def evaluate(case_file: Path, result_file: Path) -> None:
     """Grade a deterministic evaluation result against a case definition."""
     case = EvaluationCase.model_validate_json(case_file.read_text(encoding="utf-8"))
-    observation = EvaluationObservation.model_validate_json(
-        result_file.read_text(encoding="utf-8")
-    )
+    observation = EvaluationObservation.model_validate_json(result_file.read_text(encoding="utf-8"))
     report = grade_case(
         case,
         retrieved_files=list(observation.retrieved_files),
@@ -279,9 +276,7 @@ def evaluate_suite(
     seed: int = typer.Option(0, min=0, help="Deterministic suite seed."),
 ) -> None:
     """Execute a versioned observation suite and enforce its release gates."""
-    suite = EvaluationSuite.model_validate_json(
-        suite_file.read_text(encoding="utf-8")
-    )
+    suite = EvaluationSuite.model_validate_json(suite_file.read_text(encoding="utf-8"))
     observations = TypeAdapter(dict[str, EvaluationObservation]).validate_json(
         observations_file.read_text(encoding="utf-8")
     )
@@ -353,9 +348,7 @@ def swebench_generate(
     evidence_directory: Annotated[
         Path, typer.Option(help="Private resumable generation evidence root.")
     ],
-    workspace_root: Annotated[
-        Path, typer.Option(help="Disposable benchmark checkout root.")
-    ],
+    workspace_root: Annotated[Path, typer.Option(help="Disposable benchmark checkout root.")],
     artifact_root: Annotated[Path, typer.Option(help="Private patch artifact root.")],
     arm: Literal["baseline", "candidate"] = typer.Option(...),
     role: Literal["calibration", "development", "frozen"] = typer.Option(...),
@@ -369,9 +362,7 @@ def swebench_generate(
     """Generate resumable predictions for one frozen SWE-bench protocol role."""
     protocol_value = _json_object(protocol, "SWE-bench protocol")
     protocol_digest = _validated_protocol_digest(protocol_value)
-    maximum_spend, maximum_call_cost_cny, rates = _protocol_cost_policy(
-        protocol_value
-    )
+    maximum_spend, maximum_call_cost_cny, rates = _protocol_cost_policy(protocol_value)
     model_api_style = _protocol_model_api_style(protocol_value)
     (
         max_iterations,
@@ -404,8 +395,7 @@ def swebench_generate(
 
     locators = _json_object(repository_locators, "repository locator map")
     invalid_locator = any(
-        not isinstance(key, str) or not isinstance(value, str)
-        for key, value in locators.items()
+        not isinstance(key, str) or not isinstance(value, str) for key, value in locators.items()
     )
     if invalid_locator:
         raise typer.BadParameter("repository locators must map strings to strings")
@@ -489,16 +479,12 @@ def _json_object(path: Path, label: str) -> dict[str, Any]:
 
 def _validated_protocol_digest(protocol: dict[str, Any]) -> str:
     claimed = protocol.get("protocol_digest")
-    if (
-        not isinstance(claimed, str)
-        or not claimed.startswith("sha256:")
-        or len(claimed) != 71
-    ):
+    if not isinstance(claimed, str) or not claimed.startswith("sha256:") or len(claimed) != 71:
         raise typer.BadParameter("protocol digest is invalid")
     body = {key: value for key, value in protocol.items() if key != "protocol_digest"}
-    canonical = json.dumps(
-        body, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
+    canonical = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
     expected = "sha256:" + hashlib.sha256(canonical).hexdigest()
     if claimed != expected:
         raise typer.BadParameter("protocol digest does not match its body")
@@ -541,9 +527,7 @@ def _read_development_feedback(
             raise typer.BadParameter("development feedback task IDs must be unique")
         feedback_by_id[feedback.instance_id] = feedback
     if set(feedback_by_id) != set(selected_ids):
-        raise typer.BadParameter(
-            "development feedback must exactly match the selected tasks"
-        )
+        raise typer.BadParameter("development feedback must exactly match the selected tasks")
     return feedback_by_id
 
 
@@ -573,9 +557,7 @@ def _protocol_cost_policy(
     maximum_spend = _decimal(protocol.get("maximum_spend_cny"), "maximum spend")
     if maximum_spend > Decimal("75"):
         raise typer.BadParameter("protocol maximum spend exceeds the CNY 75 hard limit")
-    maximum_call_cost = _decimal(
-        protocol.get("maximum_call_cost_cny"), "maximum call cost"
-    )
+    maximum_call_cost = _decimal(protocol.get("maximum_call_cost_cny"), "maximum call cost")
     raw_rates = protocol.get("cost_rates_cny_per_million")
     if not isinstance(raw_rates, dict):
         raise typer.BadParameter("protocol cost rates are required")
@@ -586,9 +568,7 @@ def _protocol_cost_policy(
         cache_miss_input_cny_per_million=_nonnegative_decimal(
             raw_rates.get("cache_miss_input"), "cache-miss input rate"
         ),
-        output_cny_per_million=_nonnegative_decimal(
-            raw_rates.get("output"), "output rate"
-        ),
+        output_cny_per_million=_nonnegative_decimal(raw_rates.get("output"), "output rate"),
     )
     return maximum_spend, maximum_call_cost, rates
 
@@ -636,9 +616,7 @@ def _protocol_arm_configuration(
                 f"SWE-bench {arm} {field} must be between {minimum} and {maximum}"
             )
         normalized[field] = value
-    canonical = json.dumps(
-        normalized, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
+    canonical = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")
     expected_digest = "sha256:" + hashlib.sha256(canonical).hexdigest()
     if arm_value.get("generation_config_digest") != expected_digest:
         raise typer.BadParameter(f"SWE-bench {arm} generation config digest is invalid")

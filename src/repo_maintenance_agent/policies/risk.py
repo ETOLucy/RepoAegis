@@ -5,9 +5,18 @@ from pathlib import PurePosixPath
 from repo_maintenance_agent.domain.models import RiskLevel, ToolPermission
 
 _DEPENDENCY_FILES = {
-    "cargo.lock", "cargo.toml", "go.mod", "go.sum", "package-lock.json",
-    "package.json", "pnpm-lock.yaml", "poetry.lock", "pyproject.toml",
-    "requirements.txt", "uv.lock", "yarn.lock",
+    "cargo.lock",
+    "cargo.toml",
+    "go.mod",
+    "go.sum",
+    "package-lock.json",
+    "package.json",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "pyproject.toml",
+    "requirements.txt",
+    "uv.lock",
+    "yarn.lock",
 }
 _CI_PREFIXES = (".github/workflows/", ".circleci/", ".gitlab/")
 _CI_FILES = {".gitlab-ci.yml", "azure-pipelines.yml", "jenkinsfile"}

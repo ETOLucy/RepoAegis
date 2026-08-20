@@ -71,9 +71,7 @@ async def test_symbol_index_returns_definition_and_honors_allowed_paths(tmp_path
     chunks = ingest_workspace(
         tmp_path, tenant_id="tenant-a", repo_id="owner/repo", commit_sha="a" * 40
     )
-    scoped = query("definition validate_token").model_copy(
-        update={"allowed_paths": ("auth.py",)}
-    )
+    scoped = query("definition validate_token").model_copy(update={"allowed_paths": ("auth.py",)})
 
     hits = await SymbolSearch(chunks).search(scoped)
 
@@ -97,9 +95,7 @@ async def test_vector_index_uses_batch_embeddings_and_cosine_similarity(tmp_path
         tmp_path, tenant_id="tenant-a", repo_id="owner/repo", commit_sha="a" * 40
     )
 
-    hits = await VectorSearch(chunks, MeaningEmbedding()).search(
-        query("credential handling")
-    )
+    hits = await VectorSearch(chunks, MeaningEmbedding()).search(query("credential handling"))
 
     assert hits[0].path == "auth.py"
     assert hits[0].source == "vector"

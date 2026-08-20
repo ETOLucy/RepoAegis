@@ -79,9 +79,7 @@ async def test_sql_evaluation_repository_round_trip_and_tenant_isolation() -> No
 async def test_sql_evaluation_repository_rejects_stale_update() -> None:
     repository = _repository()
     original = await repository.create(_run())
-    running = original.model_copy(
-        update={"status": EvaluationRunStatus.RUNNING, "version": 1}
-    )
+    running = original.model_copy(update={"status": EvaluationRunStatus.RUNNING, "version": 1})
     await repository.save(running, expected_version=0)
 
     with pytest.raises(ConcurrentUpdate):

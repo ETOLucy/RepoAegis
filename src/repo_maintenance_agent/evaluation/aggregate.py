@@ -20,9 +20,7 @@ def aggregate_results(
     results: tuple[EvaluationCaseResult, ...],
 ) -> EvaluationAggregate:
     reports = [result.report for result in results if result.report is not None]
-    observations = [
-        result.observation for result in results if result.observation is not None
-    ]
+    observations = [result.observation for result in results if result.observation is not None]
     case_count = len(results)
     latencies = sorted(report.wall_clock_ms for report in reports)
     total_calls = sum(item.total_tool_calls for item in observations)
@@ -55,8 +53,7 @@ def aggregate_results(
         input_tokens=sum(report.input_tokens for report in reports),
         output_tokens=sum(report.output_tokens for report in reports),
         terminal_failure_count=sum(
-            FailureCategory.is_terminal(result.failure_category)
-            for result in results
+            FailureCategory.is_terminal(result.failure_category) for result in results
         ),
     )
 
@@ -73,10 +70,7 @@ def compare_aggregates(
     resolution_ci_upper: float | None = None
     resolution_significant: bool | None = None
     resolution_direction: str | None = None
-    if (
-        resolution_scores_candidate is not None
-        and resolution_scores_baseline is not None
-    ):
+    if resolution_scores_candidate is not None and resolution_scores_baseline is not None:
         decision = paired_bootstrap_delta(
             resolution_scores_baseline,
             resolution_scores_candidate,
@@ -90,13 +84,11 @@ def compare_aggregates(
         baseline_run_id=baseline_run_id,
         resolution_rate_delta=candidate.resolution_rate - baseline.resolution_rate,
         relevant_file_recall_at_10_delta=(
-            candidate.relevant_file_recall_at_10
-            - baseline.relevant_file_recall_at_10
+            candidate.relevant_file_recall_at_10 - baseline.relevant_file_recall_at_10
         ),
         mrr_delta=candidate.mrr - baseline.mrr,
         unauthorized_tool_call_rate_delta=(
-            candidate.unauthorized_tool_call_rate
-            - baseline.unauthorized_tool_call_rate
+            candidate.unauthorized_tool_call_rate - baseline.unauthorized_tool_call_rate
         ),
         regression_rate_delta=candidate.regression_rate - baseline.regression_rate,
         latency_p50_ms_delta=candidate.latency_p50_ms - baseline.latency_p50_ms,
@@ -121,9 +113,7 @@ def evaluate_gates(
     comparison: EvaluationComparison | None,
     privacy_findings: int = 0,
 ) -> GateDecision:
-    resolution_delta = (
-        comparison.resolution_rate_delta if comparison is not None else None
-    )
+    resolution_delta = comparison.resolution_rate_delta if comparison is not None else None
     checks = (
         GateCheck(
             name="resolution_rate",
@@ -135,8 +125,7 @@ def evaluate_gates(
         GateCheck(
             name="resolution_regression",
             passed=(
-                resolution_delta is None
-                or resolution_delta >= -gates.resolution_regression_max
+                resolution_delta is None or resolution_delta >= -gates.resolution_regression_max
             ),
             actual=resolution_delta,
             threshold=-gates.resolution_regression_max,
@@ -148,10 +137,7 @@ def evaluate_gates(
         ),
         GateCheck(
             name="unauthorized_tool_calls",
-            passed=(
-                aggregate.unauthorized_tool_call_rate
-                <= gates.unauthorized_tool_call_rate_max
-            ),
+            passed=(aggregate.unauthorized_tool_call_rate <= gates.unauthorized_tool_call_rate_max),
             actual=aggregate.unauthorized_tool_call_rate,
             threshold=gates.unauthorized_tool_call_rate_max,
             detail="Denied tool calls divided by total tool calls.",
@@ -175,14 +161,12 @@ def evaluate_gates(
             passed=_resolution_significance_gate_passed(comparison),
             actual=(
                 comparison.resolution_rate_delta
-                if comparison is not None
-                and comparison.resolution_direction == "regression"
+                if comparison is not None and comparison.resolution_direction == "regression"
                 else None
             ),
             threshold=(
                 0
-                if comparison is not None
-                and comparison.resolution_direction == "regression"
+                if comparison is not None and comparison.resolution_direction == "regression"
                 else None
             ),
             detail=_resolution_significance_gate_detail(comparison),

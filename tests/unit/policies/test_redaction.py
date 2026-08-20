@@ -20,4 +20,3 @@ def test_redactor_does_not_hide_non_secret_token_metrics() -> None:
     redacted = Redactor().redact({"token_count": 42, "duration_ms": 12})
 
     assert redacted == {"token_count": 42, "duration_ms": 12}
-

@@ -204,10 +204,7 @@ def _results(
     scores_b: list[float],
 ) -> tuple[list[EvalResult], list[EvalResult]]:
     def make(scores: list[float]) -> list[EvalResult]:
-        return [
-            EvalResult(case_id=f"c{index}", score=score)
-            for index, score in enumerate(scores)
-        ]
+        return [EvalResult(case_id=f"c{index}", score=score) for index, score in enumerate(scores)]
 
     return make(scores_a), make(scores_b)
 

@@ -94,6 +94,7 @@ def _git(cwd: Path, *arguments: str) -> str:
     )
     return result.stdout.strip()
 
+
 @pytest.mark.asyncio
 async def test_workspace_prepare_cleans_leftover_files_through_gateway(
     tmp_path: Path,

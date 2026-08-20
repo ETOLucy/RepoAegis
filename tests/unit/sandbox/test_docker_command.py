@@ -12,9 +12,7 @@ class RecordingRunner:
         self.extra_env = None
         self.timeout_seconds = None
 
-    async def run(
-        self, arguments, *, cwd, extra_env=None, check=True, timeout_seconds=None
-    ):
+    async def run(self, arguments, *, cwd, extra_env=None, check=True, timeout_seconds=None):
         del cwd, check
         self.arguments = arguments
         self.extra_env = extra_env

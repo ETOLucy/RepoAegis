@@ -47,10 +47,7 @@ DEFAULT_BASELINES: dict[str, float] = {
     "SWE-agent (GPT-4o)": 0.18,  # official run 2025
 }
 
-DISCLAIMER = (
-    "???? baseline ?????????????????????????"
-    "???????????????????"
-)
+DISCLAIMER = "???? baseline ????????????????????????????????????????????"
 
 
 def load_result(json_path: Path) -> dict[str, Any]:
@@ -101,8 +98,7 @@ def load_baselines(csv_path: Path) -> dict[str, float]:
                 rate = float(raw_rate)
             except ValueError as exc:
                 raise ValueError(
-                    f"row {row_number} of {csv_path}: invalid resolution_rate "
-                    f"{raw_rate!r}"
+                    f"row {row_number} of {csv_path}: invalid resolution_rate {raw_rate!r}"
                 ) from exc
             baselines[name] = rate
     return baselines
@@ -147,8 +143,7 @@ def parser() -> argparse.ArgumentParser:
         "--baselines",
         type=Path,
         default=None,
-        help="optional CSV (name,resolution_rate[,note]); defaults to built-in "
-        "references",
+        help="optional CSV (name,resolution_rate[,note]); defaults to built-in references",
     )
     argument_parser.add_argument(
         "--output",
@@ -162,9 +157,7 @@ def parser() -> argparse.ArgumentParser:
 def main(arguments: Sequence[str] | None = None) -> int:
     args = parser().parse_args(arguments)
     result_rate = extract_resolution_rate(load_result(args.result))
-    baselines = (
-        load_baselines(args.baselines) if args.baselines else dict(DEFAULT_BASELINES)
-    )
+    baselines = load_baselines(args.baselines) if args.baselines else dict(DEFAULT_BASELINES)
     markdown = render_baseline_table(result_rate, baselines)
     if args.output is None:
         sys.stdout.write(markdown)

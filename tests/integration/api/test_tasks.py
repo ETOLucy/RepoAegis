@@ -136,15 +136,13 @@ async def test_approval_decision_validates_plan_and_advances_state(
     expected_status: TaskStatus,
 ) -> None:
     repository = InMemoryTaskRepository()
-    waiting = (
-        await repository.create(
-            _task_state()
-            .transition(TaskStatus.INTAKE)
-            .transition(TaskStatus.RESEARCH)
-            .transition(TaskStatus.PLANNING)
-            .transition(TaskStatus.NEEDS_APPROVAL)
-            .model_copy(update={"plan_hash": "b" * 64})
-        )
+    waiting = await repository.create(
+        _task_state()
+        .transition(TaskStatus.INTAKE)
+        .transition(TaskStatus.RESEARCH)
+        .transition(TaskStatus.PLANNING)
+        .transition(TaskStatus.NEEDS_APPROVAL)
+        .model_copy(update={"plan_hash": "b" * 64})
     )
     body = {
         "approved": approved,
@@ -258,9 +256,7 @@ async def test_task_response_exposes_reviewable_approval_envelope() -> None:
                 "declared_files": (".github/workflows/ci.yml",),
                 "allowed_tools": (ToolPermission.REPO_READ, ToolPermission.GIT_WRITE),
                 "verification_plan": ("pytest tests/test_ci.py",),
-                "evidence": (
-                    Evidence(source="bm25", locator="ci.py:1-8", summary="CI helper"),
-                ),
+                "evidence": (Evidence(source="bm25", locator="ci.py:1-8", summary="CI helper"),),
             }
         )
     )

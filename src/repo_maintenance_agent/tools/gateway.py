@@ -82,4 +82,3 @@ class ToolGateway:
     @staticmethod
     def _operation_key(call: ToolCall) -> str:
         return f"{call.tenant_id}:{call.task_id}:{call.name}:{call.idempotency_key}"
-

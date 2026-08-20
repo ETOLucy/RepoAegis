@@ -29,6 +29,8 @@ def test_resolution_requires_hidden_tests_and_no_regression() -> None:
 def test_unauthorized_call_rate_handles_empty_trace() -> None:
     assert unauthorized_call_rate(total_calls=0, denied_calls=0) == 0.0
     assert unauthorized_call_rate(total_calls=10, denied_calls=2) == 0.2
+
+
 def test_partial_resolution_score_returns_zero_on_regression() -> None:
     assert (
         partial_resolution_score(
@@ -106,4 +108,3 @@ def test_ndcg_at_k_truncates_to_k() -> None:
     score = ndcg_at_k(retrieved=["a", "b", "c", "d"], gold=["a", "b", "c"], k=2)
 
     assert score == pytest.approx(1.0)
-

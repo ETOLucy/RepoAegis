@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from decimal import Decimal
@@ -20,14 +20,7 @@ from repo_maintenance_agent.evaluation.swebench_runner import SWEbenchTask
 from repo_maintenance_agent.models.usage import UsageLedger, UsageRates
 
 _PROTOCOL_DIGEST = "sha256:" + "a" * 64
-_PATCH = (
-    "diff --git a/app.py b/app.py\n"
-    "--- a/app.py\n"
-    "+++ b/app.py\n"
-    "@@ -1 +1 @@\n"
-    "-old\n"
-    "+new\n"
-)
+_PATCH = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1 @@\n-old\n+new\n"
 _INSTANCE_ID = "django__django-11099"
 _REPO = "django/django"
 
@@ -39,9 +32,7 @@ class FakeRuntime:
         del instance_id
         return None
 
-    async def execute(
-        self, task: SWEbenchTask, ledger: UsageLedger
-    ) -> SWEbenchPrediction:
+    async def execute(self, task: SWEbenchTask, ledger: UsageLedger) -> SWEbenchPrediction:
         del ledger
         return SWEbenchPrediction(
             instance_id=task.instance_id,
@@ -51,9 +42,7 @@ class FakeRuntime:
 
 
 class RecordingRuntime(FakeRuntime):
-    async def execute(
-        self, task: SWEbenchTask, ledger: UsageLedger
-    ) -> SWEbenchPrediction:
+    async def execute(self, task: SWEbenchTask, ledger: UsageLedger) -> SWEbenchPrediction:
         reservation = ledger.reserve(Decimal("0.001"))
         ledger.record(
             ModelUsage(input_cache_miss_tokens=100, output_tokens=50),

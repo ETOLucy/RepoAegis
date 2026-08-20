@@ -1,4 +1,4 @@
-﻿# ruff: noqa: RUF001, RUF002
+# ruff: noqa: RUF001, RUF002
 """Benchmark-agnostic evaluation adapters.
 
 RepoAegis 的评测框架是 benchmark-agnostic 的：Evaluation Harness 只依赖
@@ -124,9 +124,7 @@ class BenchmarkAdapter(ABC):
     ) -> tuple[BenchmarkPrediction, ...]:
         """回填权威判分结果（官方 scorer / Inspect 的 0/1 结论）。"""
         return tuple(
-            prediction.model_copy(
-                update={"resolved": resolved_by_instance[prediction.instance_id]}
-            )
+            prediction.model_copy(update={"resolved": resolved_by_instance[prediction.instance_id]})
             if prediction.instance_id in resolved_by_instance
             else prediction
             for prediction in predictions
@@ -186,8 +184,7 @@ class SwebenchAdapter(BenchmarkAdapter):
                 native = SWEbenchTask.model_validate_json(line)
             except ValueError as error:
                 raise ValueError(
-                    f"invalid SWE-bench task at line {line_number} "
-                    f"in {self._tasks_path}"
+                    f"invalid SWE-bench task at line {line_number} in {self._tasks_path}"
                 ) from error
             tasks.append(self._from_swebench_task(native))
         if not tasks:

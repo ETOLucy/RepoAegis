@@ -4,6 +4,7 @@ No network access is required: the Verified test split is read from the local
 HuggingFace cache and exported as JSONL with all metadata the Inspect
 swe_bench scorer needs.
 """
+
 from __future__ import annotations
 
 import argparse

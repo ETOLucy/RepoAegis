@@ -13,9 +13,7 @@ from repo_maintenance_agent.policies.risk import deterministic_risk
         ("config/secrets.yaml", "sensitive configuration"),
     ],
 )
-def test_sensitive_paths_are_deterministically_high_risk(
-    path: str, reason_prefix: str
-) -> None:
+def test_sensitive_paths_are_deterministically_high_risk(path: str, reason_prefix: str) -> None:
     risk, reasons = deterministic_risk((path,), (ToolPermission.REPO_READ,))
 
     assert risk is RiskLevel.HIGH

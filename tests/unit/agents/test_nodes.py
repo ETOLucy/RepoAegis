@@ -442,9 +442,7 @@ async def test_review_receives_real_diff_changed_source_and_acceptance_criteria(
     assert result["task"].review["decision"] == "approve"
     assert [call.name for call, _ in gateway.calls] == ["git_diff", "read_files"]
     assert model.review_input["diff"].startswith("diff --git")
-    assert model.review_input["changed_source"] == {
-        "src/config.py": "def load(): return default"
-    }
+    assert model.review_input["changed_source"] == {"src/config.py": "def load(): return default"}
     assert model.review_input["acceptance_criteria"] == ["uses defaults"]
 
 
@@ -644,9 +642,7 @@ async def test_coding_retries_patch_with_feedback(tmp_path: Path) -> None:
     assert len(str(model.patch_inputs[1]["patch_feedback"])) < 1_000
     proposal_artifacts = sorted(tmp_path.rglob("*-proposed-edits.json"))
     assert len(proposal_artifacts) == 2
-    saved_proposals = [
-        json.loads(path.read_text(encoding="utf-8")) for path in proposal_artifacts
-    ]
+    saved_proposals = [json.loads(path.read_text(encoding="utf-8")) for path in proposal_artifacts]
     assert {value["edits"][0]["old_text"] for value in saved_proposals} == {
         "missing implementation",
         "def load(): return default",
@@ -695,7 +691,6 @@ async def test_coding_receives_review_feedback_on_next_iteration(tmp_path: Path)
     }
 
 
-
 class LowRiskUndeclaredModel(FakeModel):
     async def structured(self, *, system, input_text, schema, max_attempts: int = 3):
         if schema is PatchProposal:
@@ -703,9 +698,7 @@ class LowRiskUndeclaredModel(FakeModel):
                 summary="Add a regression test.",
                 edits=[
                     PatchEdit(
-                        path="tests/test_demo.py", 
-                        old_text=None, 
-                        new_text="def test_x(): pass\n"
+                        path="tests/test_demo.py", old_text=None, new_text="def test_x(): pass\n"
                     )
                 ],
             )

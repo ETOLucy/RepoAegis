@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
 from repo_maintenance_agent.agents.nodes import AgentRuntime, build_agent_nodes
 from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.domain.ports import ArtifactStore, ToolAdapter
@@ -28,11 +30,14 @@ from repo_maintenance_agent.tools.git import GitToolAdapter
 from repo_maintenance_agent.tools.github import GitHubCliAdapter, LocalDraftRecordAdapter
 from repo_maintenance_agent.tools.patch import GitPatchApplier
 from repo_maintenance_agent.tools.process import ProcessRunner
+
+
 @dataclass(frozen=True, slots=True)
 class ProductionGraphFactory:
     settings: Settings
     artifacts: ArtifactStore
     operations: OperationLog
+
     def __call__(self, workspace: Path) -> Any:
         model = OpenAIModelGateway.from_settings(self.settings)
         gateway = ToolGateway(
@@ -50,13 +55,11 @@ class ProductionGraphFactory:
                 )
             )
         )
+
     def _build_index(
         self, workspace: Path, *, model: OpenAIModelGateway | None = None
     ) -> WorkspaceIndex:
-        if (
-            self.settings.openai_embedding_api_key is None
-            and self.settings.openai_api_key is None
-        ):
+        if self.settings.openai_embedding_api_key is None and self.settings.openai_api_key is None:
             raise RuntimeError(
                 "OPENAI_API_KEY or OPENAI_EMBEDDING_API_KEY is required "
                 "to build the hybrid index (Vector channel). Set at least one key."
@@ -66,11 +69,10 @@ class ProductionGraphFactory:
             workspace,
             embeddings=embeddings,
             lexical=default_lexical_search(workspace),
-            history=GitHistorySearch(
-                workspace, ProcessRunner(allowed_executables={"git"})
-            ),
+            history=GitHistorySearch(workspace, ProcessRunner(allowed_executables={"git"})),
             reranker=LLMReranker(model=model, candidate_pool=20, final_k=10),
         )
+
     def build_adapters(self, workspace: Path) -> dict[str, ToolAdapter]:
         model = OpenAIModelGateway.from_settings(self.settings)
         patch_runner = ProcessRunner(allowed_executables={"git"})

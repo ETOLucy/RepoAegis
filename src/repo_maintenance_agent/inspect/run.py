@@ -15,6 +15,7 @@ Usage (from the RepoAegis repo root, with the RepoAegis venv python):
     --replay /path/to/predictions.jsonl \
     --sample-id django__django-13568 --allow-internet
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,9 +38,7 @@ _PACKAGE_ROOT = Path(__file__).resolve().parent
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--dataset", type=Path, default=_PACKAGE_ROOT / "data" / "verified.jsonl"
-    )
+    parser.add_argument("--dataset", type=Path, default=_PACKAGE_ROOT / "data" / "verified.jsonl")
     parser.add_argument(
         "--replay",
         type=Path,

@@ -121,14 +121,9 @@ def pairwise_deltas(
     statistical gating layer.
     """
     if baseline_model not in runs:
-        raise ValueError(
-            f"baseline model {baseline_model!r} is not a key of runs"
-        )
+        raise ValueError(f"baseline model {baseline_model!r} is not a key of runs")
     baseline_resolution = _resolution(runs[baseline_model])
-    return {
-        model: _resolution(run) - baseline_resolution
-        for model, run in runs.items()
-    }
+    return {model: _resolution(run) - baseline_resolution for model, run in runs.items()}
 
 
 def _resolution(run: EvaluationRun) -> float:
@@ -137,25 +132,17 @@ def _resolution(run: EvaluationRun) -> float:
 
 def _summarize(model: str, run: EvaluationRun) -> ModelMatrixResult:
     aggregate = run.aggregate
-    reports = [
-        result.report for result in run.results if result.report is not None
-    ]
+    reports = [result.report for result in run.results if result.report is not None]
     return ModelMatrixResult(
         model=model,
-        resolution_rate=(
-            aggregate.resolution_rate if aggregate is not None else 0.0
-        ),
+        resolution_rate=(aggregate.resolution_rate if aggregate is not None else 0.0),
         mean_tests_passed_ratio=(
             aggregate.mean_tests_passed_ratio if aggregate is not None else 0.0
         ),
         mean_latency_ms=(
-            sum(report.wall_clock_ms for report in reports) / len(reports)
-            if reports
-            else 0.0
+            sum(report.wall_clock_ms for report in reports) / len(reports) if reports else 0.0
         ),
         total_tokens=(
-            aggregate.input_tokens + aggregate.output_tokens
-            if aggregate is not None
-            else 0
+            aggregate.input_tokens + aggregate.output_tokens if aggregate is not None else 0
         ),
     )

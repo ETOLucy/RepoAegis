@@ -102,7 +102,7 @@ class SearchAdapter:
                 top_k=top_k,
             )
         except Exception as e:
-            raise ValueError(f'SearchQuery construction failed: {e}') from e
+            raise ValueError(f"SearchQuery construction failed: {e}") from e
         hits = await self._search.search(query)
         return ToolResult(
             call_id=call.call_id,

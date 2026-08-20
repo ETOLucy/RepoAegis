@@ -51,4 +51,3 @@ async def test_process_runner_does_not_inherit_api_keys(
     )
 
     assert result.stdout.strip() == "missing"
-

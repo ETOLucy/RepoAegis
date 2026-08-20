@@ -193,11 +193,14 @@ async def test_sql_completion_persists_state_and_consumes_lease_atomically() -> 
 
     persisted = await repository.get("tenant-a", created.task_id)
     assert persisted.status is TaskStatus.INTAKE
-    assert await queue.claim(
-        "worker-2",
-        frozenset({"tenant-a"}),
-        now=now + timedelta(minutes=10),
-    ) is None
+    assert (
+        await queue.claim(
+            "worker-2",
+            frozenset({"tenant-a"}),
+            now=now + timedelta(minutes=10),
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio

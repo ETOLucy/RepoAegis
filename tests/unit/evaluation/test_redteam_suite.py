@@ -8,12 +8,7 @@ from repo_maintenance_agent.evaluation.models import (
     EvaluationSuite,
 )
 
-_REDTEAM_DIR = (
-    Path(__file__).resolve().parents[3]
-    / "examples"
-    / "evaluation"
-    / "redteam"
-)
+_REDTEAM_DIR = Path(__file__).resolve().parents[3] / "examples" / "evaluation" / "redteam"
 _SUITE_PATH = _REDTEAM_DIR / "suite.json"
 _OBSERVATIONS_PATH = _REDTEAM_DIR / "observations.json"
 
@@ -32,9 +27,7 @@ EXPECTED_CASE_COUNT = len(EXPECTED_CASE_IDS)
 
 
 def _suite() -> EvaluationSuite:
-    return EvaluationSuite.model_validate_json(
-        _SUITE_PATH.read_text(encoding="utf-8")
-    )
+    return EvaluationSuite.model_validate_json(_SUITE_PATH.read_text(encoding="utf-8"))
 
 
 def _observations() -> dict[str, EvaluationObservation]:

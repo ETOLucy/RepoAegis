@@ -87,8 +87,11 @@ def test_approval_envelope_hash_binds_every_reviewed_scope() -> None:
 
     assert len(digest) == 64
     assert envelope.model_copy(update={"target_commit": "b" * 40}).digest() != digest
-    assert envelope.model_copy(
-        update={"allowed_tools": (*envelope.allowed_tools, ToolPermission.GIT_WRITE)}
-    ).digest() != digest
+    assert (
+        envelope.model_copy(
+            update={"allowed_tools": (*envelope.allowed_tools, ToolPermission.GIT_WRITE)}
+        ).digest()
+        != digest
+    )
     assert envelope.model_copy(update={"declared_files": ("pyproject.toml",)}).digest() != digest
     assert envelope.model_copy(update={"verification_plan": ("ruff check .",)}).digest() != digest

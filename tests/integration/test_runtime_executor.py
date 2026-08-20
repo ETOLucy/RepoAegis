@@ -125,6 +125,7 @@ def _git(cwd: Path, *arguments: str) -> str:
     )
     return result.stdout.strip()
 
+
 @pytest.mark.asyncio
 async def test_executor_cleans_leftover_files_on_replayed_retry(
     tmp_path: Path,
@@ -167,9 +168,7 @@ async def test_executor_cleans_leftover_files_on_replayed_retry(
         if run_count > 1:
             assert not leftover.exists(), "retry must start from a clean tree"
         leftover.write_text("untracked", encoding="utf-8")
-        task = graph_state["task"].transition(TaskStatus.CODING).model_copy(
-            update={"iteration": 1}
-        )
+        task = graph_state["task"].transition(TaskStatus.CODING).model_copy(update={"iteration": 1})
         return {"task": task, "trace": ["coding"]}
 
     def graph_factory(workspace: Path):

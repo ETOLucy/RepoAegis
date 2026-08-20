@@ -26,4 +26,3 @@ class HybridSearchService:
             return []
         result_sets = await asyncio.gather(*(retriever.search(query) for retriever in selected))
         return reciprocal_rank_fusion(result_sets, limit=query.top_k)
-

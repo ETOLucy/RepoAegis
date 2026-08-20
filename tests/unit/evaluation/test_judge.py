@@ -83,9 +83,7 @@ async def test_judge_case_returns_first_score_and_consistency() -> None:
     assert score.judge_model == "fake-judge"
     assert score.judge_prompt_version == "prompt-v1"
 
-    expected_mean_std = (
-        pstdev([5, 3]) + pstdev([4, 2]) + pstdev([5, 5])
-    ) / 3
+    expected_mean_std = (pstdev([5, 3]) + pstdev([4, 2]) + pstdev([5, 5])) / 3
     assert consistency.rerun_count == 2
     assert math.isclose(consistency.mean_std, expected_mean_std, abs_tol=1e-9)
 

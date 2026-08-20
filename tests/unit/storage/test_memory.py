@@ -55,4 +55,3 @@ async def test_artifact_store_sanitizes_name_and_enforces_tenant(tmp_path: Path)
     assert not (tmp_path.parent / "patch.diff").exists()
     with pytest.raises(ResourceNotFound):
         await store.get("tenant-b", artifact_id)
-

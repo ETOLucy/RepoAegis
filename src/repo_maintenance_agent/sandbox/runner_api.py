@@ -59,9 +59,7 @@ def create_sandbox_runner_app(
         credentials: HTTPAuthorizationCredentials | None = bearer_dependency,
     ) -> None:
         supplied = credentials.credentials if credentials is not None else ""
-        if credentials is None or not hmac.compare_digest(
-            supplied, token.get_secret_value()
-        ):
+        if credentials is None or not hmac.compare_digest(supplied, token.get_secret_value()):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized")
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)

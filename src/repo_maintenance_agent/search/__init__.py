@@ -1,2 +1,1 @@
 """Hybrid repository retrieval."""
-

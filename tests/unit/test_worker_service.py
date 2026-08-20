@@ -22,9 +22,7 @@ async def test_worker_service_claims_executes_and_persists_sql_task(
 ) -> None:
     settings = Settings(
         environment="test",
-        database_url=SecretStr(
-            f"sqlite+pysqlite:///{(tmp_path / 'runtime.db').as_posix()}"
-        ),
+        database_url=SecretStr(f"sqlite+pysqlite:///{(tmp_path / 'runtime.db').as_posix()}"),
         artifact_root=str(tmp_path / "artifacts"),
         worker_id="worker-a",
         worker_tenant_ids=("tenant-a",),
@@ -51,9 +49,7 @@ async def test_worker_service_claims_executes_and_persists_sql_task(
 async def test_worker_loop_stops_while_queue_is_idle(tmp_path: Path) -> None:
     settings = Settings(
         environment="test",
-        database_url=SecretStr(
-            f"sqlite+pysqlite:///{(tmp_path / 'runtime.db').as_posix()}"
-        ),
+        database_url=SecretStr(f"sqlite+pysqlite:///{(tmp_path / 'runtime.db').as_posix()}"),
         artifact_root=str(tmp_path / "artifacts"),
         worker_id="worker-a",
         worker_tenant_ids=("tenant-a",),
@@ -62,9 +58,7 @@ async def test_worker_loop_stops_while_queue_is_idle(tmp_path: Path) -> None:
     runtime = build_runtime(settings, executor=IntakeExecutor())
     stop = asyncio.Event()
 
-    running = asyncio.create_task(
-        run_worker_forever(settings, runtime=runtime, stop=stop)
-    )
+    running = asyncio.create_task(run_worker_forever(settings, runtime=runtime, stop=stop))
     await asyncio.sleep(0)
     stop.set()
     await asyncio.wait_for(running, timeout=1)

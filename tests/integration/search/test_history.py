@@ -9,9 +9,7 @@ from repo_maintenance_agent.tools.process import ProcessRunner
 
 
 def git(repo: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["git", *args], cwd=repo, check=True, capture_output=True, text=True
-    )
+    result = subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
     return result.stdout.strip()
 
 
@@ -28,9 +26,7 @@ async def test_history_search_uses_pinned_commit_and_path_scope(tmp_path: Path) 
     git(tmp_path, "add", "unrelated.py")
     git(tmp_path, "commit", "-m", "add arithmetic helper")
 
-    search = GitHistorySearch(
-        tmp_path, ProcessRunner(allowed_executables={"git"})
-    )
+    search = GitHistorySearch(tmp_path, ProcessRunner(allowed_executables={"git"}))
     query = SearchQuery(
         tenant_id="tenant-a",
         repo_id="owner/repo",

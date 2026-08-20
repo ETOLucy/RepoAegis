@@ -30,4 +30,3 @@ class Redactor:
             redacted = _BEARER.sub(lambda match: f"{match.group(1)}{self.replacement}", value)
             return _OPENAI_KEY.sub(self.replacement, redacted)
         return value
-

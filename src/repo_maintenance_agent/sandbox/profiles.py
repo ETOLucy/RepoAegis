@@ -62,9 +62,7 @@ class EnvironmentProfiler:
         if (root / "package.json").exists():
             package = self._read_package(root / "package.json")
             language = (
-                Language.TYPESCRIPT
-                if (root / "tsconfig.json").exists()
-                else Language.JAVASCRIPT
+                Language.TYPESCRIPT if (root / "tsconfig.json").exists() else Language.JAVASCRIPT
             )
             scripts = package.get("scripts")
             has_test = isinstance(scripts, dict) and "test" in scripts

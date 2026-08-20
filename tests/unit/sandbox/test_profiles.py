@@ -25,4 +25,3 @@ def test_profiler_detects_typescript_repository(tmp_path: Path) -> None:
 
     assert profile.language is Language.TYPESCRIPT
     assert ("npm", "test", "--", "--run") in profile.test_commands
-

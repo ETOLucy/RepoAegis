@@ -28,9 +28,7 @@ class StaticTokenAuthenticator:
             for token, identity in token_to_tenant.items()
         }
 
-    def authenticate(
-        self, credentials: HTTPAuthorizationCredentials | None
-    ) -> Principal:
+    def authenticate(self, credentials: HTTPAuthorizationCredentials | None) -> Principal:
         if credentials is None or credentials.scheme.casefold() != "bearer":
             raise _unauthorized()
         candidate = self._digest(credentials.credentials)

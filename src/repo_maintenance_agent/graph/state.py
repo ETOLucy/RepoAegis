@@ -9,4 +9,3 @@ from repo_maintenance_agent.domain.models import RepoTaskState
 class GraphState(TypedDict):
     task: RepoTaskState
     trace: Annotated[list[str], operator.add]
-

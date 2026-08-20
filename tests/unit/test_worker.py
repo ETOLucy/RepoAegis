@@ -143,9 +143,7 @@ async def test_worker_parks_task_that_requires_human_approval() -> None:
     outcome = await worker.run_once()
 
     assert outcome is WorkerOutcome.AWAITING_APPROVAL
-    assert (
-        await repository.get("tenant-a", waiting.task_id)
-    ).status is TaskStatus.NEEDS_APPROVAL
+    assert (await repository.get("tenant-a", waiting.task_id)).status is TaskStatus.NEEDS_APPROVAL
 
 
 @pytest.mark.asyncio

@@ -24,9 +24,7 @@ class FakeRunner:
 
 @pytest.mark.asyncio
 async def test_issue_reader_uses_structured_json_and_brokered_token(tmp_path: Path) -> None:
-    runner = FakeRunner(
-        json.dumps({"number": 7, "title": "Bug", "body": "Details", "labels": []})
-    )
+    runner = FakeRunner(json.dumps({"number": 7, "title": "Bug", "body": "Details", "labels": []}))
     adapter = GitHubCliAdapter(runner, token=SecretStr("not-a-real-token"))
     call = ToolCall(
         task_id="task-1",
@@ -92,7 +90,5 @@ async def test_local_draft_adapter_persists_review_record_without_claiming_real_
     assert result.output["draft"] is True
     assert result.output["local_record"] is True
     assert "url" not in result.output
-    payload = json.loads(
-        (await artifacts.get("tenant-a", result.output["artifact_id"])).decode()
-    )
+    payload = json.loads((await artifacts.get("tenant-a", result.output["artifact_id"])).decode())
     assert payload["head"] == "repoaegis/task-key"

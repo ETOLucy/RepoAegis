@@ -8,18 +8,22 @@ _PATH_HINT = re.compile(
     r"\b([\w./-]+\.(?:py|ts|js|tsx|jsx|go|rs|java|md|toml|yml|yaml|json))\b",
     re.IGNORECASE,
 )
-_SYMBOL_HINT = re.compile(
-    r"\b([A-Z][A-Za-z0-9_]*)\b|(?<=\.)\b([a-z_][A-Za-z0-9_]*)\b"
-)
+_SYMBOL_HINT = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\b|(?<=\.)\b([a-z_][A-Za-z0-9_]*)\b")
+
+
 @dataclass(frozen=True, slots=True)
 class RewrittenQuery:
     text: str
     kind: str = "general"
     key_paths: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True, slots=True)
 class QueryRewritePlan:
     queries: tuple[RewrittenQuery, ...]
     raw: str = field(default="", compare=False)
+
+
 def rewrite_queries(issue_text: str, *, max_queries: int = 4) -> QueryRewritePlan:
     """Rule-based issue -> search queries splitter.
     Mirrors the CGM 'Rewriter' idea (issue -> multiple search queries) without
@@ -55,6 +59,6 @@ def rewrite_queries(issue_text: str, *, max_queries: int = 4) -> QueryRewritePla
         key = (item.text.casefold(), item.kind)
         if key in seen:
             continue
-        seen.add(key) # type: ignore
+        seen.add(key)  # type: ignore
         unique.append(item)
     return QueryRewritePlan(queries=tuple(unique[:max_queries]))

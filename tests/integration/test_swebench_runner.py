@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import json
@@ -111,9 +111,7 @@ class FailingUsageRuntime:
         del instance_id
         return "sha256:" + "b" * 64
 
-    async def execute(
-        self, task: SWEbenchTask, ledger: UsageLedger
-    ) -> object:
+    async def execute(self, task: SWEbenchTask, ledger: UsageLedger) -> object:
         del task
         reservation = ledger.reserve(Decimal("0.25"))
         ledger.record(
@@ -351,9 +349,7 @@ async def test_prediction_evidence_rejects_changed_development_feedback(
         development_feedback={task.instance_id: changed_feedback},
     )
 
-    with pytest.raises(
-        ValueError, match="saved SWE-bench evidence does not match this run"
-    ):
+    with pytest.raises(ValueError, match="saved SWE-bench evidence does not match this run"):
         await run_predictions(
             [task],
             runtime=resumed_runtime,
@@ -503,4 +499,3 @@ def _git(cwd: Path, *arguments: str) -> str:
         encoding="utf-8",
     )
     return result.stdout.strip()
-

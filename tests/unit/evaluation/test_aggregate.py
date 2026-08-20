@@ -135,6 +135,8 @@ def test_infrastructure_failure_blocks_release_and_report_is_deterministic() -> 
     assert "# Evaluation Report" in markdown
     assert "run-1" in markdown
     assert "FAIL" in markdown
+
+
 def test_aggregate_mean_tests_passed_ratio_averages_over_case_count() -> None:
     aggregate = aggregate_results(
         (
@@ -234,9 +236,7 @@ def test_gate_resolution_statistical_significance_blocks_regression() -> None:
 
     decision = evaluate_gates(aggregate, gates=ReleaseGates(), comparison=comparison)
     gate = next(
-        check
-        for check in decision.checks
-        if check.name == "resolution_statistical_significance"
+        check for check in decision.checks if check.name == "resolution_statistical_significance"
     )
 
     assert gate.passed is False
@@ -255,9 +255,7 @@ def test_gate_resolution_statistical_significance_flags_inconclusive() -> None:
 
     decision = evaluate_gates(aggregate, gates=ReleaseGates(), comparison=comparison)
     gate = next(
-        check
-        for check in decision.checks
-        if check.name == "resolution_statistical_significance"
+        check for check in decision.checks if check.name == "resolution_statistical_significance"
     )
 
     assert gate.passed is False
@@ -276,9 +274,7 @@ def test_gate_resolution_statistical_significance_passes_improvement() -> None:
 
     decision = evaluate_gates(aggregate, gates=ReleaseGates(), comparison=comparison)
     gate = next(
-        check
-        for check in decision.checks
-        if check.name == "resolution_statistical_significance"
+        check for check in decision.checks if check.name == "resolution_statistical_significance"
     )
 
     assert gate.passed is True
@@ -289,13 +285,12 @@ def test_gate_resolution_statistical_significance_passes_without_baseline() -> N
 
     decision = evaluate_gates(aggregate, gates=ReleaseGates(), comparison=None)
     gate = next(
-        check
-        for check in decision.checks
-        if check.name == "resolution_statistical_significance"
+        check for check in decision.checks if check.name == "resolution_statistical_significance"
     )
 
     assert gate.passed is True
     assert "baseline" in gate.detail.lower()
+
 
 def test_aggregate_mean_ndcg_at_10_averages_over_case_count() -> None:
     aggregate = aggregate_results(
@@ -313,4 +308,3 @@ def test_aggregate_mean_ndcg_at_10_averages_over_case_count() -> None:
     )
 
     assert aggregate.mean_ndcg_at_10 == pytest.approx(1.0 / 3)
-

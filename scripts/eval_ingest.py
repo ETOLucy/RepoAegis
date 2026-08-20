@@ -353,9 +353,7 @@ def _parse_zip_archive(path: Path) -> list[EvalResult]:
         if payload is None:
             return []
         score_name = _zip_entry_name(names, "score")
-        overrides = (
-            _parse_score_payload(_zip_member(zf, score_name)) if score_name else {}
-        )
+        overrides = _parse_score_payload(_zip_member(zf, score_name)) if score_name else {}
     return _merge_score_overrides(_parse_log_payload(payload), overrides)
 
 
@@ -445,9 +443,7 @@ def bootstrap_summary(
         seed=seed,
     )
     threshold = (
-        _default_minimum_effect(len(results_a))
-        if minimum_effect is None
-        else float(minimum_effect)
+        _default_minimum_effect(len(results_a)) if minimum_effect is None else float(minimum_effect)
     )
     direction = decision.direction
     if direction == "improvement" and abs(decision.mean_delta) < threshold:
@@ -465,10 +461,9 @@ def _collect_logs(root: Path) -> list[Path]:
         return [root]
     found: list[Path] = []
     for path in sorted(root.iterdir()):
-        if (
-            path.is_file()
-            and (path.suffix.lower() == ".eval" or path.name == "log.json")
-        ) or (path.is_dir() and (path / "log.json").exists()):
+        if (path.is_file() and (path.suffix.lower() == ".eval" or path.name == "log.json")) or (
+            path.is_dir() and (path / "log.json").exists()
+        ):
             found.append(path)
     return sorted(found, key=str)
 

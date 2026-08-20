@@ -235,4 +235,3 @@ class TaskCreate(StrictModel):
     commit_sha: str = Field(pattern=r"^[a-f0-9]{40,64}$")
     base_branch: str = Field(default="main", min_length=1, max_length=255)
     issue: IssueSpec
-

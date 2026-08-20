@@ -190,4 +190,3 @@ def _safe_branch(value: object) -> str:
     if branch.startswith("-") or ".." in branch or branch.endswith(".lock"):
         raise ValueError("branch contains unsafe Git syntax")
     return branch
-

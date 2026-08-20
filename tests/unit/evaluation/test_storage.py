@@ -63,12 +63,8 @@ async def test_in_memory_evaluation_repository_is_tenant_scoped_and_ordered() ->
 
 async def test_in_memory_evaluation_repository_uses_optimistic_versions() -> None:
     repository = InMemoryEvaluationRepository()
-    original = await repository.create(
-        _run("tenant-a", "run-1", datetime.now(UTC))
-    )
-    updated = original.model_copy(
-        update={"status": EvaluationRunStatus.RUNNING, "version": 1}
-    )
+    original = await repository.create(_run("tenant-a", "run-1", datetime.now(UTC)))
+    updated = original.model_copy(update={"status": EvaluationRunStatus.RUNNING, "version": 1})
 
     saved = await repository.save(updated, expected_version=0)
 

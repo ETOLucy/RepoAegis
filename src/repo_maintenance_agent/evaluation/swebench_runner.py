@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import json
@@ -96,9 +96,7 @@ class RuntimeExecutor(Protocol):
 class SWEbenchGenerationEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["swebench-generation-evidence/v1"] = (
-        "swebench-generation-evidence/v1"
-    )
+    schema_version: Literal["swebench-generation-evidence/v1"] = "swebench-generation-evidence/v1"
     protocol_digest: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
     arm: Literal["baseline", "candidate"]
     instance_id: str = Field(min_length=1, max_length=256)
@@ -107,9 +105,7 @@ class SWEbenchGenerationEvidence(BaseModel):
     prediction: SWEbenchPrediction
     usage: ModelUsage
     latency_ms: int = Field(ge=0)
-    development_feedback_digest: str | None = Field(
-        default=None, pattern=r"^sha256:[a-f0-9]{64}$"
-    )
+    development_feedback_digest: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
 
 
 class SWEbenchGenerationFailureEvidence(BaseModel):
@@ -127,9 +123,7 @@ class SWEbenchGenerationFailureEvidence(BaseModel):
     latency_ms: int = Field(ge=0)
     error_type: str = Field(min_length=1, max_length=256)
     error_summary: str = Field(min_length=1, max_length=2_000)
-    development_feedback_digest: str | None = Field(
-        default=None, pattern=r"^sha256:[a-f0-9]{64}$"
-    )
+    development_feedback_digest: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
 
 
 class RepoAegisPatchAgent:
@@ -263,9 +257,7 @@ class GitSWEbenchRuntime:
         feedback = self._development_feedback.get(instance_id)
         return feedback.digest() if feedback is not None else None
 
-    async def execute(
-        self, task: SWEbenchTask, ledger: UsageLedger
-    ) -> SWEbenchPrediction:
+    async def execute(self, task: SWEbenchTask, ledger: UsageLedger) -> SWEbenchPrediction:
         workspace = await self._materialize(task)
         await self._patch_agent.run(
             task,
@@ -395,9 +387,7 @@ async def run_predictions(
     evidence_directory.mkdir(parents=True, exist_ok=True)
     predictions: list[SWEbenchPrediction] = []
     for task in tasks:
-        development_feedback_digest = runtime.development_feedback_digest(
-            task.instance_id
-        )
+        development_feedback_digest = runtime.development_feedback_digest(task.instance_id)
         evidence_path = evidence_directory / (
             hashlib.sha256(task.instance_id.encode()).hexdigest() + ".json"
         )
@@ -473,9 +463,7 @@ def _approve_generation_scope(state: GraphState) -> GraphState:
         verification_plan=task.verification_plan,
     )
     plan_hash = envelope.digest()
-    narrowed = task.model_copy(
-        update={"allowed_tools": allowed_tools, "plan_hash": plan_hash}
-    )
+    narrowed = task.model_copy(update={"allowed_tools": allowed_tools, "plan_hash": plan_hash})
     decision = ApprovalDecision(
         approved=True,
         approver="swebench-protocol",
@@ -487,9 +475,7 @@ def _approve_generation_scope(state: GraphState) -> GraphState:
     if narrowed.status not in {TaskStatus.PLANNING, TaskStatus.NEEDS_APPROVAL}:
         raise RuntimeError("RepoAegis planning ended in an invalid generation state")
     return {
-        "task": narrowed.model_copy(update={"approval": decision}).transition(
-            TaskStatus.CODING
-        ),
+        "task": narrowed.model_copy(update={"approval": decision}).transition(TaskStatus.CODING),
         "trace": [*state.get("trace", []), "generation_approval"],
     }
 
@@ -529,9 +515,7 @@ def _defer_to_official_verifier(state: GraphState) -> GraphState:
 
 def _usage_difference(current: ModelUsage, previous: ModelUsage) -> ModelUsage:
     return ModelUsage(
-        input_cache_hit_tokens=(
-            current.input_cache_hit_tokens - previous.input_cache_hit_tokens
-        ),
+        input_cache_hit_tokens=(current.input_cache_hit_tokens - previous.input_cache_hit_tokens),
         input_cache_miss_tokens=(
             current.input_cache_miss_tokens - previous.input_cache_miss_tokens
         ),
@@ -573,9 +557,7 @@ def _next_failure_evidence_path(root: Path, instance_id: str) -> Path:
         attempt += 1
 
 
-_CREDENTIAL_PATTERN = re.compile(
-    r"(?i)\b(?:bearer\s+[A-Za-z0-9._~+/=-]+|sk-[A-Za-z0-9_-]+)\b"
-)
+_CREDENTIAL_PATTERN = re.compile(r"(?i)\b(?:bearer\s+[A-Za-z0-9._~+/=-]+|sk-[A-Za-z0-9_-]+)\b")
 
 
 def _safe_error_summary(error: Exception) -> str:
@@ -595,12 +577,8 @@ def _atomic_json(path: Path, evidence: BaseModel) -> None:
     os.replace(temporary, path)
 
 
-def _retry_readonly_removal(
-    function: Callable[..., Any], path: str, error: BaseException
-) -> None:
+def _retry_readonly_removal(function: Callable[..., Any], path: str, error: BaseException) -> None:
     if not isinstance(error, PermissionError):
         raise error
     os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
     function(path)
-
-

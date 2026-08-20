@@ -33,8 +33,7 @@ def _make_record(repo: str, difficulty: str, index: int) -> dict:
 
 def _fixture_records(count: int = 30) -> list[dict]:
     return [
-        _make_record(REPOS[index % 3], DIFFICULTIES[index % 3], index)
-        for index in range(count)
+        _make_record(REPOS[index % 3], DIFFICULTIES[index % 3], index) for index in range(count)
     ]
 
 
@@ -48,9 +47,7 @@ def _write_input(tmp_path: Path, records: list[dict]) -> Path:
 
 def _read_output(path: Path) -> list[dict]:
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
@@ -122,9 +119,7 @@ def test_target_size_beyond_input_warns_and_keeps_all(tmp_path, capsys):
     assert "target_size=40" in stderr
     rows = _read_output(output_path)
     assert len(rows) == 30
-    assert {row["instance_id"] for row in rows} == {
-        record["instance_id"] for record in records
-    }
+    assert {row["instance_id"] for row in rows} == {record["instance_id"] for record in records}
 
 
 def test_output_sorted_by_instance_id(tmp_path):

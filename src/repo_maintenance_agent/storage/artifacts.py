@@ -76,9 +76,7 @@ class SqlFileArtifactStore:
         safe_name = _sanitize_name(name)
         content_sha = hashlib.sha256(content).hexdigest()
         artifact_id = hashlib.sha256(
-            "\0".join(
-                (tenant_id, task_id, safe_name, media_type, content_sha)
-            ).encode()
+            "\0".join((tenant_id, task_id, safe_name, media_type, content_sha)).encode()
         ).hexdigest()
         tenant_key = hashlib.sha256(tenant_id.encode()).hexdigest()[:24]
         task_key = hashlib.sha256(task_id.encode()).hexdigest()[:24]
@@ -128,4 +126,3 @@ class SqlFileArtifactStore:
         if hashlib.sha256(content).hexdigest() != expected_sha:
             raise ResourceNotFound("artifact content integrity check failed")
         return content
-

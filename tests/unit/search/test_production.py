@@ -21,6 +21,8 @@ def _make_repo(tmp_path: Path) -> Path:
     )
     (tmp_path / "README.md").write_text("# Demo\nloads configuration defaults\n", encoding="utf-8")
     return tmp_path
+
+
 def _query(text: str, *, top_k: int = 5) -> SearchQuery:
     return SearchQuery(
         tenant_id="tenant-a",
@@ -29,6 +31,8 @@ def _query(text: str, *, top_k: int = 5) -> SearchQuery:
         text=text,
         top_k=top_k,
     )
+
+
 @pytest.mark.asyncio
 async def test_workspace_index_returns_symbol_and_bm25_hits(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
@@ -38,6 +42,8 @@ async def test_workspace_index_returns_symbol_and_bm25_hits(tmp_path: Path) -> N
     assert hits[0].path == "src/config.py"
     assert hits[0].source in {"symbol", "bm25", "bm25+symbol", "symbol+bm25"}
     assert hits[0].line_start is not None
+
+
 @pytest.mark.asyncio
 async def test_workspace_index_merges_symbol_and_bm25_without_duplicates(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
@@ -45,6 +51,8 @@ async def test_workspace_index_merges_symbol_and_bm25_without_duplicates(tmp_pat
     hits = await index.search(_query("RepoService search", top_k=5))
     paths = [(hit.path, hit.line_start) for hit in hits]
     assert len(paths) == len(set(paths)), "duplicate hit locations must be merged"
+
+
 @pytest.mark.asyncio
 async def test_workspace_index_respects_allowed_paths(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
@@ -53,6 +61,8 @@ async def test_workspace_index_respects_allowed_paths(tmp_path: Path) -> None:
     query = query.model_copy(update={"allowed_paths": ("src/config.py",)})
     hits = await index.search(query)
     assert hits and all(hit.path == "src/config.py" for hit in hits)
+
+
 @pytest.mark.asyncio
 async def test_workspace_index_caches_index_per_commit(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
@@ -61,6 +71,8 @@ async def test_workspace_index_caches_index_per_commit(tmp_path: Path) -> None:
     second = await index.search(_query("load_config"))
     assert first == second
     assert len(index._bundles) == 1
+
+
 @pytest.mark.asyncio
 async def test_workspace_index_uses_lexical_channel_when_provided(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)

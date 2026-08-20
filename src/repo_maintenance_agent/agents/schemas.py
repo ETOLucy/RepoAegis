@@ -127,6 +127,7 @@ class PatchProposal(AgentOutput):
         self.edits = kept
         return self
 
+
 class ReviewOutput(AgentOutput):
     decision: Literal["approve", "request_changes"]
     findings: list[str] = Field(default_factory=list, max_length=50)

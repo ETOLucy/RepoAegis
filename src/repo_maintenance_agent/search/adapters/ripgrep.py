@@ -8,6 +8,8 @@ from pathlib import Path
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
 
 _IGNORED_PARTS = frozenset({".git", ".venv", "node_modules", "dist", "build"})
+
+
 class RipgrepSearch:
     """Exact-substring channel backed by `rg` (ripgrep).
     Registered in the hybrid retriever map under QueryKind.LEXICAL so that
@@ -15,6 +17,7 @@ class RipgrepSearch:
     Ripgrep is a hard requirement: constructing without the binary raises so
     the misconfiguration surfaces at startup, not as silently empty results.
     """
+
     def __init__(self, workspace: Path) -> None:
         self._workspace = workspace.resolve()
         self._binary = shutil.which("rg")
@@ -24,6 +27,7 @@ class RipgrepSearch:
                 "install it (e.g. `apt-get install ripgrep` / `brew install ripgrep`) "
                 "or configure the pure-Python LocalLexicalSearch explicitly."
             )
+
     async def search(self, query: SearchQuery) -> list[SearchHit]:
         command = [
             self._binary,
@@ -51,6 +55,7 @@ class RipgrepSearch:
             command,
         )
         return self._parse(result, query)
+
     def _resolve_roots(self, allowed_paths: tuple[str, ...]) -> list[Path]:
         candidates = allowed_paths or (".",)
         roots: list[Path] = []
@@ -60,8 +65,10 @@ class RipgrepSearch:
                 raise ValueError("allowed path resolves outside workspace")
             roots.append(resolved)
         return roots
+
     def _run(self, command: list[str]) -> tuple[int, str]:
         import subprocess
+
         process = subprocess.run(  # noqa: S603 - resolved executable and fixed args
             command,
             cwd=self._workspace,
@@ -70,6 +77,7 @@ class RipgrepSearch:
             check=False,
         )
         return process.returncode, process.stdout
+
     def _parse(self, result: tuple[int, str], query: SearchQuery) -> list[SearchHit]:
         returncode, stdout = result
         if returncode not in (0, 1):  # 1 = no matches
@@ -103,11 +111,14 @@ class RipgrepSearch:
             if len(hits) >= query.top_k:
                 break
         return hits
+
     def _relativize(self, path: str) -> str:
         try:
             return Path(path).resolve().relative_to(self._workspace).as_posix()
         except ValueError:
             return Path(path).as_posix()
+
+
 def default_lexical_search(workspace: Path) -> RipgrepSearch:
     """Factory for the exact-substring channel; fails fast when rg is absent.
     Teams that cannot guarantee ripgrep on the runtime image should construct

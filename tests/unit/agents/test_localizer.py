@@ -1,17 +1,22 @@
 from __future__ import annotations
+
 import json
+
 import pytest
+
 from repo_maintenance_agent.agents.localizer import Localizer, LocalizerAction
 from repo_maintenance_agent.domain.models import (
     RepoTaskState,
     SearchHit,
-    ToolPermission,
     ToolResult,
 )
+
+
 class FakeLocalizerModel:
     def __init__(self, actions: list[str]) -> None:
         self.actions = list(actions)
         self.inputs: list[dict[str, object]] = []
+
     async def structured(self, *, system, input_text, schema, max_attempts: int = 3):
         self.inputs.append(json.loads(input_text))
         action = self.actions.pop(0)
@@ -21,6 +26,8 @@ class FakeLocalizerModel:
             files=["src/config.py"] if action == "read" else [],
             rationale="follow evidence",
         )
+
+
 class FakeGateway:
     async def execute(self, call, state):
         if call.name == "search_code":
@@ -53,6 +60,8 @@ class FakeGateway:
                 output={"blame": "abc123 (Author 2026-01-01) def load_config()"},
             )
         raise AssertionError(f"unexpected tool: {call.name}")
+
+
 def _task() -> RepoTaskState:
     return RepoTaskState(
         tenant_id="tenant-a",
@@ -61,6 +70,8 @@ def _task() -> RepoTaskState:
         base_branch="main",
         issue={"title": "Fix config", "body": "load_config crashes"},
     )
+
+
 @pytest.mark.asyncio
 async def test_localizer_finishes_after_bounded_rounds() -> None:
     model = FakeLocalizerModel(["search", "finish"])
@@ -70,6 +81,8 @@ async def test_localizer_finishes_after_bounded_rounds() -> None:
     assert outcome.queries == ["load_config"]
     assert outcome.evidence
     assert outcome.evidence[0].path == "src/config.py"
+
+
 @pytest.mark.asyncio
 async def test_localizer_reads_and_blames() -> None:
     model = FakeLocalizerModel(["read", "blame", "finish"])
@@ -77,6 +90,8 @@ async def test_localizer_reads_and_blames() -> None:
     outcome = await localizer.localize(issue_text="fix config", task=_task())
     assert any(hit.source == "localizer-read" for hit in outcome.evidence)
     assert any(hit.source == "localizer-blame" for hit in outcome.evidence)
+
+
 @pytest.mark.asyncio
 async def test_localizer_stops_at_max_rounds_without_finish() -> None:
     model = FakeLocalizerModel(["search", "search", "search", "search"])

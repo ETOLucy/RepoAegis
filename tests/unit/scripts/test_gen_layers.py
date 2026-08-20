@@ -105,10 +105,7 @@ def test_ratio_based_stratification_when_difficulty_absent(tmp_path) -> None:
 
 
 def test_repo_proxy_warns_when_difficulty_and_ratio_absent(tmp_path, capsys) -> None:
-    records = [
-        _record(REPOS[index % 3], "unknown", index)
-        for index in range(9)
-    ]
+    records = [_record(REPOS[index % 3], "unknown", index) for index in range(9)]
     for record in records:
         record.pop("difficulty")
     input_path = _write_input(tmp_path, records)

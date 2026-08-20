@@ -92,9 +92,7 @@ class OpenAIModelGateway:
                     _record_usage(self._usage_ledger, reservation, response)
                     content = response.choices[0].message.content
                     if not isinstance(content, str) or not content.strip():
-                        raise RuntimeError(
-                            "model did not return the requested structured output"
-                        )
+                        raise RuntimeError("model did not return the requested structured output")
                     return schema.model_validate_json(content)
 
                 response = await self._client.responses.parse(

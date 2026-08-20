@@ -1,8 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Literal
+
 from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="REPO_AGENT_",
@@ -38,8 +42,7 @@ class Settings(BaseSettings):
     sandbox_image_digests: dict[str, str] = Field(
         default_factory=lambda: {
             "python-3.12": (
-                "python@sha256:"
-                "496a05315a012e6f51a465cd89b8d1cae53d01b6c8cf098291a4094706f3e0d4"
+                "python@sha256:496a05315a012e6f51a465cd89b8d1cae53d01b6c8cf098291a4094706f3e0d4"
             )
         }
     )
@@ -72,6 +75,7 @@ class Settings(BaseSettings):
     worker_id: str = Field(default="repoaegis-worker", min_length=1, max_length=128)
     worker_tenant_ids: tuple[str, ...] = ()
     worker_poll_seconds: float = Field(default=1.0, gt=0, le=60)
+
     @model_validator(mode="after")
     def complete_sandbox_runner_configuration(self) -> Settings:
         if self.sandbox_runner_url is not None and self.sandbox_runner_token is None:
@@ -84,6 +88,7 @@ class Settings(BaseSettings):
         #   - search/embeddings.py falls back to the chat key when embedding
         #     key is absent, and raises when neither is configured
         return self
+
     @property
     def has_openai_credentials(self) -> bool:
         return self.openai_api_key is not None

@@ -24,10 +24,8 @@ class UsageRates(BaseModel):
 
     def price(self, usage: ModelUsage) -> Decimal:
         return (
-            Decimal(usage.input_cache_hit_tokens)
-            * self.cache_hit_input_cny_per_million
-            + Decimal(usage.input_cache_miss_tokens)
-            * self.cache_miss_input_cny_per_million
+            Decimal(usage.input_cache_hit_tokens) * self.cache_hit_input_cny_per_million
+            + Decimal(usage.input_cache_miss_tokens) * self.cache_miss_input_cny_per_million
             + Decimal(usage.output_tokens) * self.output_cny_per_million
         ) / _MILLION
 

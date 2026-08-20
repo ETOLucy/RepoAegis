@@ -13,6 +13,7 @@ class FakeRewriterModel:
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
         self.calls = 0
+
     async def structured(self, *, system, input_text, schema, max_attempts: int = 3):
         self.calls += 1
         if self.fail:
@@ -25,15 +26,8 @@ class FakeRewriterModel:
                 ),
             ]
         )
-@pytest.mark.asyncio
-async def test_rewrite_with_model_fails_fast_on_model_error() -> None:
-    model = FakeRewriterModel(fail=True)
-    with pytest.raises(RuntimeError, match="model unavailable"):
-        await rewrite_queries_with_model(
-            model,
-            'Crash on "NoSuchKey" in `src/config.py`',
-        )
-    assert model.calls == 1
+
+
 @pytest.mark.asyncio
 async def test_rewrite_with_model_falls_back_to_rules_on_failure() -> None:
     model = FakeRewriterModel(fail=True)

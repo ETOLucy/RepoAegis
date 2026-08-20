@@ -1,2 +1,1 @@
 """Language-independent sandbox contracts."""
-

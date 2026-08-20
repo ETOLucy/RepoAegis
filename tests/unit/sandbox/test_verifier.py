@@ -52,8 +52,8 @@ async def test_verifier_runs_profile_tests_and_lints_in_hardened_sandbox(
     result = await verifier.verify(task())
 
     assert result.passed
-    assert result.error_kind is ErrorKind.CODE
-    assert len(result.summary) == len("failure")  # stderr is "failure"
+    assert result.error_kind is None
+    assert result.summary == "2 setup and 3 checks passed"
     # 默认截断仍是 2000，可配置后行为不变；此用例验证参数透传
     assert sandbox.commands[0][:3] == ("python", "-m", "venv")
     assert (".repo-agent/venv/bin/python", "-m", "pytest") in sandbox.commands

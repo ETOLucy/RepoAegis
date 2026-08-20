@@ -16,19 +16,15 @@ def _make_repo(tmp_path: Path) -> Path:
         ["git", "-C", str(tmp_path), "config", "user.name", "t"], check=True, capture_output=True
     )
     (tmp_path / "pyproject.toml").write_text(
-        "[project]\nname = \"x\"\nversion = \"0.1.0\"\n", encoding="utf-8"
+        '[project]\nname = "x"\nversion = "0.1.0"\n', encoding="utf-8"
     )
     src = tmp_path / "src"
     (src / "app.py").parent.mkdir(parents=True, exist_ok=True)
     (src / "app.py").write_text("def f():\n    return 1\n", encoding="utf-8")
     policy = src / "repo_maintenance_agent" / "policies"
     policy.mkdir(parents=True, exist_ok=True)
-    (policy / "permissions.py").write_text(
-        "class PermissionPolicy:\n    pass\n", encoding="utf-8"
-    )
-    subprocess.run(
-        ["git", "-C", str(tmp_path), "add", "-A"], check=True, capture_output=True
-    )
+    (policy / "permissions.py").write_text("class PermissionPolicy:\n    pass\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True, capture_output=True)
     subprocess.run(
         ["git", "-C", str(tmp_path), "commit", "-m", "init"], check=True, capture_output=True
     )
@@ -58,9 +54,7 @@ def test_target_pack_digest_is_stable(tmp_path: Path) -> None:
 def test_target_pack_digest_changes_with_source(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
     before = build_target_pack(Settings(), repo_root=repo)
-    (repo / "src" / "app.py").write_text(
-        "def f():\n    return 2\n", encoding="utf-8"
-    )
+    (repo / "src" / "app.py").write_text("def f():\n    return 2\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True, capture_output=True)
     subprocess.run(
         ["git", "-C", str(tmp_path), "commit", "-m", "change"], check=True, capture_output=True

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
@@ -124,4 +124,3 @@ class WorkspaceAdapter:
                 path.chmod(path.stat().st_mode | 0o222)
         with suppress(OSError):
             target.chmod(target.stat().st_mode | 0o222)
-

@@ -279,6 +279,7 @@ def test_swebench_evidence_spend_includes_failed_generation(tmp_path: Path) -> N
 
     assert _evidence_spend(tmp_path, protocol_digest) == Decimal("0.250")
 
+
 def test_evaluate_suite_writes_json_and_markdown_reports(tmp_path: Path) -> None:
     suite_file, observations_file = _suite_files(tmp_path, hidden_tests_passed=True)
     json_report = tmp_path / "report.json"

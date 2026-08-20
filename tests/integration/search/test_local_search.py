@@ -44,4 +44,3 @@ async def test_local_search_rejects_allowed_path_outside_workspace(tmp_path: Pat
 
     with pytest.raises(ValueError, match="outside"):
         await search.search(query)
-

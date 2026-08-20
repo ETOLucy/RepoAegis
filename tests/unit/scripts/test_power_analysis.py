@@ -22,11 +22,7 @@ PLAN_TARGET_N = [464, 178, 57, 30]
 
 
 def _scenario_n_values(table: str) -> list[int]:
-    return [
-        int(line.split("|")[5])
-        for line in table.splitlines()
-        if line.startswith("| 0.30 |")
-    ]
+    return [int(line.split("|")[5]) for line in table.splitlines() if line.startswith("| 0.30 |")]
 
 
 def test_power_table_contains_header_and_four_scenario_rows() -> None:

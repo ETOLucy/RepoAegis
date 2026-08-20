@@ -1,4 +1,5 @@
 """Windows compatibility shims for swebench on Windows (no ``resource`` module)."""
+
 from __future__ import annotations
 
 import sys

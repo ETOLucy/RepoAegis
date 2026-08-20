@@ -19,6 +19,7 @@ from repo_maintenance_agent.storage.artifacts import FileArtifactStore
 class EnhancedIntakeModel:
     def __init__(self) -> None:
         self.intake_payload = None
+
     async def structured(self, *, system, input_text, schema, max_attempts: int = 3):
         if schema is TaskSpecOutput:
             self.intake_payload = input_text
@@ -62,9 +63,12 @@ class EnhancedIntakeModel:
                 title="Fix", body="Fix.", head="repoaegis/task-key", base="main"
             )
         raise AssertionError(f"unexpected schema: {schema}")
+
+
 class RecordingResearchGateway:
     def __init__(self) -> None:
         self.calls = []
+
     async def execute(self, call, state):
         self.calls.append((call.name, call.arguments))
         if call.name == "search_code":
@@ -97,6 +101,8 @@ class RecordingResearchGateway:
                 output={"changed_files": call.arguments["files"]},
             )
         raise AssertionError(f"unexpected tool: {call.name}")
+
+
 def task() -> RepoTaskState:
     return RepoTaskState(
         tenant_id="tenant-a",
@@ -105,6 +111,8 @@ def task() -> RepoTaskState:
         base_branch="main",
         issue={"title": "Empty config crashes", "body": "Use defaults instead"},
     )
+
+
 @pytest.mark.asyncio
 async def test_intake_outputs_structured_classification(tmp_path: Path) -> None:
     model = EnhancedIntakeModel()
@@ -120,6 +128,8 @@ async def test_intake_outputs_structured_classification(tmp_path: Path) -> None:
     assert spec["issue_classification"] == "bugfix"
     assert "load_config" in spec["search_hints"]
     assert spec["key_paths"] == ["src/config.py"]
+
+
 @pytest.mark.asyncio
 async def test_research_uses_search_hints_in_rewrite_input(tmp_path: Path) -> None:
     model = EnhancedIntakeModel()

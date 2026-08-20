@@ -10,6 +10,7 @@ Two modes:
   apply those patches (free, validates the pipeline end to end).
 - "generate": call RepoAegis to generate a new patch (requires model API).
 """
+
 from __future__ import annotations
 
 import json

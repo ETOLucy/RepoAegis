@@ -65,4 +65,3 @@ class LocalLexicalSearch:
                     if len(results) >= query.top_k:
                         return results
         return results
-

@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from pydantic import ValidationError
 
 from repo_maintenance_agent.agents.patches import render_patch
@@ -211,4 +211,3 @@ def test_render_patch_fuzzy_resolves_ambiguous_repeat() -> None:
         declared_files=("app.py",),
     )
     assert b"def g()" in rendered.data
-

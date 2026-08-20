@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import pytest
 
@@ -79,6 +79,7 @@ def test_wilson_ci_three_of_eight_is_within_loose_bounds() -> None:
 
 def test_wilson_ci_zero_samples_returns_zero_interval() -> None:
     assert wilson_ci(0, 0) == (0.0, 0.0)
+
 
 def test_clopper_pearson_ci_three_of_eight_matches_known_value() -> None:
     lower, upper = clopper_pearson_ci(3, 8)

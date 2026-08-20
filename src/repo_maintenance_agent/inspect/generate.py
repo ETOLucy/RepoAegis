@@ -4,6 +4,7 @@ This mirrors the frozen-candidate runner (run_frozen_candidate.py) but is
 parameterised: a single Inspect Sample is turned into a SWEbenchTask, RepoAegis
 runs its real agent graph, and the produced unified diff is returned.
 """
+
 # mypy: ignore-errors
 from __future__ import annotations
 
@@ -34,9 +35,7 @@ class GitSafeProcessRunner:
     def __init__(self, *, git_env: dict[str, str], timeout_seconds: float) -> None:
         from repo_maintenance_agent.tools.process import ProcessRunner
 
-        self._runner = ProcessRunner(
-            allowed_executables={"git"}, timeout_seconds=timeout_seconds
-        )
+        self._runner = ProcessRunner(allowed_executables={"git"}, timeout_seconds=timeout_seconds)
         self._git_env = git_env
 
     async def run(

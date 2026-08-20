@@ -20,9 +20,7 @@ def test_runtime_exposes_the_injected_worker_executor(tmp_path: Path) -> None:
     runtime = build_runtime(
         Settings(
             environment="test",
-            database_url=SecretStr(
-                f"sqlite+pysqlite:///{(tmp_path / 'runtime.db').as_posix()}"
-            ),
+            database_url=SecretStr(f"sqlite+pysqlite:///{(tmp_path / 'runtime.db').as_posix()}"),
             artifact_root=str(tmp_path / "artifacts"),
         ),
         executor=executor,
@@ -37,9 +35,7 @@ def test_worker_runtime_assembles_workspace_executor_without_model_call(
 ) -> None:
     settings = Settings(
         environment="test",
-        database_url=SecretStr(
-            f"sqlite+pysqlite:///{(tmp_path / 'runtime.db').as_posix()}"
-        ),
+        database_url=SecretStr(f"sqlite+pysqlite:///{(tmp_path / 'runtime.db').as_posix()}"),
         artifact_root=str(tmp_path / "artifacts"),
         workspace_root=str(tmp_path / "workspaces"),
         repository_locators={"owner/repo": str(tmp_path / "remote.git")},
