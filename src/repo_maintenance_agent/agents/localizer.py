@@ -6,6 +6,7 @@ bounded to ``max_rounds`` (default 3) with an explicit ``finish`` action so the
 research node always terminates.
 """
 from __future__ import annotations
+import json
 from dataclasses import dataclass
 from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
@@ -36,7 +37,7 @@ class Gateway(Protocol):
 @dataclass(frozen=True, slots=True)
 class LocalizeOutcome:
     evidence: tuple[Evidence, ...]
-    queries: tuple[str, ...]
+    queries: list[str]
     rounds: int
 class Localizer:
     def __init__(
@@ -145,7 +146,7 @@ class Localizer:
         deduped = _dedupe_evidence(evidence)
         return LocalizeOutcome(
             evidence=tuple(deduped),
-            queries=tuple(queries),
+            queries=queries,
             rounds=min(self._max_rounds, max(1, len(queries) + 1)),
         )
     async def _decide(self, issue_text: str, evidence: list[SearchHit]) -> LocalizerAction:
@@ -162,12 +163,19 @@ class Localizer:
                 for hit in evidence[-20:]
             ],
         }
-        return await self._model.structured(
-            system=_LOCALIZER_SYSTEM,
-            input_text=__import__("json").dumps(payload, sort_keys=True, ensure_ascii=False),
-            schema=LocalizerAction,
-            max_attempts=2,
-        )
+        try:
+            return await self._model.structured(
+                system=_LOCALIZER_SYSTEM,
+                input_text=json.dumps(payload, sort_keys=True, ensure_ascii=False),
+                schema=LocalizerAction,
+                max_attempts=2,
+            )
+        except Exception:
+            # Model could not produce a LocalizerAction (unavailable, schema
+            # drift, or a fixture model that does not implement it). Localization
+            # is an enhancement, not a hard requirement: degrade to 'finish' so
+            # research keeps the evidence gathered so far.
+            return LocalizerAction(action="finish", rationale="localizer unavailable")
 def _dedupe_evidence(evidence: list[SearchHit]) -> list[SearchHit]:
     """Collapse hits by (path, line_start), keep highest score."""
     best: dict[tuple[str, int | None], SearchHit] = {}

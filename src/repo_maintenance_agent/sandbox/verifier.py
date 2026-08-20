@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Protocol
-
 from repo_maintenance_agent.domain.errors import ToolExecutionError
 from repo_maintenance_agent.domain.models import (
     ErrorKind,
@@ -12,15 +10,11 @@ from repo_maintenance_agent.domain.models import (
 )
 from repo_maintenance_agent.policies.redaction import Redactor
 from repo_maintenance_agent.sandbox.docker import SandboxSpec
+from repo_maintenance_agent.sandbox.failure_parser import parse_failures
 from repo_maintenance_agent.sandbox.profiles import EnvironmentProfiler, Language
 from repo_maintenance_agent.tools.process import ProcessResult
-from repo_maintenance_agent.sandbox.failure_parser import parse_failures
-
-
 class SandboxExecutor(Protocol):
     async def execute(self, spec: SandboxSpec) -> ProcessResult: ...
-
-
 class SandboxVerifier:
     def __init__(
         self,
@@ -38,10 +32,8 @@ class SandboxVerifier:
         self._image_digests = dict(image_digests)
         self._redactor = redactor or Redactor()
         self._summary_limit = summary_limit
-
     async def verify(self, task: RepoTaskState) -> VerificationResult:
         return await self.verify_task(task.task_id)
-
     async def verify_task(self, task_id: str) -> VerificationResult:
         profile = self._profiler.inspect(self._workspace)
         image = self._image_digests.get(profile.image_key)
@@ -50,6 +42,13 @@ class SandboxVerifier:
                 passed=False,
                 error_kind=ErrorKind.ENVIRONMENT,
                 summary=f"no immutable sandbox image configured for {profile.image_key}",
+            )
+        commands = profile.test_commands + profile.lint_commands
+        if not commands:
+            return VerificationResult(
+                passed=False,
+                error_kind=ErrorKind.CODE,
+                summary="no test or lint commands detected for this project",
             )
         rendered: list[str] = []
         for command in profile.setup_commands:
@@ -76,7 +75,7 @@ class SandboxVerifier:
                 failures = parse_failures(summary).failures
                 return VerificationResult(
                     passed=False,
-                    error_kind=ErrorKind.ENVIRONMENT,
+                    error_kind=ErrorKind.CODE,
                     commands=tuple(rendered),
                     summary=summary,
                     failures=tuple(
@@ -88,7 +87,6 @@ class SandboxVerifier:
                         for failure in failures
                     ),
                 )
-        commands = profile.test_commands + profile.lint_commands
         for configured_command in commands:
             command = _runtime_command(profile.language, configured_command)
             rendered.append(json.dumps(command))
@@ -113,7 +111,7 @@ class SandboxVerifier:
                 failures = parse_failures(summary).failures
                 return VerificationResult(
                     passed=False,
-                    error_kind=ErrorKind.ENVIRONMENT,
+                    error_kind=ErrorKind.CODE,
                     commands=tuple(rendered),
                     summary=summary,
                     failures=tuple(
@@ -130,16 +128,11 @@ class SandboxVerifier:
             commands=tuple(rendered),
             summary=f"{len(profile.setup_commands)} setup and {len(commands)} checks passed",
         )
-
     def _safe_summary(self, value: str) -> str:
         redacted = self._redactor.redact({"message": value})
         return str(redacted["message"])[-self._summary_limit :]
-
-
 def _setup_needs_network(command: tuple[str, ...]) -> bool:
     return any(token in {"pip", "npm", "mvn", "gradle", "go", "cargo"} for token in command)
-
-
 def _runtime_command(
     language: Language,
     command: tuple[str, ...],

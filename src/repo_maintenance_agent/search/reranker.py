@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
-from repo_maintenance_agent.models.openai_gateway import OpenAIModelGateway
 _RERANK_SYSTEM = (
     "You are a code-search relevance reranker. Given a search query and a list "
     "of candidate code locations, return the candidates ordered by relevance to "

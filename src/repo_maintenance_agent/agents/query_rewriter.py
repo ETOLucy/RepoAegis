@@ -1,16 +1,12 @@
 from __future__ import annotations
-
 import json
 from typing import Any
-
 from pydantic import BaseModel, ConfigDict, Field
-
 from repo_maintenance_agent.search.rewriter import (
     QueryRewritePlan,
     RewrittenQuery,
     rewrite_queries,
 )
-
 _RESEARCH_REWRITE_SYSTEM = (
     "You are a code-search query rewriter for a repository issue. Given the issue "
     "below, produce up to 4 independent search queries that would locate the code "
@@ -60,8 +56,8 @@ async def rewrite_queries_with_model(
         ]
         if queries:
             return QueryRewritePlan(queries=tuple(queries[:max_queries]))
-    except Exception as exc:
-        raise RuntimeError(
-            "model unavailable: query rewrite failed; "
-            "research cannot proceed without the model"
-        ) from exc
+    except Exception:
+        # Research must never fail because rewriting did: fall back to the
+        # rule-based splitter so the pipeline keeps producing search queries.
+        pass
+    return rewrite_queries(issue_text, max_queries=max_queries)

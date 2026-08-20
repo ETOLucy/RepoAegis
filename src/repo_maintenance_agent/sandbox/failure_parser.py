@@ -5,22 +5,24 @@ actual failure instead of a wall of text.
 """
 from __future__ import annotations
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 _FAILURE_HEADER = re.compile(
     r"^_{5,}\s*(?P<name>[\w./\[\]()-]+)\s*_{5,}\s*$", re.MULTILINE
 )
 _ASSERTION = re.compile(
-    r"^(?P<location>.+\.py:\d+):\s*(?P<message>.*(?:Error|error|assert).*)$",
+    r"^(?P<location>.+\.py:\d+):\s*(?:in\s+\S+\s*)?(?P<message>.*(?:Error|error|assert).*)$",
     re.MULTILINE,
 )
+# pytest prints the actual exception on a line prefixed with "E" — prefer it
+# over the source "assert ..." line because it carries the real error type
+# (e.g. "AssertionError: assert {'env': 'demo'} == {'env': 'prod'}").
+_PYTEST_ERROR = re.compile(r"^E\s+(?P<message>.*)$", re.MULTILINE)
 _FAILED_SUMMARY = re.compile(r"^(?P<name>[\w./\[\]()-]+) (?:FAILED|ERROR)", re.MULTILINE)
 _JUNIT_TESTCASE = re.compile(
     r'<testcase\s+classname="(?P<classname>[^"]+)"\s+name="(?P<name>[^"]+)"',
     re.MULTILINE,
 )
-_JUNIT_FAILURE = re.compile(
-    r'<failure\s+message="(?P<message>[^"]*)"', re.MULTILINE
-)
+_JUNIT_FAILURE = re.compile(r'<failure\s+message="(?P<message>[^"]*)"', re.MULTILINE)
 @dataclass(frozen=True, slots=True)
 class Failure:
     name: str
@@ -41,6 +43,9 @@ class FailureSummary:
             lines.append(f"- {failure.name} @ {failure.location or 'unknown'}: {failure.message}")
         joined = "\n".join(lines)
         return joined[-limit:]
+def _first_pytest_error(window: str) -> str:
+    match = _PYTEST_ERROR.search(window)
+    return match.group("message")[:500] if match else ""
 def parse_failures(output: str, *, tail_chars: int = 2_000) -> FailureSummary:
     """Best-effort parser for pytest and JUnit XML output.
     Returns structured failures when recognizable, otherwise the raw tail so
@@ -62,7 +67,10 @@ def parse_failures(output: str, *, tail_chars: int = 2_000) -> FailureSummary:
             Failure(
                 name=name,
                 location=assertion.group("location"),
-                message=assertion.group("message")[:500],
+                message=(
+                    _first_pytest_error(window)
+                    or assertion.group("message")[:500]
+                ),
             )
         )
     # 2. pytest short summary "FAILED tests/x.py::test_y"

@@ -28,7 +28,11 @@ def reciprocal_rank_fusion(
         hits[hit_id].model_copy(
             update={
                 "score": scores[hit_id],
-                "source": "+".join(sorted(sources[hit_id])),
+                "source": (
+                    "+".join(sorted(sources[hit_id]))
+                    if len(sources[hit_id]) > 1
+                    else sources[hit_id][0]
+                ),
             }
         )
         for hit_id in ranked

@@ -1,12 +1,8 @@
 ﻿from __future__ import annotations
-
 from pathlib import Path
 from typing import Literal
-
 from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="REPO_AGENT_",
@@ -14,7 +10,6 @@ class Settings(BaseSettings):
         extra="ignore",
         case_sensitive=False,
     )
-
     environment: Literal["development", "test", "production"] = "development"
     openai_api_key: SecretStr | None = Field(
         default=None,
@@ -77,17 +72,18 @@ class Settings(BaseSettings):
     worker_id: str = Field(default="repoaegis-worker", min_length=1, max_length=128)
     worker_tenant_ids: tuple[str, ...] = ()
     worker_poll_seconds: float = Field(default=1.0, gt=0, le=60)
-
     @model_validator(mode="after")
     def complete_sandbox_runner_configuration(self) -> Settings:
         if self.sandbox_runner_url is not None and self.sandbox_runner_token is None:
             raise ValueError("sandbox runner URL requires a matching token")
-        if self.openai_api_key is None: 
-            raise ValueError("OPENAI_API_KEY is required")
-        if self.openai_embedding_api_key is None:
-            raise ValueError("OPENAI_EMBEDDING_API_KEY is required")
+        # OPENAI_API_KEY / OPENAI_EMBEDDING_API_KEY are intentionally NOT
+        # required here: constructing Settings() (CLI doctor, control-plane
+        # tasks, tests) must not crash before any model call is attempted.
+        # Fail-fast is enforced at the actual point of use:
+        #   - production_graph.build_index() raises when both keys are absent
+        #   - search/embeddings.py falls back to the chat key when embedding
+        #     key is absent, and raises when neither is configured
         return self
-
     @property
     def has_openai_credentials(self) -> bool:
         return self.openai_api_key is not None

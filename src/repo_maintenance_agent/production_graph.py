@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
 from repo_maintenance_agent.agents.nodes import AgentRuntime, build_agent_nodes
 from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.domain.ports import ArtifactStore, ToolAdapter
@@ -18,6 +16,7 @@ from repo_maintenance_agent.search.adapters.ripgrep import default_lexical_searc
 from repo_maintenance_agent.search.embeddings import OpenAIEmbeddingClient
 from repo_maintenance_agent.search.history import GitHistorySearch
 from repo_maintenance_agent.search.production import WorkspaceIndex
+from repo_maintenance_agent.search.reranker import LLMReranker
 from repo_maintenance_agent.tools.agent_actions import (
     PatchArtifactAdapter,
     SearchAdapter,
@@ -29,14 +28,11 @@ from repo_maintenance_agent.tools.git import GitToolAdapter
 from repo_maintenance_agent.tools.github import GitHubCliAdapter, LocalDraftRecordAdapter
 from repo_maintenance_agent.tools.patch import GitPatchApplier
 from repo_maintenance_agent.tools.process import ProcessRunner
-from repo_maintenance_agent.search.reranker import LLMReranker
-
 @dataclass(frozen=True, slots=True)
 class ProductionGraphFactory:
     settings: Settings
     artifacts: ArtifactStore
     operations: OperationLog
-
     def __call__(self, workspace: Path) -> Any:
         model = OpenAIModelGateway.from_settings(self.settings)
         gateway = ToolGateway(
@@ -54,9 +50,9 @@ class ProductionGraphFactory:
                 )
             )
         )
-
-    # search/production_graph.py 的 _build_index, 改动 3 行
-    def _build_index(self, workspace: Path) -> WorkspaceIndex:
+    def _build_index(
+        self, workspace: Path, *, model: OpenAIModelGateway | None = None
+    ) -> WorkspaceIndex:
         if (
             self.settings.openai_embedding_api_key is None
             and self.settings.openai_api_key is None
@@ -75,8 +71,8 @@ class ProductionGraphFactory:
             ),
             reranker=LLMReranker(model=model, candidate_pool=20, final_k=10),
         )
-
     def build_adapters(self, workspace: Path) -> dict[str, ToolAdapter]:
+        model = OpenAIModelGateway.from_settings(self.settings)
         patch_runner = ProcessRunner(allowed_executables={"git"})
         sandbox = (
             RemoteSandbox(

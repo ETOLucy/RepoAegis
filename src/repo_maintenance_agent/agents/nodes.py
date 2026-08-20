@@ -347,6 +347,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 break
         patch_feedback: str | None = None
         last_rendered: str | None = None
+        current_files: dict[str, object] = {}
         tool_result = None
         artifact_id: str | None = None
         for patch_attempt in range(runtime.max_patch_attempts):
@@ -363,6 +364,15 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 patch_payload["patch_feedback"] = patch_feedback
             if last_rendered:
                 patch_payload["previous_diff"] = last_rendered
+            elif current_files:
+                # render_patch failed (e.g. old_text mismatch) before any diff
+                # existed; give the model the current file contents so the next
+                # proposal copies old_text verbatim.
+                patch_payload["previous_diff"] = "\n".join(
+                    f"--- {path}\n{content}"
+                    for path, content in current_files.items()
+                    if isinstance(content, str)
+                )
             if task.review.get("decision") == "request_changes":
                 patch_payload["review_feedback"] = task.review
             try:
