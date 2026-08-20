@@ -8,7 +8,7 @@
 <h1 align="center">RepoAegis</h1>
 
 <p align="center">
-  A policy-controlled repository maintenance agent framework for evidence-backed patches and reviewable delivery.
+  Automated repo maintenance agent. Sandboxed execution, permission control, human approval, auditable delivery.
 </p>
 
 <p align="center">
@@ -26,31 +26,43 @@
 
 ## What Is This
 
-**RepoAegis is a policy-controlled LLM agent framework that turns GitHub issues into evidence-backed, reviewable code patches.** Typed state, tenant isolation, deterministic routing, tool authorization, leased workers, hybrid retrieval, container isolation, and reproducible evaluation sit between a model decision and every side effect.
-
-The system targets production-grade repository maintenance:
-
-- **LLM agent orchestration** — a LangGraph multi-agent pipeline (intake → localization → planning → patching → verification → review) with deterministic routing and bounded correction loops.
-- **Hybrid retrieval for code** — BM25 (ripgrep), symbol, and optional vector/OpenSearch adapters over the repository, fused with deterministic **reciprocal rank fusion (RRF)**; a code Q&A endpoint answers with cited file paths and line ranges.
-- **Prompt engineering & structured output** — provider-specific structured JSON with strict local Pydantic validation; the model proposes bounded exact-text edits, and diff hunk metadata is derived locally.
-- **Model evaluation & benchmarking** — a reproducible evaluation harness (concurrent, replay-safe, with release gates) and a completed **SWE-bench Verified** campaign judged by the official Docker harness; statistical rigor via **paired bootstrap CI**, Wilson / Clopper–Pearson intervals, Cohen's h, and **Holm correction**.
-- **LLM-as-a-Judge** — dual-paradigm model evaluation: deterministic harness plus rubric-based LLM judging, and a model matrix that runs one suite across several models with aligned seeds and reports cost–quality trade-offs.
-- **Safety & guardrails** — **deny-by-default** tool authorization with stage-aware permissions, approval-envelope-bound human approval for remote writes, Docker sandbox with digest-pinned images / non-root / read-only root / dropped capabilities / `no-new-privileges`, recursive secret redaction, and an execution-time red-team suite (prompt injection / unauthorized tools / secret exfiltration / path traversal).
-
-**Benchmark result (frozen, one-shot):** 74 / 200 (37.0%) instances officially resolved on a stratified subset of **SWE-bench Verified**, 38.5% conditional on successful generation, judged by the official SWE-bench Docker harness — with per-instance results, frozen task IDs, and generation failures published in-repo for audit.
+RepoAegis is a coding agent that fixes GitHub issues end to end: it locates the
+relevant code, produces a patch, verifies it in a sandbox, and delivers it for
+human approval before it touches the repository.
+- **Multi-agent pipeline.** LangGraph drives six stages — intake, locate, plan,
+  patch, verify, review — so each step is inspectable and replaceable.
+- **Hybrid code search.** BM25/ripgrep, symbol-based retrieval, and OpenSearch
+  vector search are fused with Reciprocal Rank Fusion to find relevant code
+  across large repositories.
+- **Permission control.** Tools are denied by default; each capability is
+  granted explicitly and scoped to a minimal set of operations.
+- **Sandboxed execution.** Patches are built and verified in Docker containers
+  with digest-pinned images, non-root users, and read-only root filesystems.
+- **Security audit.** Every action is logged; remote writes require explicit
+  human approval before being applied.
+- **Reproducible evaluation.** Reported against SWE-bench Verified: 74/200
+  (37.0%) resolved.
 
 ## Why This Exists
 
-Repository maintenance agents operate on hostile input and high-impact tools. Issue text can carry prompt injection, source trees can contain secrets, tests execute untrusted code, and remote writes can affect production repositories. Production use adds requirements beyond the agent loop:
-
-- immutable task scope: tenant, repository, and commit
-- deny-by-default tools with stage-aware permissions
-- approval-envelope-bound human approval for remote writes
-- isolated execution with bounded resources and network policy
-- durable concurrency control and replay-safe side effects
-- evaluation that distinguishes correctness, safety, retrieval, and cost
-
-This repository implements those boundaries end to end.
+Coding agents operate on untrusted input — issue text, repository contents,
+even third-party code fetched at runtime — while taking high-impact actions
+that can alter production repositories. That combination demands strict
+guardrails:
+- **Task boundaries are fixed.** Agent behavior is scoped to the issue at
+  hand; prompt injection from issue text must not expand what it is allowed
+  to do.
+- **Least privilege.** The agent receives only the tools needed for the
+  current task, and nothing more.
+- **Human approval.** Changes to the repository are reviewed and approved
+  before they are applied.
+- **Isolated execution.** Untrusted code runs in a disposable sandbox, never
+  on the host or with production credentials.
+- **Traceability.** Every action is recorded, so any change can be traced
+  back to who or what made it.
+- **Measurability.** Behavior is validated against a fixed evaluation
+  benchmark, so improvements are verified rather than assumed.
+This repository implements those constraints end to end.
 
 ## Implemented Guarantees
 
