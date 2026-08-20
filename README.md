@@ -19,14 +19,14 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a>
+  <a href="README-EN.md">English</a>
 </p>
 
 ---
 
 ## 这是什么
 
-**RepoAegis 是一个策略受控的 LLM Agent 框架：把 GitHub issue 变成有证据支撑、可审查的代码补丁。** 在模型决策与每一个副作用之间，隔着类型化状态、租户隔离、确定性路由、工具授权、租约 worker、混合检索、容器隔离与可复现评估。
+**RepoAegis 是一个自动化解决仓库issue的迷你Coding Agent。**
 
 系统面向生产级仓库维护设计：
 
