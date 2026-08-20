@@ -31,7 +31,7 @@
 系统面向生产级仓库维护设计：
 
 - **LLM Agent 编排** —— 基于 LangGraph 的多 Agent 流水线（intake → 定位 → 规划 → 打补丁 → 验证 → 审查），确定性路由 + 有界纠错循环。
-- **面向代码的混合检索（hybrid retrieval）** —— 对仓库做 BM25（ripgrep）、符号检索、可选向量/OpenSearch 适配器，经确定性 **reciprocal rank fusion（RRF）** 融合；代码问答接口返回带引用文件路径与行区间的答案。
+- **面向代码的混合检索（hybrid retrieval）** —— 多路召回 + 重写 + 融合 + 重排：先对查询做 query rewrite（改写/扩展，提升召回质量），再并行走词法检索（BM25，底层用 ripgrep 扫描）、符号检索（按函数/类/变量名定位）、可选向量检索（OpenSearch 适配器）三路召回，用确定性 reciprocal rank fusion（RRF） 融合成单一排序，最后经 rerank 精排后返回；代码问答接口返回带引用文件路径与行区间的答案。
 - **Prompt 工程与结构化输出** —— provider 专属结构化 JSON + 严格本地 Pydantic 校验；模型只提有界精确文本编辑，diff hunk 元数据在本地派生。
 - **模型评测与基准** —— 可复现评测 harness（并发、可重放、带发布门禁）+ 使用官方 Docker harness 判定的 **SWE-bench Verified** 评测战役；统计严谨性：配对 **bootstrap CI**、Wilson / Clopper–Pearson 区间、Cohen's h、**Holm 校正**。
 - **LLM-as-a-Judge** —— 双范式模型评测：确定性 harness + 基于量表的 LLM 判定；另有 model matrix 用对齐种子在同一套件上跑多个模型，输出成本–质量权衡。
