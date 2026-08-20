@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- 五切面七彩宝石渐变 -->
+    <linearGradient id="facet2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#0E7490"/>
+    </linearGradient>
+    <linearGradient id="facet3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F472B6"/>
+      <stop offset="1" stop-color="#BE185D"/>
+    </linearGradient>
+    <linearGradient id="facet4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FB923C"/>
+      <stop offset="1" stop-color="#C2410C"/>
+    </linearGradient>
+    <linearGradient id="facet5" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="topB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FACC15"/>
+      <stop offset="1" stop-color="#EAB308"/>
+    </linearGradient>
+    <linearGradient id="facet1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#79E3AE"/>
+      <stop offset="1" stop-color="#00A141"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 七彩补天石：五切面宝石（青 / 粉 / 橙 / 蓝 / 黄 + 绿色高光切面），垂直居中于画布
+       Reversed 变体：描边改用亮紫罗兰 #C4B5FD，在深色背景上更醒目 -->
+  <g transform="translate(512 497) scale(0.75)">
+    <path d="M0 292 L-176 92 L-118 -86 L118 -86 L176 92 Z" fill="#0D1726" stroke="#C4B5FD" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M0 292 L-176 92 L-118 -86 L0 -16 Z" fill="url(#facet2)"/>
+    <path d="M0 292 L176 92 L118 -86 L0 -16 Z" fill="url(#facet3)"/>
+    <path d="M0 -16 L-118 -86 L-62 -196 L0 -126 Z" fill="url(#facet5)"/>
+    <path d="M0 -16 L118 -86 L62 -196 L0 -126 Z" fill="url(#facet4)"/>
+    <path d="M0 -126 L-62 -196 L0 -252 L62 -196 Z" fill="url(#topB)"/>
+    <path d="M0 292 L-176 92 L0 66 Z" fill="#FFFFFF" opacity="0.14"/>
+    <path d="M0 292 L176 92 L0 66 Z" fill="#FFFFFF" opacity="0.14"/>
+    <path d="M0 -126 L-62 -196 L0 -160 Z" fill="#FFFFFF" opacity="0.22"/>
+  </g>
+</svg>
