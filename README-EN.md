@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/repo-aegis-mark-reversed.svg">
-    <img src="docs/assets/repo-aegis-mark.svg" width="200" alt="RepoAegis mark">
+    <img src="docs/assets/repo-aegis-mark.svg" width="400" alt="RepoAegis mark">
   </picture>
 </p>
 
