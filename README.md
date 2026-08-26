@@ -42,29 +42,40 @@ RepoAegis 是一个 **policy-controlled、evidence-backed** 的 Issue 修复流�
 
 核心编排基于 LangGraph 的 StateGraph，是一个 **10 节点条件路由图 + 有界重试 + 证据驱动兜底**：
 
-```
-START ──[route_entry]──→ intake ──→ research ──→ planning
-                                │
-                                └──→ code (恢复挂起任务)
+```mermaid
+flowchart TD
+    START --> ENTRY{route_entry}
+    ENTRY -->|PENDING| I[Intake]
+    ENTRY -->|CODING| CD[Code]
+    ENTRY -->|OTHER| FAIL[Failure]
 
-planning ──[route_after_planning]──→ approval (高风险)
-         │                           └──→ code (低风险跳过审批)
-         │                           └──→ failure
+    I --> R[Research]
+    R --> P[Planning]
 
-approval ──[route_after_approval]──→ code (通过)
-         │                           └──→ failure (拒绝)
+    P --> ROUTE_P{route_after_planning}
+    ROUTE_P -->|NEEDS_APPROVAL| A[Approval]
+    ROUTE_P -->|CODING| CD
+    ROUTE_P -->|FAILED| FAIL
 
-code ──→ verification ──[route_after_verification]──→ review (通过)
-                                                │   └──→ code (重试, CODE错误+iter<max)
-                                                │   └──→ failure (其他错误)
+    A --> ROUTE_A{route_after_approval}
+    ROUTE_A -->|CODING| CD
+    ROUTE_A -->|OTHER| FAIL
 
-review ──[route_after_review]──→ pr (approve)
-       │                         └──→ code (重试, request_changes+iter<max)
-       │                         └──→ pr (证据驱动兜底)
-       │                         └──→ failure
+    CD --> V[Verification]
+    V --> ROUTE_V{route_after_verification}
+    ROUTE_V -->|passed| RV[Review]
+    ROUTE_V -->|CODE error + iter<max| CD
+    ROUTE_V -->|OTHER error| FAIL
 
-pr ──→ finalize ──→ END
-failure ──→ END
+    RV --> ROUTE_RV{route_after_review}
+    ROUTE_RV -->|approve| PR[PR]
+    ROUTE_RV -->|request_changes + iter<max| CD
+    ROUTE_RV -->|evidence-driven fallback| PR
+    ROUTE_RV -->|OTHER| FAIL
+
+    PR --> FINAL[Finalize]
+    FINAL --> END
+    FAIL --> END
 ```
 
 - **条件路由图**：不是线性流水线——每个节点后是条件分支，由路由函数基于状态 + 迭代次数 + 验证结果动态决定下一步。从 START 到 END 有 5 个路由决策点（route_entry、route_after_planning、route_after_approval、route_after_verification、route_after_review）。
