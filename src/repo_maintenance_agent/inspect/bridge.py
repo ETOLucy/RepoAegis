@@ -214,7 +214,7 @@ def repoaegis_agent(
                 result = await graph.ainvoke({"task": initial_task, "trace": []})
                 final_task: RepoTaskState = result["task"]
 
-                # 8. Write results to bridge.state.metadata for the scorer  # type: ignore[attr-defined]
+                # 8. Write results to bridge.state.metadata for the scorer
                 progress = _calculate_progress(final_task)
                 bridge.state.metadata.update(progress)  # type: ignore[attr-defined]
                 bridge.state.metadata["instance_id"] = instance_id  # type: ignore[attr-defined]
