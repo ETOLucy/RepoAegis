@@ -17,7 +17,6 @@ from repo_maintenance_agent.search.index import (
     ingest_workspace,
 )
 from repo_maintenance_agent.search.reranker import LLMReranker
-from repo_maintenance_agent.search.adapters.opensearch import OpenSearchHybridAdapter
 from repo_maintenance_agent.search.router import QueryKind
 from repo_maintenance_agent.search.service import HybridSearchService
 

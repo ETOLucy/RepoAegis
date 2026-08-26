@@ -152,7 +152,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 },
             }
         )
-        # 校准：research 阶段后检查 intake 标准是否仍有效
+        # 校准:research 阶段后检查 intake 标准是否仍有效
         from repo_maintenance_agent.agents.calibration import CalibrationJudge
         judge = CalibrationJudge(model=runtime.model)
         calibration = await judge.calibrate(
@@ -216,7 +216,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 "verification_plan": envelope.verification_plan,
             }
         )
-        # 校准：planning 阶段后检查 intake 标准是否仍有效
+        # 校准:planning 阶段后检查 intake 标准是否仍有效
         from repo_maintenance_agent.agents.calibration import CalibrationJudge
         judge = CalibrationJudge(model=runtime.model)
         calibration = await judge.calibrate(
@@ -547,7 +547,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 "patch_artifact_id": artifact_id,
             }
         )
-        # 校准：coding 阶段后检查 intake 标准是否仍有效
+        # 校准:coding 阶段后检查 intake 标准是否仍有效
         from repo_maintenance_agent.agents.calibration import CalibrationJudge
         judge = CalibrationJudge(model=runtime.model)
         calibration = await judge.calibrate(

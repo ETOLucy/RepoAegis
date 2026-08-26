@@ -10,12 +10,12 @@ class QueryKind(StrEnum):
     Each value corresponds to a concrete SearchPort implementation
     registered in WorkspaceIndex / HybridSearchService.
     """
-    LEXICAL = "lexical"       # 精确子串匹配（LocalLexicalSearch）
-    BM25 = "bm25"             # BM25 全文检索（BM25Search）
-    VECTOR = "vector"         # 向量嵌入检索（VectorSearch）
-    SYMBOL = "symbol"         # AST 符号检索（SymbolSearch）
-    HISTORY = "history"       # Git 历史检索（未完整实现）
-    OPENSEARCH = "opensearch" # OpenSearch 混合检索（OpenSearchHybridAdapter）
+    LEXICAL = "lexical"       # 精确子串匹配(LocalLexicalSearch)
+    BM25 = "bm25"             # BM25 全文检索(BM25Search)
+    VECTOR = "vector"         # 向量嵌入检索(VectorSearch)
+    SYMBOL = "symbol"         # AST 符号检索(SymbolSearch)
+    HISTORY = "history"       # Git 历史检索(未完整实现)
+    OPENSEARCH = "opensearch" # OpenSearch 混合检索(OpenSearchHybridAdapter)
 
 
 _SYMBOL = re.compile(

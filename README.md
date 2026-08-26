@@ -40,16 +40,37 @@ RepoAegis 是一个 **policy-controlled、evidence-backed** 的 Issue 修复流�
 
 ## 架构总览
 
-核心编排基于 LangGraph 的 StateGraph，是一个 **9 节点线性流水线 + 条件路由 + 有界重试**：
+核心编排基于 LangGraph 的 StateGraph，是一个 **10 节点条件路由图 + 有界重试 + 证据驱动兜底**：
 
 ```
-intake → research → planning → approval → coding → verification → review → pr → finalize
+START ──[route_entry]──→ intake ──→ research ──→ planning
+                                │
+                                └──→ code (恢复挂起任务)
+
+planning ──[route_after_planning]──→ approval (高风险)
+         │                           └──→ code (低风险跳过审批)
+         │                           └──→ failure
+
+approval ──[route_after_approval]──→ code (通过)
+         │                           └──→ failure (拒绝)
+
+code ──→ verification ──[route_after_verification]──→ review (通过)
+                                                │   └──→ code (重试, CODE错误+iter<max)
+                                                │   └──→ failure (其他错误)
+
+review ──[route_after_review]──→ pr (approve)
+       │                         └──→ code (重试, request_changes+iter<max)
+       │                         └──→ pr (证据驱动兜底)
+       │                         └──→ failure
+
+pr ──→ finalize ──→ END
+failure ──→ END
 ```
 
-- **状态机**：RepoTaskState 是严格的 Pydantic 模型，带合法生命周期迁移表，每一步 transition() 校验状态合法性。
-- **条件路由**：基于状态 + 迭代次数 + 验证结果动态决定下一步。review 阶段有「证据驱动兜底」——LLM reviewer 反复 request_changes 但验证通过、改动在声明文件内、风险低时仍放行。
+- **条件路由图**：不是线性流水线——每个节点后是条件分支，由路由函数基于状态 + 迭代次数 + 验证结果动态决定下一步。从 START 到 END 有 5 个路由决策点（route_entry、route_after_planning、route_after_approval、route_after_verification、route_after_review）。
+- **有界重试**：verification 失败（CODE 错误且 iteration < max）→ 回到 code 重试；review request_changes 且 iteration < max → 回到 code 重试。最多重试 max_iterations 次。
+- **证据驱动兜底**：review 阶段 LLM 反复 request_changes 但验证通过、改动在声明文件内、风险低时仍放行（保留警告记录）。
 - **人工审批**：approval 节点使用 LangGraph 的 interrupt（human-in-the-loop），审批信封带 plan_hash 摘要，防止审批后计划被篡改。
-
 ## 模块详解
 
 ### Intake（任务理解）
@@ -57,6 +78,14 @@ intake → research → planning → approval → coding → verification → re
 **做了什么**：接收 GitHub Issue，提取结构化元数据——task_type（bugfix/feature/test/documentation/dependency/refactor）、summary、acceptance_criteria、constraints、unknowns。
 
 **为什么这么做**：Issue 是自然语言文本，需要转化为机器可处理的规范格式。但 Intake 只负责"理解任务是什么"，不负责"找到代码在哪里"——搜索相关的工作全部交给下游 Rewriter 模块，确保职责单一。
+
+### CalibrationJudge（标准校准）
+
+**做了什么**：独立裁判模块，各阶段（research/planning/coding）可调用 calibrate() 检查 Intake 生成的标准是否需要调整。生成 calibration diff 写入 task_spec.calibration，下游阶段读取校准后的标准。
+
+**为什么这么做**：Intake 的初步分析可能不准确。Research 阶段收集到证据后，可能发现 task_type 判断错误（比如 Intake 说是 feature，但证据显示是 bugfix）。CalibrationJudge 作为独立模块，不修改 Intake 输出，而是生成 diff 供下游读取，保持数据流的单向性。
+
+
 
 ### Rewriter（查询改写）
 
@@ -105,12 +134,6 @@ intake → research → planning → approval → coding → verification → re
 | api | SYMBOL + BM25 | BM25 + VECTOR | API 接口 |
 | ui | LEXICAL + BM25 | BM25 | 前端 UI |
 | ci_cd | LEXICAL + BM25 + HISTORY | BM25 | CI/CD 配置 |
-
-### CalibrationJudge（标准校准）
-
-**做了什么**：独立裁判模块，各阶段（research/planning/coding）可调用 calibrate() 检查 Intake 生成的标准是否需要调整。生成 calibration diff 写入 task_spec.calibration，下游阶段读取校准后的标准。
-
-**为什么这么做**：Intake 的初步分析可能不准确。Research 阶段收集到证据后，可能发现 task_type 判断错误（比如 Intake 说是 feature，但证据显示是 bugfix）。CalibrationJudge 作为独立模块，不修改 Intake 输出，而是生成 diff 供下游读取，保持数据流的单向性。
 
 ### Planning（计划生成）
 

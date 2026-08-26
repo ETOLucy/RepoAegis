@@ -12,7 +12,7 @@ class OpenSearchClient(Protocol):
 
 class OpenSearchClientImpl:
     """Real OpenSearch client backed by opensearch-py."""
-    def __init__(self, hosts, *, port=9200, http_auth=None, use_ssl=False, verify_certs=False, **kwargs):
+    def __init__(self, hosts, *, port=9200, http_auth=None, use_ssl=False, verify_certs=False, **kwargs):  # noqa: E501
         from opensearchpy import OpenSearch
         self._client = OpenSearch(
             hosts=[{"host": h, "port": port} for h in hosts],

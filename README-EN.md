@@ -29,8 +29,7 @@
 RepoAegis is a coding agent that fixes GitHub issues end to end: it locates the
 relevant code, produces a patch, verifies it in a sandbox, and delivers it for
 human approval before it touches the repository.
-- **Multi-agent pipeline.** LangGraph drives six stages — intake, locate, plan,
-  patch, verify, review — so each step is inspectable and replaceable.
+- **Conditional routing graph.** LangGraph drives 10 nodes — intake, research, planning, approval, code, verification, review, pr, failure, finalize — with 5 conditional routing decision points, bounded retry loops, and evidence-driven fallback.
 - **Hybrid code search.** BM25/ripgrep, symbol-based retrieval, and OpenSearch
   vector search are fused with Reciprocal Rank Fusion to find relevant code
   across large repositories.
@@ -40,8 +39,7 @@ human approval before it touches the repository.
   with digest-pinned images, non-root users, and read-only root filesystems.
 - **Security audit.** Every action is logged; remote writes require explicit
   human approval before being applied.
-- **Reproducible evaluation.** Reported against SWE-bench Verified: 74/200
-  (37.0%) resolved.
+- **Reproducible evaluation.** Reported against SWE-bench Verified (see docs for latest results).
 
 ## Why This Exists
 

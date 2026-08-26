@@ -14,7 +14,10 @@ from repo_maintenance_agent.sandbox.docker import DockerSandbox
 from repo_maintenance_agent.sandbox.profiles import EnvironmentProfiler
 from repo_maintenance_agent.sandbox.remote import RemoteSandbox
 from repo_maintenance_agent.sandbox.verifier import SandboxVerifier
-from repo_maintenance_agent.search.adapters.opensearch import OpenSearchClientImpl, OpenSearchHybridAdapter
+from repo_maintenance_agent.search.adapters.opensearch import (
+    OpenSearchClientImpl,
+    OpenSearchHybridAdapter,
+)
 from repo_maintenance_agent.search.adapters.ripgrep import default_lexical_search
 from repo_maintenance_agent.search.embeddings import OpenAIEmbeddingClient
 from repo_maintenance_agent.search.history import GitHistorySearch
@@ -73,7 +76,7 @@ class ProductionGraphFactory:
                 list(self.settings.opensearch_hosts),
                 port=self.settings.opensearch_port,
                 http_auth=(
-                    (self.settings.opensearch_user, self.settings.opensearch_password.get_secret_value())
+                    (self.settings.opensearch_user, self.settings.opensearch_password.get_secret_value())  # noqa: E501
                     if self.settings.opensearch_user and self.settings.opensearch_password
                     else None
                 ),

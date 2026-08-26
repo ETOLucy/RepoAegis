@@ -1,4 +1,3 @@
-# ruff: noqa: RUF002, RUF003
 """Inspect agent bridge for the RepoAegis agent.
 This module wraps RepoAegis LangGraph as an Inspect Agent via agent_bridge.
 """
@@ -8,8 +7,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from openai import AsyncOpenAI
 from inspect_ai.agent import Agent, AgentState, agent, agent_bridge
+from openai import AsyncOpenAI
 
 from repo_maintenance_agent.agents.nodes import AgentRuntime, Gateway, build_agent_nodes
 from repo_maintenance_agent.domain.models import (
@@ -54,14 +53,14 @@ class _BridgedGateway(Gateway):
         if call.name == "read_files":
             return ToolResult(call_id=call.call_id, success=True, output={"files": {}})
         if call.name in ("git_blame", "git_diff", "git_log"):
-            return ToolResult(call_id=call.call_id, success=True, output={"blame": "", "diff": "", "log": ""})
+            return ToolResult(call_id=call.call_id, success=True, output={"blame": "", "diff": "", "log": ""})  # noqa: E501
         if call.name == "apply_patch":
-            return ToolResult(call_id=call.call_id, success=True, output={"changed_files": ["mock/patch.py"]})
+            return ToolResult(call_id=call.call_id, success=True, output={"changed_files": ["mock/patch.py"]})  # noqa: E501
         if call.name == "git_commit":
             return ToolResult(call_id=call.call_id, success=True, output={"commit_sha": "0" * 40})
         if call.name in ("draft_pr", "create_pr"):
             return ToolResult(call_id=call.call_id, success=True, output={"pr_url": "https://github.com/mock/repo/pull/1"})
-        return ToolResult(call_id=call.call_id, success=False, error_code="unknown_tool", output={"error": f"unknown tool: {call.name}"})
+        return ToolResult(call_id=call.call_id, success=False, error_code="unknown_tool", output={"error": f"unknown tool: {call.name}"})  # noqa: E501
 
 
 def _create_bridge_gateway(
@@ -143,7 +142,7 @@ def _calculate_progress(task: RepoTaskState) -> dict[str, Any]:
     }
 
 
-@agent(name="repoaegis", description="RepoAegis policy-controlled repo maintenance agent (Inspect bridge)")
+@agent(name="repoaegis", description="RepoAegis policy-controlled repo maintenance agent (Inspect bridge)")  # noqa: E501
 def repoaegis_agent(
     *,
     model_name: str = BRIDGE_MODEL_NAME,
