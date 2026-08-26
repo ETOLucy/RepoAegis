@@ -3,9 +3,11 @@ from __future__ import annotations
 import pytest
 
 from repo_maintenance_agent.agents.query_rewriter import (
-    QueryRewriterOutput,
-    RewrittenQueryOutput,
     rewrite_queries_with_model,
+)
+from repo_maintenance_agent.search.rewriter import (
+    QueryRewritePlan,
+    RewrittenQuery,
 )
 
 
@@ -18,13 +20,14 @@ class FakeRewriterModel:
         self.calls += 1
         if self.fail:
             raise RuntimeError("model unavailable")
-        return QueryRewriterOutput(
+        return QueryRewritePlan(
             queries=[
-                RewrittenQueryOutput(text="load_config default", kind="general"),
-                RewrittenQueryOutput(
-                    text="src/config.py", kind="path", key_paths=["src/config.py"]
+                RewrittenQuery(text="load_config default", kind="general"),
+                RewrittenQuery(
+                    text="src/config.py", kind="path", key_paths=("src/config.py",)
                 ),
-            ]
+            ],
+            raw="{}",
         )
 
 
