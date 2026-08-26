@@ -93,6 +93,9 @@ class SearchAdapter:
         if not isinstance(top_k, int):
             raise ValueError("search top_k must be an integer")
         try:
+            kind = call.arguments.get("kind")
+            if kind is not None and not isinstance(kind, str):
+                kind = None
             query = SearchQuery(
                 tenant_id=call.tenant_id,
                 repo_id=call.repo_id,
@@ -100,6 +103,7 @@ class SearchAdapter:
                 text=text,
                 allowed_paths=tuple(allowed_paths),
                 top_k=top_k,
+                kind=kind,
             )
         except Exception as e:
             raise ValueError(f"SearchQuery construction failed: {e}") from e

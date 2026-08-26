@@ -18,31 +18,18 @@ class TaskSpecOutput(AgentOutput):
     acceptance_criteria: list[str] = Field(min_length=1, max_length=20)
     constraints: list[str] = Field(default_factory=list, max_length=20)
     unknowns: list[str] = Field(default_factory=list, max_length=20)
-    # M3: structured issue understanding.
-    issue_classification: str = Field(
-        default="bugfix",
-        description=(
-            "High-level classification of the issue: bugfix, feature, test, "
-            "documentation, dependency, refactor."
-        ),
-        max_length=50,
-    )
-    search_hints: list[str] = Field(
-        default_factory=list,
-        max_length=20,
-        description=(
-            "Exact identifiers, file paths, error strings and CamelCase symbols "
-            "that would locate the relevant code. Used to build search queries."
-        ),
-    )
-    key_paths: list[str] = Field(
-        default_factory=list,
-        max_length=20,
-        description=(
-            "Repository paths that most likely contain the code that must change. "
-            "Use paths as they appear in the repository (e.g. 'src/config.py')."
-        ),
-    )
+    # Calibration metadata: calibrated by CalibrationJudge in later stages
+    calibration: dict[str, object] = Field(default_factory=dict, max_length=50)
+
+
+class CalibrationOutput(AgentOutput):
+    """Output schema for the CalibrationJudge LLM calibration."""
+    calibrated_task_type: str | None = None
+    calibrated_ac: list[str] | None = None
+    calibrated_constraints: list[str] | None = None
+    calibrated_unknowns: list[str] | None = None
+    calibration_reason: str = "no adjustment needed"
+
 
 
 class PlanStep(AgentOutput):
@@ -139,3 +126,4 @@ class PullRequestDraft(AgentOutput):
     body: str = Field(min_length=1, max_length=50_000)
     head: str = Field(min_length=1, max_length=255)
     base: str = Field(min_length=1, max_length=255)
+

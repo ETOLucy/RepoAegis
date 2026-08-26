@@ -17,6 +17,7 @@ from repo_maintenance_agent.search.index import (
     ingest_workspace,
 )
 from repo_maintenance_agent.search.reranker import LLMReranker
+from repo_maintenance_agent.search.adapters.opensearch import OpenSearchHybridAdapter
 from repo_maintenance_agent.search.router import QueryKind
 from repo_maintenance_agent.search.service import HybridSearchService
 
@@ -57,6 +58,7 @@ class WorkspaceIndex:
         embeddings: EmbeddingPort | None = None,
         lexical: SearchPort | None = None,
         history: SearchPort | None = None,
+        opensearch: SearchPort | None = None,
         reranker: LLMReranker | None = None,
     ) -> None:
         self._workspace = workspace.resolve()
@@ -65,6 +67,7 @@ class WorkspaceIndex:
         self._embeddings = embeddings
         self._lexical = lexical or LocalLexicalSearch(workspace)
         self._history = history
+        self._opensearch = opensearch
         self._reranker = reranker
         self._bundles: OrderedDict[str, _IndexBundle] = OrderedDict()
         self._lock = asyncio.Lock()
@@ -81,8 +84,10 @@ class WorkspaceIndex:
             retrievers[QueryKind.LEXICAL] = self._lexical
         if self._history is not None:
             retrievers[QueryKind.HISTORY] = self._history
+        if self._opensearch is not None:
+            retrievers[QueryKind.OPENSEARCH] = self._opensearch
         service = HybridSearchService(retrievers)
-        fused = await service.search(query)
+        fused = await service.search(query, kind=query.kind)
         if self._reranker is not None:
             fused = await self._reranker.rerank(query, fused)
         return _dedupe_by_location(fused, limit=query.top_k)

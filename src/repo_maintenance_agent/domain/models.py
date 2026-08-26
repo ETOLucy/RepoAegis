@@ -140,6 +140,7 @@ class SearchQuery(StrictModel):
     text: str = Field(min_length=1, max_length=10_000)
     allowed_paths: tuple[str, ...] = ()
     top_k: int = Field(default=15, ge=1, le=100)
+    kind: str | None = None  # SearchKind value from Rewriter (e.g. "exact", "symbol")
 
 
 class SearchHit(StrictModel):

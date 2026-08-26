@@ -10,6 +10,22 @@ class OpenSearchClient(Protocol):
     def search(self, *, index: str, body: dict[str, Any]) -> dict[str, Any]: ...
 
 
+class OpenSearchClientImpl:
+    """Real OpenSearch client backed by opensearch-py."""
+    def __init__(self, hosts, *, port=9200, http_auth=None, use_ssl=False, verify_certs=False, **kwargs):
+        from opensearchpy import OpenSearch
+        self._client = OpenSearch(
+            hosts=[{"host": h, "port": port} for h in hosts],
+            http_auth=http_auth, use_ssl=use_ssl, verify_certs=verify_certs, **kwargs)
+    def search(self, *, index, body):
+        return self._client.search(index=index, body=body)
+    def ping(self):
+        try:
+            return self._client.ping()
+        except Exception:
+            return False
+
+
 class OpenSearchHybridAdapter:
     def __init__(self, client: OpenSearchClient, index_alias: str) -> None:
         self._client = client

@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     worker_tenant_ids: tuple[str, ...] = ()
     worker_poll_seconds: float = Field(default=1.0, gt=0, le=60)
 
+    # ── OpenSearch 配置 ──
+    opensearch_hosts: tuple[str, ...] = ("localhost",)
+    opensearch_port: int = 9200
+    opensearch_user: str | None = None
+    opensearch_password: SecretStr | None = Field(default=None, repr=False)
+    opensearch_use_ssl: bool = False
+    opensearch_verify_certs: bool = False
+    opensearch_index_alias: str = "repo-aegis-chunks"
+
     @model_validator(mode="after")
     def complete_sandbox_runner_configuration(self) -> Settings:
         if self.sandbox_runner_url is not None and self.sandbox_runner_token is None:

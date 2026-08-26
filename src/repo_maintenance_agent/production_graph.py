@@ -14,6 +14,7 @@ from repo_maintenance_agent.sandbox.docker import DockerSandbox
 from repo_maintenance_agent.sandbox.profiles import EnvironmentProfiler
 from repo_maintenance_agent.sandbox.remote import RemoteSandbox
 from repo_maintenance_agent.sandbox.verifier import SandboxVerifier
+from repo_maintenance_agent.search.adapters.opensearch import OpenSearchClientImpl, OpenSearchHybridAdapter
 from repo_maintenance_agent.search.adapters.ripgrep import default_lexical_search
 from repo_maintenance_agent.search.embeddings import OpenAIEmbeddingClient
 from repo_maintenance_agent.search.history import GitHistorySearch
@@ -65,11 +66,31 @@ class ProductionGraphFactory:
                 "to build the hybrid index (Vector channel). Set at least one key."
             )
         embeddings = OpenAIEmbeddingClient.from_settings(self.settings)
+        # ── OpenSearch 接入 ──
+        opensearch: OpenSearchHybridAdapter | None = None
+        if self.settings.opensearch_hosts:
+            client = OpenSearchClientImpl(
+                list(self.settings.opensearch_hosts),
+                port=self.settings.opensearch_port,
+                http_auth=(
+                    (self.settings.opensearch_user, self.settings.opensearch_password.get_secret_value())
+                    if self.settings.opensearch_user and self.settings.opensearch_password
+                    else None
+                ),
+                use_ssl=self.settings.opensearch_use_ssl,
+                verify_certs=self.settings.opensearch_verify_certs,
+            )
+            if client.ping():
+                opensearch = OpenSearchHybridAdapter(
+                    client,
+                    index_alias=self.settings.opensearch_index_alias,
+                )
         return WorkspaceIndex(
             workspace,
             embeddings=embeddings,
             lexical=default_lexical_search(workspace),
             history=GitHistorySearch(workspace, ProcessRunner(allowed_executables={"git"})),
+            opensearch=opensearch,
             reranker=LLMReranker(model=model, candidate_pool=20, final_k=10),
         )
 

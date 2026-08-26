@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/repo-aegis-mark-reversed.svg">
     <img src="docs/assets/repo-aegis-mark.svg" width="112" alt="RepoAegis 标志">
@@ -8,7 +8,7 @@
 <h1 align="center">RepoAegis</h1>
 
 <p align="center">
-  面向生产环境的仓库维护与 Issue 修复 Agent：权限控制、沙箱隔离、人工审批，全程可审计。
+  Policy-controlled, evidence-backed 的 Issue 修复流水线：从 GitHub Issue 出发 → 定位代码 → 生成 patch → 沙箱验证 → 人工审批 → 提交 PR。
 </p>
 
 <p align="center">
@@ -24,341 +24,153 @@
 
 ---
 
-## 这是什么
-RepoAegis 是一个自动化修复仓库 Issue 的 Coding Agent：从 Issue 出发定位相关代码，生成补丁，在隔离沙箱中验证，经人工审批后提交。面向日常仓库维护，注重安全与可审计性。
-- **多 Agent 流水线**：基于 LangGraph 编排 intake → 定位 → 规划 → 打补丁 → 验证 → 审查六个阶段，确定性路由与有界重试，各阶段职责单一、可独立替换。
-- **混合代码检索**：语法检索（BM25/ripgrep）与符号检索并行召回，可选向量检索（OpenSearch），RRF 融合重排；问答结果附带文件路径与行区间。
-- **权限控制**：deny-by-default 工具授权，按阶段感知；远程写入必须经人工审批。
-- **沙箱执行**：Docker 隔离运行测试，digest-pinned 镜像、非 root、只读根、丢弃 capabilities、`no-new-privileges`。
-- **安全审计**：递归密钥脱敏；红队用例集覆盖 prompt injection、越权工具、密钥外泄、路径穿越；交付全程留痕。
-- **可复现评测**：SWE-bench Verified 分层抽样子集 74/200（37.0%），由官方 Docker harness 判定端到端解决；评测可并发重放、可作 CI 发布门禁，逐实例结果随仓库发布。
+## 项目定位
 
-## 为什么存在
-让 Agent 直接操作真实仓库意味着处理恶意输入与高影响操作：Issue 文本可能携带 prompt injection，源码树可能包含密钥，测试会执行不可信代码，远程写入可能直接影响生产仓库。这些约束决定了设计取舍：
-- **任务边界不可变**：租户、仓库与目标 commit 在任务开始时固定，之后不可更改。
-- **最小权限**：工具默认拒绝，仅按阶段授予必要能力。
-- **人工审批**：远程写入绑定审批信封，人确认计划、目标 commit、验证命令与工具范围后才执行。
-- **隔离执行**：有界资源与网络策略下运行，命令与测试不接触宿主环境。
-- **可追溯**：并发控制与可重放副作用，Git diff、变更记录与验证证据完整留存。
-- **可度量**：评测区分正确性、安全、检索与成本，指标可复现，可对比不同模型与配置。
-本仓库把上述约束端到端实现出来。
+RepoAegis 是一个 **policy-controlled、evidence-backed** 的 Issue 修复流水线。它的核心职责是：给定一个 GitHub Issue，自动完成从理解问题到提交 PR 的全流程，并在每一步确保安全性和可追溯性。
 
-## 已实现的保证
+与其他自动修复工具不同，RepoAegis 不追求"全自动通过"——它优先保证**每一次远程写入都经过人工确认**，**每一次代码变更都有证据支撑**，**每一次执行都在隔离环境中完成**。
 
-| 边界 | 实现 |
-|---|---|
-| Agent 状态 | 严格 Pydantic 模型与合法生命周期迁移 |
-| 并发 | 原子入队、乐观版本、租约认领、轮转 fencing ID |
-| 检索 | 词法、稠密与符号适配器 + 确定性 reciprocal rank fusion |
-| 工具使用 | 租户/仓库/commit 作用域 + 角色与阶段授权 |
-| 远端写入 | 人工决策绑定计划、目标 commit、声明文件、验证命令与精确工具范围 |
-| 补丁安全 | 精确文本编辑、批准路径强制、本地 diff 渲染 + `git apply --check` 预检 |
-| 独立审查 | Gateway 收集的 Git diff、变更后源码、验收条件与验证证据 |
-| 命令 | 参数数组、可执行白名单、超时、输出上限、净化环境 |
-| 沙箱 | 摘要固定镜像、非 root、只读根、丢弃 capabilities、离线检查 |
-| 模型输出 | provider 专属结构化 JSON + 严格本地校验；Responses 调用使用 `store=False`；diff hunk 元数据本地派生 |
-| 编码上下文 | 仅 Gateway 的搜索/读取请求，固定轮次与工具调用上限 |
-| 评测 | 并发套件、重试、来源、基线增量、硬门禁、确定性重放 |
-| 隐私 | 递归脱敏 + 当前树与可达历史发布扫描 |
-| 浏览器面 | 同源控制台 + CSP + 仅内存的 bearer 身份 |
+## 核心设计原则
 
-## 评测
+- **任务边界不可变**：租户、仓库、目标 commit 在任务开始时固定，之后不可更改。防止 Agent 在推理过程中意外偏离范围。
+- **最小权限**：工具默认拒绝，仅按阶段授予必要能力。Agent 在 coding 阶段拿不到审批工具，在 review 阶段拿不到写入工具。
+- **人工审批**：远程写入绑定审批信封。人在回路中确认计划、目标 commit、验证命令与工具范围后才执行。
+- **隔离执行**：Docker 沙箱中运行测试与命令，digest-pinned 镜像、非 root 用户、只读根文件系统、丢弃所有 capabilities。命令不接触宿主环境。
+- **可追溯**：每步操作都有并发控制与可重放副作用。Git diff、变更记录、验证证据完整留存，支持事后审计。
 
-### 评测 harness
+## 架构总览
 
-Harness 在有界并发下评测版本化套件。它保持清单顺序，只重试超时与基础设施失败，并记录：
+核心编排基于 LangGraph 的 StateGraph，是一个 **9 节点线性流水线 + 条件路由 + 有界重试**：
 
-- 不可变的仓库 commit 与数据集版本
-- provider、模型、提示、工具 schema 与策略版本
-- 确定性种子与规范化环境指纹
-- 每个用例的观察、尝试、失败类别、延迟、检索、调用与 token
-- 聚合 resolution、Recall@10、MRR、回归、安全率与 p50/p95 延迟
-- 候选减基线的增量
-- 逐项发布门禁检查与一个最终决策
-
-重放为选定用例创建新 run，且永不修改源证据。
-
-运行内置的无凭据示例：
-
-```bash
-.venv/bin/python -m repo_maintenance_agent.cli evaluate-suite \
-  examples/evaluation/suite.json \
-  examples/evaluation/observations.json \
-  --json-report artifacts/evaluation/example.json \
-  --markdown-report artifacts/evaluation/example.md \
-  --candidate-label local-example
+```
+intake → research → planning → approval → coding → verification → review → pr → finalize
 ```
 
-命令在返回前写入两份报告；门禁失败时以退出码 `1` 返回，可直接用作 CI 发布检查。
+- **状态机**：RepoTaskState 是严格的 Pydantic 模型，带合法生命周期迁移表，每一步 transition() 校验状态合法性。
+- **条件路由**：基于状态 + 迭代次数 + 验证结果动态决定下一步。review 阶段有「证据驱动兜底」——LLM reviewer 反复 request_changes 但验证通过、改动在声明文件内、风险低时仍放行。
+- **人工审批**：approval 节点使用 LangGraph 的 interrupt（human-in-the-loop），审批信封带 plan_hash 摘要，防止审批后计划被篡改。
 
-### SWE-bench 证据标签
+## 模块详解
 
-RepoAegis 把生成证据与质量证据分开：
+### Intake（任务理解）
 
-- **one-shot generation**：预测在未收到官方测试反馈的情况下生成；
-- **officially resolved**：官方 SWE-bench Docker harness 通过全部必需测试；
-- **feedback-assisted calibration**：开发重跑消费了之前的官方失败；
-- **frozen evaluation**：CLI 拒绝开发反馈并保持 one-shot 边界。
+**做了什么**：接收 GitHub Issue，提取结构化元数据——task_type（bugfix/feature/test/documentation/dependency/refactor）、summary、acceptance_criteria、constraints、unknowns。
 
-反馈辅助校准对改进 agent 循环有用，但不会被报告为 one-shot 或 frozen 基准分数。
+**为什么这么做**：Issue 是自然语言文本，需要转化为机器可处理的规范格式。但 Intake 只负责"理解任务是什么"，不负责"找到代码在哪里"——搜索相关的工作全部交给下游 Rewriter 模块，确保职责单一。
 
-### 评测战役
+### Rewriter（查询改写）
 
-开发迭代在从 SWE-bench 全量（2,294 实例）中采样的 **200 实例子集** 上进行，所有 Verified 实例（500 个）按唯一 ID 排除，防止数据泄漏。这一迭代循环——在开发子集上运行、分类失败、修复根因、重新运行——把生成率从最初的 <10% 提升到最终结果。
+**做了什么**：将 Issue 文本改写为多条独立搜索查询，每条查询带 SearchKind 分类和 key_paths 提示。双轨实现：LLM Rewriter 调用模型生成结构化 QueryRewritePlan；规则版 Rewriter 以正则表达式检测作为降级方案。
 
-最终评测在从 **SWE-bench Verified**（500 任务）中采样的 200 实例子集上进行，按仓库分层、比例对齐 Verified 500 分布（seed 42），**frozen** 模式，由**官方 SWE-bench Docker harness** 判定：
+**为什么这么做**：单一搜索查询往往不够精准。通过生成多条不同角度的查询（精确标识符、文件路径、错误消息、符号名等），提高召回覆盖率。双轨设计确保 LLM 失败时系统仍能工作。
 
-| 指标 | 数值 |
-|--------|:-----:|
-| 总实例 | 200 |
-| 成功生成 | 192 / 200（96.0%） |
-| 生成失败 | 8 / 200（4.0%） |
-| **官方解决（端到端）** | **74 / 200（37.0%）** |
-| 官方解决（条件于生成成功） | 74 / 192（38.5%） |
+**SearchKind 18 种**：exact / path / symbol / error / history / general / explore / definition / test / config / dependency / regex / schema / performance / security / api / ui / ci_cd
 
-端到端解决率领先的仓库：pydata 62.5%、astropy 55.6%、django 46.3%（44 个解决）、matplotlib 38.5%、sympy 25.8%。逐实例结果、冻结任务 ID、生成失败原因、评分进度与校验和全部发布在 `docs/evaluation-results/` 中供审计（manifest：`manifest.json`，聚合：`aggregate.json`）。
+### Research（证据收集）
 
-> **注意：** 这是单子集结果，不是排行榜声明。在发布对齐的配对基线之前，不作任何基线提升声明。
+**做了什么**：对 Rewriter 生成的每条查询执行搜索，每个查询携带 kind 和 key_paths。搜索时通过 ToolCall 传递 kind 到搜索链路。搜索后进行 Localizer 局部化循环，精确定位需要修改的代码行。
 
-### 统计严谨性
+**为什么这么做**：搜索不是盲目的——每条查询都知道自己要找什么（kind 决定搜索策略，key_paths 缩小搜索范围）。主搜 + 副搜并行执行，通过 RRF 融合（rank_constant=60）排序结果。方案 C 重试机制确保搜索结果不足时自动回退到 GENERAL 策略，最多 3 次。
 
-比较自带配对 bootstrap 不确定性，而非裸点估计增量：`evaluation/significance.py` 计算可复现的 10,000 次重采样百分位区间（种子固定），标注方向（improvement / regression / inconclusive）；`resolution_statistical_significance` 发布门禁在显著回归与不明确的小样本增量上拒绝。`wilson_ci()` 与精确的 `clopper_pearson_ci()` 为小样本二分类结果给出诚实区间；`required_n_for_power()` 把样本量假设显式化。效应量用 `cohens_h()` 报告，族系多重比较控制用 `holm_adjust()`。聚合报告还暴露平均部分解决率（`tests_passed_ratio`）与缓存命中率，让成本被测量而非猜测。
+**供给侧 QueryKind 6 种**：
 
-### LLM-as-a-Judge 与模型矩阵
-
-`evaluation/judge.py` 在确定性 harness 之外增加基于量表的 LLM 判定（独立 judge gateway、逐标准 1–5 分、重跑一致性），并给出两种范式的一致/不一致率。`evaluation/model_matrix.py` 用对齐种子在同一套件上跑多个模型，输出成本–质量表，并计算可直接进入 bootstrap 门禁的配对增量。
-
-### 双轨评测、Inspect 对齐与红队评测
-
-评测跑在两条轨道上，汇入同一个门禁：CI/迭代用快速自研 harness，权威 run 用 UK AISI Inspect 框架。
-
-- **自研 harness（CI，秒级，无模型调用）**：确定性 fixture 评测 smoke 门禁（`.github/workflows/eval-smoke.yml`）+ 完整版本化套件——并发、可断点、可重放，带发布门禁。
-- **Inspect 对齐（权威）**：`repo_maintenance_agent/inspect/` 以**脚手架**形式提供桥接——数据集转换、SWE-bench 进度 scorer、`.eval` 日志解析器、agent 桥接骨架——使官方 run 可复用行业标准框架与基线。该桥接是已设计的集成方案，还不是已交付的官方提交；Inspect 负责执行与评分，统计结论仍由 AegisEvo 门禁作为唯一权威。
-- **红队用例集**：`examples/evaluation/redteam/` 覆盖提示注入 / 越权工具 / 密钥外泄 / 路径穿越用例，断言 100% deny-by-default 拦截——这是攻击面扫描工具不提供的执行期治理。
-
-## 相关工作
-
-设计建立在 Agent 基准、混合检索、Agent 安全、模型评测与统计学的既有工作上：
-
-- **Agent 基准。** SWE-bench 把 issue 解决定义为由 Docker harness 判定的可复现基准 [1]，SWE-bench Verified 提供人工验证的 500 任务子集 [2]。RepoAegis 报告官方 harness 结果并附逐实例证据，且区分 one-shot 生成与反馈辅助校准。
-- **混合检索。** 稠密段落检索展示了稠密表示相对稀疏基线的价值 [3]；reciprocal rank fusion（RRF）提供对多个排序列表的确定性、无参数融合 [4]。RepoAegis 组合词法（BM25）、符号与可选稠密适配器，用 RRF 融合，保持融合确定性与可审计性。
-- **Agent 安全。** 间接提示注入展示了攻击者控制的检索内容可攻陷 LLM 集成应用 [5]；InjecAgent 为针对工具集成 Agent 的攻击形式化基准 [6]。RepoAegis 把 issue 文本、仓库文件与模型输出视为不可信数据，并强制 deny-by-default 工具授权、审批绑定的远端写入与沙箱执行。
-- **模型评测。** LLM-as-a-judge 建立了 LLM 判定与人类偏好的一致性与偏差特征 [7]。RepoAegis 把确定性 harness 分数与基于量表的 LLM 判定配对，并报告两种范式的一致性。
-- **统计学。** Bootstrap [8]、Holm 序贯拒绝过程 [9]、Wilson [10] 与 Clopper–Pearson [11] 二项区间，支撑 `evaluation/significance.py` 中的显著性门禁。
-- **进化式 prompt 优化。** EvoPrompt 展示了 LLM 可以驱动对 prompt 策略的进化搜索 [12]；AegisEvo 把同样的证据门控进化纪律应用于 Agent 配置基因组，采用配对 bootstrap 显著性加安全否决。
-
-与相邻工具/工作线的定位：
-
-| 工具/工作线 | 焦点 | RepoAegis / AegisEvo 定位 |
+| QueryKind | 实现 | 说明 |
 |---|---|---|
-| Inspect AI（UK AISI） | 权威 Agent 评测 harness | 提供 Inspect 桥接脚手架，让官方 run 复用标准框架；Inspect 负责执行与评分，RepoAegis 增加发布门禁、安全与成本记账 |
-| OpenAI Evals / DeepEval / promptfoo | LLM 评测框架 | 给模型输出打分；RepoAegis 端到端评测 Agent 副作用（工具、沙箱、成本、安全） |
-| LangSmith / Braintrust | LLM 应用的评测 + 追踪 + 门禁 | 用阈值门控 prompt/模型调用的回归；AegisEvo 用配对 bootstrap 加安全否决门控 Agent 配置基因组 |
-| MLflow / SageMaker Model Registry | 模型权重版本化与晋升 | AegisEvo 治理的是 Agent 配置基因组（而非权重），带内容寻址谱系与统计门禁 |
-| Garak / PyRIT / HarmBench | 攻击面扫描 | 互补：探测模型的攻击面；RepoAegis 在执行期强制 deny-by-default 边界 |
+| LEXICAL | LocalLexicalSearch | 精确子串匹配（ripgrep） |
+| BM25 | BM25Search | 通用全文检索，基于词频+逆文档频率 |
+| VECTOR | VectorSearch | 向量嵌入检索，语义相似度 |
+| SYMBOL | SymbolSearch | AST 符号检索，类名/函数名匹配 |
+| HISTORY | GitHistorySearch | Git 历史检索（blame/commit log） |
+| OPENSEARCH | OpenSearchHybridAdapter | OpenSearch 混合检索适配器（可选） |
 
-### 参考文献
+**SearchKind → 搜索策略映射表**：
 
-1. John Yang, Carlos E. Jimenez, Alexander Wettig, Kilian Lieret, Shunyu Yao, Karthik Narasimhan, Ofir Press. *SWE-bench: Can Language Models Resolve Real-World GitHub Issues?* ICLR 2024. arXiv:2310.06770.
-2. OpenAI. *SWE-bench Verified.* 2024. https://openai.com/index/introducing-swe-bench-verified/.
-3. Vladimir Karpukhin, Barlas Oğuz, Sewon Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, Wen-tau Yih. *Dense Passage Retrieval for Open-Domain Question Answering.* EMNLP 2020. arXiv:2004.04906.
-4. Gordon V. Cormack, Charles L. A. Clarke, Stefan Büttcher. *Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods.* SIGIR 2009.
-5. Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten Holz, Mario Fritz. *Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection.* AISec 2023. arXiv:2302.12173.
-6. Qiusi Zhan, Zhixiang Liang, Zifan Ying, Daniel Kang. *InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents.* ACL 2024 Findings. arXiv:2403.02691.
-7. Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, et al. *Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena.* NeurIPS 2023. arXiv:2306.05685.
-8. Bradley Efron. *Bootstrap Methods: Another Look at the Jackknife.* The Annals of Statistics, 7(1), 1979.
-9. Sture Holm. *A Simple Sequentially Rejective Multiple Test Procedure.* Scandinavian Journal of Statistics, 6(2), 1979.
-10. Edwin B. Wilson. *Probable Inference, the Law of Succession, and Statistical Inference.* Journal of the American Statistical Association, 22, 1927.
-11. C. J. Clopper, E. S. Pearson. *The Use of Confidence or Fiducial Limits Illustrated in the Case of the Binomial.* Biometrika, 26, 1934.
-12. Qingyan Guo, Rui Wang, Junliang Guo, Bei Li, Kaitao Song, Xu Tan, Guoqing Liu, Jiang Bian, Yujiu Yang. *EvoPrompt: Connecting LLMs with Evolutionary Algorithms Yields Powerful Prompt Optimizers.* ICLR 2024. arXiv:2309.08532.
-
-## Web 工作台（AI 全栈）
-
-一个 React + Vite 工作台，连接 API 与混合检索代码问答接口：
-
-- **代码问答（混合检索）** `POST /v1/chat`：对仓库做 BM25 + 符号混合检索，通过 OpenAI 兼容模型（DeepSeek）返回带引用的回答，并返回参考路径/行区间。
-- **任务控制台** `/v1/tasks`：列出/创建/查看仓库维护任务。
-- **评测看板** `/v1/evaluations/runs`：评测 run 与发布门禁。
-
-构建前端并托管：
-
-```bash
-cd web
-npm --registry=https://registry.npmmirror.com install
-npm run build          # outputs web/dist
-```
-
-设置 `REPO_AGENT_CHAT_REPO_ROOT` 指向仓库检出即可启用代码问答。对话引擎在 `repo_maintenance_agent/chat.py`；检索在 `search/index.py`（BM25/符号/向量）与 `search/embeddings.py`。
-
-## 快速开始
-
-依赖：
-
-- Python 3.12
-- Git
-- Docker（沙箱与镜像执行）
-
-```bash
-python -m venv .venv
-.venv/bin/python -m pip install -e ".[dev,postgres,observability]"
-.venv/bin/python -m pytest --cov=repo_maintenance_agent --cov-report=term-missing
-.venv/bin/python -m ruff check src tests
-.venv/bin/python -m mypy src
-```
-
-用仅开发的身份启动本地 API：
-
-```bash
-export REPO_AGENT_API_TOKENS='{"local-api-token":{"tenant_id":"tenant-local","subject":"local-reviewer"}}'
-export REPO_AGENT_ENVIRONMENT='development'
-.venv/bin/python -m uvicorn repo_maintenance_agent.main:build_application --factory
-```
-
-打开：
-
-- 运维控制台：`http://127.0.0.1:8000/console`
-- OpenAPI：`http://127.0.0.1:8000/docs`
-- 健康检查：`http://127.0.0.1:8000/health`
-
-控制台在加载后请求 bearer 身份，且只保存在 JavaScript 内存中。它不使用 cookie、local storage、session storage 或 URL 参数。
-
-## CLI
-
-仅在当前进程设置 API 身份：
-
-```bash
-export REPO_AGENT_API_TOKEN='local-api-token'
-
-repo-agent run owner/repository aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa "Fix empty config"
-repo-agent status TASK_ID
-repo-agent approve TASK_ID PLAN_HASH --reason "Reviewed scope and verification plan"
-repo-agent resume TASK_ID PLAN_HASH --reason "Approved for sandbox execution"
-repo-agent cancel TASK_ID
-```
-
-`status` 返回可审查计划、确定性风险与原因、计划哈希、证据摘要、声明文件、验证计划与允许工具。`approve` 读取该信封并随决策提交其目标 commit 与工具范围。API 拒绝过期的哈希、commit 或工具集；任何变更的信封都要求新的决策。`approve --reject` 记录一次拒绝。
-
-## API 面
-
-认证任务路由：
-
-```text
-POST /v1/tasks
-GET  /v1/tasks
-GET  /v1/tasks/{task_id}
-POST /v1/tasks/{task_id}/approval
-POST /v1/tasks/{task_id}/cancel
-```
-
-任务响应刻意省略租户身份与完整检索内容。证据摘要只包含审查所需的来源、定位符与有界摘要字段。
-
-认证评测路由：
-
-```text
-POST /v1/evaluations/runs
-GET  /v1/evaluations/runs
-GET  /v1/evaluations/runs/{run_id}
-POST /v1/evaluations/runs/{run_id}/replay
-GET  /v1/evaluations/runs/{run_id}/report.json
-GET  /v1/evaluations/runs/{run_id}/report.md
-```
-
-跨租户与未知对象 ID 返回相同的 404。公开响应模型省略租户标识与内部队列状态。
-
-## 本地基础设施
-
-Compose profile 定义 API、worker、PostgreSQL、OpenSearch、认证沙箱 runner 与项目自有的 rootless Docker daemon。worker 与 daemon 不共享网络；runner 是唯一桥梁，宿主机不暴露任何 Docker socket 或 daemon 端口。暴露的应用端口绑定 loopback。OpenSearch 安全仅在本本地 profile 中禁用。
-
-```bash
-export POSTGRES_PASSWORD='choose-a-local-password'
-export REPO_AGENT_API_TOKENS='{"local-api-token":{"tenant_id":"tenant-local","subject":"local-reviewer"}}'
-export SANDBOX_RUNNER_TOKEN='choose-a-separate-runner-token'
-export REPO_AGENT_REPOSITORY_LOCATORS='{"owner/repository":"/operator/pinned/repository.git"}'
-export REPO_AGENT_WORKER_TENANT_IDS='["tenant-local"]'
-docker compose config
-docker compose up --build
-```
-
-应用与任务沙箱容器以 UID 10001 运行，只读根文件系统、丢弃 capabilities、`no-new-privileges`、不可变基础镜像摘要。专用 rootless daemon 与 worker 和宿主机 socket 隔离。沙箱依赖安装是独立的可审计阶段；测试与 lint 阶段无网络运行。Compose 语法、隔离拓扑、镜像构建、六服务启动与一个本地提交任务生命周期均已验证。生产可用性、敌意多租户运行与容量不做声明。
-
-## 配置
-
-| 变量 | 用途 | 密钥 |
-|---|---|---|
-| `OPENAI_API_KEY` | 可选的实时 OpenAI 模型调用 | 是 |
-| `OPENAI_MODEL` | 由模型网关记录与选择的模型 | 否 |
-| `REPO_AGENT_API_TOKENS` | 映射到租户与主体的 API bearer 身份 | 是 |
-| `REPO_AGENT_API_TOKEN` | CLI bearer 身份 | 是 |
-| `REPO_AGENT_API_URL` | CLI API URL | 否 |
-| `REPO_AGENT_DATABASE_URL` | SQLAlchemy 任务与评测数据库 | 通常 |
-| `REPO_AGENT_ARTIFACT_ROOT` | 工件存储根 | 否 |
-| `REPO_AGENT_WORKSPACE_ROOT` | 运维方任务工作区根 | 否 |
-| `REPO_AGENT_REPOSITORY_LOCATORS` | 白名单仓库来源注册表 | 通常 |
-| `REPO_AGENT_WORKER_TENANT_IDS` | 显式 worker 租户范围 | 否 |
-| `REPO_AGENT_SANDBOX_RUNNER_TOKEN` | worker 到 runner 的 bearer 凭证 | 是 |
-| `REPO_AGENT_ALLOWED_HOSTS` | Trusted Host 白名单 | 否 |
-| `REPO_AGENT_MAX_ITERATIONS` | 有界图纠错预算 | 否 |
-
-应用永不加载仓库的 `.env` 文件。`.env.example` 只含名称与空白占位符。生产凭证属于密钥管理器；GitHub 访问应使用短时 App installation token。
-
-## 安全模型
-
-Issue 文本、仓库文件、模型输出、搜索结果、测试日志与文档都是不可信数据。它们都不能授予权限。每个副作用都穿过类型化适配器与工具网关。
-
-发布门禁：
-
-```bash
-.venv/bin/python -m repo_maintenance_agent.security.scanner
-```
-
-扫描器检查已跟踪与未忽略文件，以及所有可达 Git 历史中的凭证形态、私钥、个人 Windows 路径与私有代理配置。
-
-## 仓库布局
-
-```text
-src/repo_maintenance_agent/
-  agents/         类型化专责节点与输出
-  api/            认证 API 与控制台路由
-  console/        零构建运维工作区
-  domain/         框架无关状态与端口
-  evaluation/     harness、聚合、门禁、报告与持久化
-  graph/          LangGraph 构建与确定性路由
-  models/         模型 provider 边界
-  observability/  脱敏追踪与归一化指标
-  policies/       工具授权与递归脱敏
-  sandbox/        语言 profile 与 Docker 验证
-  search/         路由、适配器与排序融合
-  security/       隐私与凭证扫描
-  storage/        任务状态、队列租约与工件
-  tools/          Git、GitHub、Context7、补丁与进程适配器
-examples/         无凭据评测输入
-sandbox/          不可变 worker 镜像与 seccomp profile
-tests/            单元与集成契约
-```
-
-## 文档
-
-- [权威系统设计](RepoAegis_Design.md)
-- [威胁模型](docs/threat-model.md)
-- [安全最佳实践报告](security_best_practices_report.md)
-
-## 与 AegisEvo 的联合治理流
-
-RepoAegis 与 AegisEvo 构成一条受治理流水线。RepoAegis 执行仓库维护任务；AegisEvo 是它的搜索、评测与晋升平台，通过版本化、内容寻址的 target pack 驱动固定的 RepoAegis 运行时。
-
-- **RepoAegis** 执行真实仓库任务：materialize 固定 commit → plan → approve → patch → 容器验证 → review → commit/push → 草稿 PR。
-- **Target pack** 冻结 RepoAegis commit、运行时源码、镜像与策略摘要（`repoaegis-target-pack/v2`）。独立的 SWE-bench 协议绑定任务 ID、模型、编排元数据与 token 记账策略。
-- **AegisEvo** 通过版本化 `repoaegis-http-v1` 适配器消费 target pack，运行等预算 baseline / random / evolution 搜索，并报告解决率、安全、用量与延迟证据（`evaluation-observation/v1`）。
-- **受控晋升** 要求绝对质量、统计显著性、零安全回退、预算合规与人工批准。新的 RepoAegis 发布创建新的 target pack，而不是覆盖旧的。
-
-### 版本兼容
-
-| RepoAegis | Target pack | AegisEvo | 契约 |
+| SearchKind | 主搜 | 副搜 | 适用场景 |
 |---|---|---|---|
-| `978d24e`（已评测修订） | `repoaegis-target-pack/v2`（`repoaegis-v2`） | `ed1f445`（已评测修订） | `repoaegis-http-v1` 适配器 + `evaluation-observation/v1` |
+| exact | LEXICAL + BM25 | BM25 | 精确标识符 |
+| path | LEXICAL + BM25 | BM25 | 文件路径 |
+| symbol | SYMBOL + BM25 | BM25 + VECTOR | 符号/类名/函数名 |
+| error | LEXICAL + BM25 | BM25 | 错误消息 |
+| history | HISTORY + BM25 | BM25 | Git 历史 |
+| general | BM25 + VECTOR + OPENSEARCH | BM25 + VECTOR | 通用 fallback |
+| explore | VECTOR + BM25 | BM25 + VECTOR | 探索性搜索 |
+| definition | SYMBOL + BM25 | BM25 + VECTOR | 定义查找 |
+| test | LEXICAL + BM25 | BM25 + VECTOR | 测试相关 |
+| config | LEXICAL + BM25 | BM25 | 配置相关 |
+| dependency | LEXICAL + BM25 + SYMBOL | BM25 | 依赖/导入 |
+| regex | LEXICAL + BM25 | BM25 | 正则模式 |
+| schema | SYMBOL + BM25 + VECTOR | BM25 + VECTOR | 数据库 schema |
+| performance | BM25 + VECTOR | BM25 + VECTOR | 性能优化 |
+| security | LEXICAL + BM25 | BM25 | 安全漏洞 |
+| api | SYMBOL + BM25 | BM25 + VECTOR | API 接口 |
+| ui | LEXICAL + BM25 | BM25 | 前端 UI |
+| ci_cd | LEXICAL + BM25 + HISTORY | BM25 | CI/CD 配置 |
 
-跨语言摘要校验与实时联合 demo 验证运行时兼容：AegisEvo 驱动真实 RepoAegis 任务到 `completed`。该历史 demo 不证明任务解决；只有官方 verifier 报告才能确立 `resolved`。评测侧见 [AegisEvo](https://github.com/ETOLucy/AegisEvo)。
+### CalibrationJudge（标准校准）
 
-## 许可证
+**做了什么**：独立裁判模块，各阶段（research/planning/coding）可调用 calibrate() 检查 Intake 生成的标准是否需要调整。生成 calibration diff 写入 task_spec.calibration，下游阶段读取校准后的标准。
 
-Apache License 2.0。见 [LICENSE](LICENSE)。
+**为什么这么做**：Intake 的初步分析可能不准确。Research 阶段收集到证据后，可能发现 task_type 判断错误（比如 Intake 说是 feature，但证据显示是 bugfix）。CalibrationJudge 作为独立模块，不修改 Intake 输出，而是生成 diff 供下游读取，保持数据流的单向性。
+
+### Planning（计划生成）
+
+**做了什么**：基于 Research 收集的证据生成实现计划，包含步骤列表、涉及文件、验证方案。同时评估风险等级（low/medium/high/critical）。
+
+**为什么这么做**：让 Agent 在动手之前先想清楚要做什么，而不是直接开始写代码。风险等级决定是否需要人工审批——高风险任务强制进入 approval 环节。
+
+### Approval（人工审批）
+
+**做了什么**：高风险任务进入人工审批环节。审批信封 ApprovalEnvelope 包含 plan_hash（SHA-256 防篡改摘要）、declared_files、allowed_tools、verification_plan。plan_hash 使用 canonical JSON + SHA-256 生成不可逆摘要。
+
+**为什么这么做**：远程写入可能直接影响生产仓库。审批信封确保人在回路中确认计划后再执行，且 plan_hash 保证审批通过后计划不会被篡改——任何修改都会导致 hash 不匹配，触发拒绝。
+
+### Coding（代码生成）
+
+**做了什么**：根据计划生成 patch，使用精确文本替换（old_text → new_text），确保不修改未声明文件。
+
+**为什么这么做**：精确文本替换比行号补丁更可靠，不会因为代码行变动而失效。声明的文件列表确保 Agent 不会修改计划外的文件，与最小权限原则一致。
+
+### Verification（沙箱验证）
+
+**做了什么**：在 Docker 沙箱中运行测试，验证 patch 的正确性。
+
+**为什么这么做**：隔离执行防止恶意代码影响宿主环境。沙箱使用 digest-pinned 镜像确保不可变性、非 root 用户降低权限、只读根防止持久化修改、丢弃所有 capabilities 减少攻击面。
+
+### Review（代码审查）
+
+**做了什么**：LLM 审查生成的 patch，检查是否满足 acceptance_criteria。
+
+**为什么这么做**：增加一层自动化质量保障，确保 patch 不引入新问题、满足原始需求。review 与 verification 互为补充——验证保证"不坏"，审查保证"做对"。
+
+### Localizer（定位循环）
+
+**做了什么**：Planner + Explorer 循环，最多 3 轮，支持 4 种动作（search / read / blame / finish）。
+
+**为什么这么做**：搜索返回的代码片段可能不够精确。Localizer 通过多轮交互逐步缩小范围，从文件级定位到函数级再到行级，最终给出精确的待修改位置。
+
+## 技术栈
+
+| 层 | 技术 | 说明 |
+|---|---|---|
+| 语言 | Python 3.12+ | pyproject.toml 要求 >=3.12 |
+| 编排 | LangGraph（StateGraph） | interrupt + conditional edges |
+| 模型接入 | openai SDK（Responses API） | structured() 统一入口，Pydantic schema 校验 |
+| Web | FastAPI + uvicorn | API 服务 |
+| 搜索 | 自研：BM25 / AST 符号 / 向量 / LEXICAL / History / OpenSearch | 18 种 SearchKind 映射，RRF 融合 |
+| 存储 | SQLAlchemy + Postgres（可选）/ 内存 | artifacts / memory / queue |
+| 沙箱 | Docker（digest-pinned 镜像、非 root、只读根） | 隔离执行 |
+| 前端 | React + Vite 控制台 | web/ |
+| 评测 | 自研 harness + UK AISI Inspect 桥接 | 双轨评测 |
+
+## 安全设计
+
+- **deny-by-default 工具授权**：工具默认拒绝，仅按阶段授予必要能力。Agent 无法越权调用工具。
+- **审批信封**：远程写入绑定审批信封，plan_hash（SHA-256）防篡改。审批通过后任何计划变更都会导致 hash 不匹配。
+- **递归脱敏**：Redactor 递归检测并替换密钥、token、密码、API key 等敏感信息，防止泄漏。
+- **路径穿越防护**：检查所有文件路径是否在 workspace root 内，拒绝任何包含 `..` 或绝对路径穿越的尝试。
+- **沙箱隔离**：Docker 隔离运行测试，digest-pinned 镜像确保不可变性、非 root 用户降低权限、只读根文件系统防止持久化修改、丢弃所有 capabilities 减少攻击面。
+
+## 相关项目
+
+- [AegisEvo](https://github.com/ETOLucy/AegisEvo) — Agent 配置基因组进化优化，配套 RepoAegis 使用。
+- [UK AISI Inspect](https://github.com/UKGovernmentBEIS/inspect_ai) — 行业标准 Agent 评测框架，RepoAegis 提供桥接。
