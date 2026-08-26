@@ -46,13 +46,13 @@ class RipgrepSearch:
             "--glob",
             "!build/**",
             "--",
-            query.text,
+            query.text or "",
         ]
         roots = self._resolve_roots(query.allowed_paths)
         command.extend(str(root) for root in roots)
         result = await asyncio.to_thread(
             self._run,
-            command,
+            command,  # type: ignore[arg-type]
         )
         return self._parse(result, query)
 

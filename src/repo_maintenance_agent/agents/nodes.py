@@ -131,7 +131,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
             initial_hits=tuple(hits),
         )
         queries.extend(outcome.queries)
-        merged = _dedupe_hits(list(outcome.evidence))
+        merged = _dedupe_hits(list(outcome.evidence))  # type: ignore[arg-type]
         evidence = tuple(
             Evidence(
                 source=hit.source,
@@ -434,7 +434,7 @@ def build_agent_nodes(runtime: AgentRuntime) -> AgentNodes:
                 "application/json",
             )
             proposal_paths = tuple(sorted({edit.path for edit in output.edits}))
-            current_files: dict[str, object] = {}
+            # current_files is already a parameter
             try:
                 undeclared = sorted(set(proposal_paths) - set(task.declared_files))
                 if undeclared:

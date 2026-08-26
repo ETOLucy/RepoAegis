@@ -70,7 +70,7 @@ async def run_model_matrix(
     """
     runs: dict[str, EvaluationRun] = {}
     for model in models:
-        provenance = provenance_factory(model, seed=seed)
+        provenance = provenance_factory(model, seed=seed)  # type: ignore[call-arg]
         runs[model] = await harness.run(
             tenant_id=DEFAULT_MATRIX_TENANT_ID,
             suite=suite,

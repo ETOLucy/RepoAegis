@@ -46,7 +46,7 @@ RepoAegis 是一个 **policy-controlled、evidence-backed** 的 Issue 修复流�
 flowchart TD
     START --> ENTRY{route_entry}
     ENTRY -->|PENDING| I[Intake]
-    ENTRY -->|CODING| CD[Code]
+    ENTRY -->|Resume 中断恢复| CD[Code]
     ENTRY -->|OTHER| FAIL[Failure]
 
     I --> R[Research]
@@ -78,7 +78,7 @@ flowchart TD
     FAIL --> END
 ```
 
-- **条件路由图**：不是线性流水线——每个节点后是条件分支，由路由函数基于状态 + 迭代次数 + 验证结果动态决定下一步。从 START 到 END 有 5 个路由决策点（route_entry、route_after_planning、route_after_approval、route_after_verification、route_after_review）。
+- **条件路由图**：不是线性流水线——每个节点后是条件分支，由路由函数基于状态 + 迭代次数 + 验证结果动态决定下一步。从 START 到 END 有 5 个路由决策点（route_entry、route_after_planning、route_after_approval、route_after_verification、route_after_review）。route_entry 的 CODING → Code 分支仅用于任务中断后恢复（如 approval 审批通过后继续执行），正常流程走 PENDING → Intake。
 - **有界重试**：verification 失败（CODE 错误且 iteration < max）→ 回到 code 重试；review request_changes 且 iteration < max → 回到 code 重试。最多重试 max_iterations 次。
 - **证据驱动兜底**：review 阶段 LLM 反复 request_changes 但验证通过、改动在声明文件内、风险低时仍放行（保留警告记录）。
 - **人工审批**：approval 节点使用 LangGraph 的 interrupt（human-in-the-loop），审批信封带 plan_hash 摘要，防止审批后计划被篡改。

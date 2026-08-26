@@ -61,7 +61,7 @@ class CalibrationJudge:
         try:
             from repo_maintenance_agent.agents.schemas import CalibrationOutput
 
-            output = await self._model.structured(
+            output = await self._model.structured(  # type: ignore[union-attr]
                 system=(
                     "You are a calibration judge. Given the existing task specification "
                     "and newly gathered evidence, determine whether the task_type, "

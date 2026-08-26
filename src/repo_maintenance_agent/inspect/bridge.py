@@ -90,7 +90,7 @@ def _extract_issue_from_state(state: AgentState) -> tuple[str, dict[str, Any]]:
         if msg.role == "user" and msg.content:
             content = msg.content
             if isinstance(content, list):
-                texts = []
+                texts: list[str] = []
                 for item in content:
                     if isinstance(item, dict):
                         texts.append(item.get("text", ""))
@@ -100,7 +100,7 @@ def _extract_issue_from_state(state: AgentState) -> tuple[str, dict[str, Any]]:
             if isinstance(content, str):
                 issue_text = content
                 break
-    return issue_text, dict(state.metadata or {})
+    return issue_text, dict(state.metadata or {})  # type: ignore[attr-defined]
 
 
 def _calculate_progress(task: RepoTaskState) -> dict[str, Any]:
@@ -160,8 +160,8 @@ def repoaegis_agent(
             base_commit = metadata.get("base_commit", "")
 
             if not issue_text:
-                bridge.state.metadata["passed_ratio"] = 0.0
-                bridge.state.metadata["error"] = "no user message found in state"
+                bridge.state.metadata["passed_ratio"] = 0.0  # type: ignore[attr-defined]
+                bridge.state.metadata["error"] = "no user message found in state"  # type: ignore[attr-defined]
                 return bridge.state
 
             # 2. Create usage ledger (high limit to avoid eval interruption)
@@ -214,25 +214,25 @@ def repoaegis_agent(
                 result = await graph.ainvoke({"task": initial_task, "trace": []})
                 final_task: RepoTaskState = result["task"]
 
-                # 8. Write results to bridge.state.metadata for the scorer
+                # 8. Write results to bridge.state.metadata for the scorer  # type: ignore[attr-defined]
                 progress = _calculate_progress(final_task)
-                bridge.state.metadata.update(progress)
-                bridge.state.metadata["instance_id"] = instance_id
-                bridge.state.metadata["repo"] = repo
-                bridge.state.metadata["base_commit"] = base_commit
-                bridge.state.metadata["trace"] = result.get("trace", [])
-                bridge.state.metadata["task_status"] = final_task.status.value
+                bridge.state.metadata.update(progress)  # type: ignore[attr-defined]
+                bridge.state.metadata["instance_id"] = instance_id  # type: ignore[attr-defined]
+                bridge.state.metadata["repo"] = repo  # type: ignore[attr-defined]
+                bridge.state.metadata["base_commit"] = base_commit  # type: ignore[attr-defined]
+                bridge.state.metadata["trace"] = result.get("trace", [])  # type: ignore[attr-defined]
+                bridge.state.metadata["task_status"] = final_task.status.value  # type: ignore[attr-defined]
 
                 if final_task.patch_artifact_id:
                     try:
                         pb = await artifact_store.get("inspect-eval", final_task.patch_artifact_id)
-                        bridge.state.metadata["model_patch"] = pb.decode("utf-8")
+                        bridge.state.metadata["model_patch"] = pb.decode("utf-8")  # type: ignore[attr-defined]
                     except (FileNotFoundError, UnicodeDecodeError):
                         pass
             except Exception as exc:
-                bridge.state.metadata["passed_ratio"] = 0.0
-                bridge.state.metadata["error"] = str(exc)[:2000]
-                bridge.state.metadata["instance_id"] = instance_id
+                bridge.state.metadata["passed_ratio"] = 0.0  # type: ignore[attr-defined]
+                bridge.state.metadata["error"] = str(exc)[:2000]  # type: ignore[attr-defined]
+                bridge.state.metadata["instance_id"] = instance_id  # type: ignore[attr-defined]
 
         return bridge.state
 

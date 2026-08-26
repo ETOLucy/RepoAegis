@@ -12,16 +12,16 @@ class OpenSearchClient(Protocol):
 
 class OpenSearchClientImpl:
     """Real OpenSearch client backed by opensearch-py."""
-    def __init__(self, hosts, *, port=9200, http_auth=None, use_ssl=False, verify_certs=False, **kwargs):  # noqa: E501
+    def __init__(self, hosts: list[str], *, port: int = 9200, http_auth: tuple[str, str] | None = None, use_ssl: bool = False, verify_certs: bool = False, **kwargs: Any) -> None:  # noqa: E501
         from opensearchpy import OpenSearch
         self._client = OpenSearch(
             hosts=[{"host": h, "port": port} for h in hosts],
             http_auth=http_auth, use_ssl=use_ssl, verify_certs=verify_certs, **kwargs)
-    def search(self, *, index, body):
-        return self._client.search(index=index, body=body)
-    def ping(self):
+    def search(self, *, index: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._client.search(index=index, body=body)  # type: ignore[no-any-return]
+    def ping(self) -> bool:
         try:
-            return self._client.ping()
+            return self._client.ping()  # type: ignore[no-any-return]
         except Exception:
             return False
 

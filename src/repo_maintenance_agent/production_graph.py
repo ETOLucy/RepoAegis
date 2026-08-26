@@ -72,7 +72,7 @@ class ProductionGraphFactory:
         # ── OpenSearch 接入 ──
         opensearch: OpenSearchHybridAdapter | None = None
         if self.settings.opensearch_hosts:
-            client = OpenSearchClientImpl(
+            client: OpenSearchClientImpl = OpenSearchClientImpl(
                 list(self.settings.opensearch_hosts),
                 port=self.settings.opensearch_port,
                 http_auth=(

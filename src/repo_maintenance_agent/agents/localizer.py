@@ -159,7 +159,7 @@ class Localizer:
                         )
         deduped = _dedupe_evidence(evidence)
         return LocalizeOutcome(
-            evidence=tuple(deduped),
+            evidence=tuple(deduped),  # type: ignore[arg-type]
             queries=queries,
             rounds=min(self._max_rounds, max(1, len(queries) + 1)),
         )
@@ -179,7 +179,7 @@ class Localizer:
             ],
         }
         try:
-            return await self._model.structured(
+            return await self._model.structured(  # type: ignore[no-any-return]
                 system=_LOCALIZER_SYSTEM,
                 input_text=json.dumps(payload, sort_keys=True, ensure_ascii=False),
                 schema=LocalizerAction,
