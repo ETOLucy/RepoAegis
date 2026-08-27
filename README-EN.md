@@ -249,7 +249,7 @@ curl -X POST http://127.0.0.1:8000/v1/tasks \
 | Storage | SQLAlchemy + Postgres (optional) / in-memory | artifacts / memory / queue |
 | Sandbox | Docker (digest-pinned images, non-root, read-only root) | Isolated execution |
 | Frontend | React + Vite console | web/ |
-| Evaluation | Custom harness + UK AISI Inspect bridge | Dual-track evaluation |
+| Evaluation | Custom harness (SWE-bench official swebench package validator + Inspect scaffold skeleton) | Single-track (custom) |
 
 ## Security Design
 
@@ -262,7 +262,7 @@ curl -X POST http://127.0.0.1:8000/v1/tasks \
 ## Related Projects
 
 - [AegisEvo](https://github.com/ETOLucy/AegisEvo) — Agent configuration genome evolution optimization, companion to RepoAegis.
-- [UK AISI Inspect](https://github.com/UKGovernmentBEIS/inspect_ai) — Industry-standard agent evaluation framework, bridged by RepoAegis.
+- [UK AISI Inspect](https://github.com/UKGovernmentBEIS/inspect_ai) — Industry-standard agent evaluation framework. RepoAegis provides a scaffold skeleton (`inspect/`); replay scoring via `swe_bench_scorer` verified (3/8 resolved), generate mode wiring not yet complete.
 
 ## License
 
