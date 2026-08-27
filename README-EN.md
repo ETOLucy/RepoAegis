@@ -8,7 +8,7 @@
 <h1 align="center">RepoAegis</h1>
 
 <p align="center">
-  Automated repo maintenance agent. Sandboxed execution, permission control, human approval, auditable delivery.
+  Policy-controlled, evidence-backed issue fixing pipeline: GitHub Issue → locate code → produce patch → sandbox verification → human approval → submit PR.
 </p>
 
 <p align="center">
@@ -24,359 +24,245 @@
 
 ---
 
-## What Is This
+## Project Positioning
 
-RepoAegis is a coding agent that fixes GitHub issues end to end: it locates the
-relevant code, produces a patch, verifies it in a sandbox, and delivers it for
-human approval before it touches the repository.
-- **Conditional routing graph.** LangGraph drives 10 nodes — intake, research, planning, approval, code, verification, review, pr, failure, finalize — with 5 conditional routing decision points, bounded retry loops, and evidence-driven fallback.
-- **Hybrid code search.** BM25/ripgrep, symbol-based retrieval, and OpenSearch
-  vector search are fused with Reciprocal Rank Fusion to find relevant code
-  across large repositories.
-- **Permission control.** Tools are denied by default; each capability is
-  granted explicitly and scoped to a minimal set of operations.
-- **Sandboxed execution.** Patches are built and verified in Docker containers
-  with digest-pinned images, non-root users, and read-only root filesystems.
-- **Security audit.** Every action is logged; remote writes require explicit
-  human approval before being applied.
-- **Reproducible evaluation.** Reported against SWE-bench Verified (see docs for latest results).
+RepoAegis is a **policy-controlled, evidence-backed** issue fixing pipeline. Given a GitHub Issue, it automates the full flow from understanding the problem to submitting a PR, ensuring safety and traceability at every step.
 
-## Why This Exists
+Unlike fully automated repair tools, RepoAegis prioritizes: **every remote write requires human confirmation**, **every code change is backed by evidence**, **every execution runs in an isolated environment**.
 
-Coding agents operate on untrusted input — issue text, repository contents,
-even third-party code fetched at runtime — while taking high-impact actions
-that can alter production repositories. That combination demands strict
-guardrails:
-- **Task boundaries are fixed.** Agent behavior is scoped to the issue at
-  hand; prompt injection from issue text must not expand what it is allowed
-  to do.
-- **Least privilege.** The agent receives only the tools needed for the
-  current task, and nothing more.
-- **Human approval.** Changes to the repository are reviewed and approved
-  before they are applied.
-- **Isolated execution.** Untrusted code runs in a disposable sandbox, never
-  on the host or with production credentials.
-- **Traceability.** Every action is recorded, so any change can be traced
-  back to who or what made it.
-- **Measurability.** Behavior is validated against a fixed evaluation
-  benchmark, so improvements are verified rather than assumed.
-This repository implements those constraints end to end.
+## Core Design Principles
 
-## Implemented Guarantees
+- **Immutable task boundaries**: Tenant, repository, and target commit are fixed at task start and cannot be changed afterward. Prevents the agent from drifting out of scope during reasoning.
+- **Least privilege**: Tools are denied by default; capabilities are granted only as needed for each stage. The agent cannot access approval tools during the coding stage, or write tools during the review stage.
+- **Human approval**: Remote writes require an approval envelope. Human-in-the-loop confirms the plan, target commit, verification commands, and tool scope before execution.
+- **Isolated execution**: Tests and commands run in Docker sandboxes with digest-pinned images, non-root users, read-only root filesystems, and all capabilities dropped. Commands never touch the host environment.
+- **Traceability**: Every operation has concurrency control and replayable side effects. Git diffs, change records, and verification evidence are fully preserved for post-mortem audit.
 
-| Boundary | Implementation |
-|---|---|
-| Agent state | Strict Pydantic models and legal lifecycle transitions |
-| Concurrency | Atomic enqueue, optimistic versions, leased claims, rotating fencing IDs |
-| Retrieval | Lexical, dense, and symbol adapters with deterministic reciprocal rank fusion |
-| Tool use | Tenant/repository/commit scope plus role and stage authorization |
-| Remote writes | Human decision bound to the plan, target commit, declared files, verification commands, and exact tool scope |
-| Patch safety | Exact-text proposals, approved-path enforcement, local diff rendering, and `git apply --check` preflight |
-| Independent review | Gateway-collected Git diff, post-change source, acceptance criteria, and verification evidence |
-| Commands | Argument arrays, executable allowlist, timeout, output limit, sanitized environment |
-| Sandbox | Digest-pinned image, non-root user, read-only root, dropped capabilities, offline checks |
-| Model output | Provider-specific structured JSON with strict local validation; Responses calls use `store=False`; diff hunk metadata is derived locally |
-| Coding context | Gateway-only search/read requests with fixed round and tool-call ceilings |
-| Evaluation | Concurrent suites, retries, provenance, baseline deltas, hard gates, deterministic replay |
-| Privacy | Recursive redaction plus current-tree and reachable-history publication scanning |
-| Browser surface | Same-origin console with CSP and in-memory-only bearer identity |
+## Architecture Overview
 
-## Evaluation
+The core orchestration is built on LangGraph's StateGraph, a **10-node conditional routing graph + bounded retry + evidence-driven fallback**:
 
-### Evaluation harness
+```mermaid
+flowchart TD
+    START --> ENTRY{route_entry}
+    ENTRY -->|PENDING| I[Intake]
+    ENTRY -->|Resume interrupted| CD[Code]
+    ENTRY -->|OTHER| FAIL[Failure]
 
-The Harness evaluates a versioned suite under a bounded concurrency limit. It preserves manifest order, retries only timeout and infrastructure failures, and records:
+    I --> R[Research]
+    R --> P[Planning]
 
-- immutable repository commit and dataset version
-- provider, model, prompt, tool-schema, and policy versions
-- deterministic seed and normalized environment fingerprint
-- observation, attempts, failure category, latency, retrieval, calls, and tokens per case
-- aggregate resolution, Recall@10, MRR, regressions, safety rate, and p50/p95 latency
-- candidate-minus-baseline deltas
-- individual release-gate checks and one final decision
+    P --> ROUTE_P{route_after_planning}
+    ROUTE_P -->|NEEDS_APPROVAL| A[Approval]
+    ROUTE_P -->|CODING| CD
+    ROUTE_P -->|FAILED| FAIL
 
-Replay creates a new run for selected cases and never mutates the source evidence.
+    A --> ROUTE_A{route_after_approval}
+    ROUTE_A -->|CODING| CD
+    ROUTE_A -->|OTHER| FAIL
 
-Run the included credential-free example:
+    CD --> V[Verification]
+    V --> ROUTE_V{route_after_verification}
+    ROUTE_V -->|passed| RV[Review]
+    ROUTE_V -->|CODE error + iter<max| CD
+    ROUTE_V -->|OTHER error| FAIL
 
-```bash
-.venv/bin/python -m repo_maintenance_agent.cli evaluate-suite \
-  examples/evaluation/suite.json \
-  examples/evaluation/observations.json \
-  --json-report artifacts/evaluation/example.json \
-  --markdown-report artifacts/evaluation/example.md \
-  --candidate-label local-example
+    RV --> ROUTE_RV{route_after_review}
+    ROUTE_RV -->|approve| PR[PR]
+    ROUTE_RV -->|request_changes + iter<max| CD
+    ROUTE_RV -->|evidence-driven fallback| PR
+    ROUTE_RV -->|OTHER| FAIL
+
+    PR --> FINAL[Finalize]
+    FINAL --> END
+    FAIL --> END
 ```
 
-The command writes both reports before returning exit code `1` for a failed gate, which makes it usable as a CI release check.
+- **Conditional routing graph**: Not a linear pipeline — each node is followed by a conditional branch, dynamically determined by routing functions based on state + iteration count + verification results. There are 5 routing decision points (route_entry, route_after_planning, route_after_approval, route_after_verification, route_after_review).
+- **Bounded retry**: Verification failure (CODE error + iteration < max) → retry code; review request_changes + iteration < max → retry code. Maximum retries: max_iterations.
+- **Evidence-driven fallback**: If review repeatedly requests changes but verification passes, changes are within declared files, and risk is low, the pipeline still proceeds (with a warning record).
+- **Human approval**: The approval node uses LangGraph's interrupt (human-in-the-loop), with an approval envelope carrying a plan_hash digest to prevent tampering after approval.
 
-### SWE-bench evidence labels
+## Module Details
 
-RepoAegis keeps generation and quality evidence separate:
+### Intake (Task Understanding)
 
-- **one-shot generation**: a prediction was produced without prior official-test feedback;
-- **officially resolved**: the official SWE-bench Docker harness passed all required tests;
-- **feedback-assisted calibration**: a development rerun consumed a previous official failure;
-- **frozen evaluation**: the CLI rejects development feedback and preserves the one-shot boundary.
+**What it does**: Receives a GitHub Issue and extracts structured metadata — task_type (bugfix/feature/test/documentation/dependency/refactor), summary, acceptance_criteria, constraints, unknowns.
 
-Feedback-assisted calibration is useful for improving the agent loop, but it is not reported as a one-shot or frozen benchmark score.
+**Why**: Issues are natural language text that needs to be converted into a machine-processable specification format. However, Intake only does initial analysis; calibration happens in subsequent stages.
 
-### Evaluation campaign
+### CalibrationJudge (Standard Calibration)
 
-Development iteration was conducted on a **200-instance subset** sampled from the full SWE-bench dataset (2,294 instances), with all Verified instances (500) excluded by unique ID to prevent data leakage. The iterative loop — run on the development subset, classify failures, patch the root cause, re-run — drove the generation rate from an initial <10% to the final result.
+**What it does**: After each stage (research/planning/coding), calls CalibrationJudge to check whether the intake standards (task_type, acceptance_criteria, constraints, unknowns) are still valid. Calibration results are written as a diff/overlay; downstream stages see the adjusted standards.
 
-The final evaluation ran on a **200-instance subset** sampled from **SWE-bench Verified** (500 tasks), stratified by repository proportional to the Verified 500 distribution (seed 42), in **frozen** mode, judged by the **official SWE-bench Docker harness**:
+**Why**: Intake's initial analysis may be inaccurate. After Research collects evidence, it may discover that the task_type was wrong (e.g., Intake said "feature" but evidence shows "bugfix"). CalibrationJudge is an independent module that doesn't modify Intake's output but generates a diff for downstream consumption, maintaining data flow unidirectionality.
 
-| Metric | Value |
-|--------|:-----:|
-| Total instances | 200 |
-| Successfully generated | 192 / 200 (96.0%) |
-| Generation failed | 8 / 200 (4.0%) |
-| **Officially resolved (end-to-end)** | **74 / 200 (37.0%)** |
-| Officially resolved (conditional on generation) | 74 / 192 (38.5%) |
+### Rewriter (Query Rewriting)
 
-Top repos by end-to-end resolution: pydata 62.5%, astropy 55.6%, django 46.3% (44 resolved), matplotlib 38.5%, sympy 25.8%. Per-instance results, frozen task IDs, generation-failure reasons, grading progress, and checksums are published in `docs/evaluation-results/` for audit (manifest: `manifest.json`, aggregate: `aggregate.json`).
+**What it does**: In the Research node, calls `rewrite_queries_with_model()` to rewrite the issue title + body + search hints into multiple targeted search queries. Each query carries a `SearchKind` (18 kinds) for the search backend to select the appropriate retrieval strategy.
 
-> **Note:** This is a single-subset result, not a leaderboard claim. No baseline improvement claim is made until an aligned paired baseline is published.
+**Why**: A single issue description may require different search strategies for different aspects. The Rewriter decomposes the issue into multiple search dimensions, each with the optimal retrieval strategy, improving search coverage.
 
-### Statistical rigor
+### Research (Evidence Collection)
 
-Comparisons carry paired-bootstrap uncertainty instead of bare point deltas: `evaluation/significance.py` computes a reproducible 10,000-resample percentile interval (seed-fixed), labels the direction (improvement / regression / inconclusive), and a `resolution_statistical_significance` release gate fails on a significant regression and on inconclusive small-sample deltas. `wilson_ci()` and the exact `clopper_pearson_ci()` report honest intervals for small binary results, and `required_n_for_power()` makes the sample-size assumption explicit. Effect size is reported as `cohens_h()`, and family-wise multiple-comparison control uses `holm_adjust()`. Aggregate reports also expose a mean partial resolution ratio (`tests_passed_ratio`) and a cache-hit rate so cost is measured, not guessed.
+**What it does**: Executes the rewritten queries through the search system. Each query carries a `kind` that maps to a search strategy. Searches are executed in parallel across primary and secondary strategies, with results fused via RRF (Reciprocal Rank Fusion). Supports 18 SearchKind mappings.
 
-### LLM-as-a-Judge and model matrix
+**Search strategy mapping table**:
 
-`evaluation/judge.py` adds rubric-based LLM judging (independent judge gateway, per-criterion 1–5 scores, rerun consistency) alongside the deterministic harness, plus an agreement/disagreement rate between the two paradigms. `evaluation/model_matrix.py` runs the same suite across several models with aligned seeds, prints a cost-quality table, and computes pairwise deltas ready for the bootstrap gate.
+| Rewriter Kind | Primary Search | Secondary Search | Description |
+|---|---|---|---|
+| exact | LEXICAL + BM25 | BM25 | Exact identifier, error string |
+| path | LEXICAL + BM25 | BM25 | File path hints |
+| error | LEXICAL + BM25 | BM25 | Error messages, tracebacks |
+| symbol | SYMBOL + BM25 | BM25 + VECTOR | CamelCase symbols, class/function names |
+| definition | SYMBOL + BM25 | BM25 + VECTOR | Definition lookup |
+| history | HISTORY + BM25 | BM25 | Git history queries |
+| general | BM25 + VECTOR + OPENSEARCH | BM25 + VECTOR | General fallback |
+| explore | VECTOR + BM25 | BM25 + VECTOR | Exploratory search |
+| test | LEXICAL + BM25 | BM25 + VECTOR | Test-related |
+| config | LEXICAL + BM25 | BM25 | Configuration-related |
+| dependency | LEXICAL + BM25 + SYMBOL | BM25 | Dependencies/imports |
+| regex | LEXICAL + BM25 | BM25 | Regex pattern matching |
+| schema | SYMBOL + BM25 + VECTOR | BM25 + VECTOR | Database schema |
+| performance | BM25 + VECTOR | BM25 + VECTOR | Performance optimization |
+| security | LEXICAL + BM25 | BM25 | Security vulnerabilities |
+| api | SYMBOL + BM25 | BM25 + VECTOR | API interfaces |
+| ui | LEXICAL + BM25 | BM25 | Frontend UI |
+| ci_cd | LEXICAL + BM25 + HISTORY | BM25 | CI/CD configuration |
 
-### Dual-track evaluation, Inspect alignment, and red-team evaluation
+### Planning (Plan Generation)
 
-Evaluation runs on two tracks that feed one gate: a fast self-hosted harness for CI/iteration, and the UK AISI Inspect framework for authoritative runs.
+**What it does**: Generates an implementation plan based on Research evidence, containing step list, involved files, and verification plan. Also assesses risk level (low/medium/high/critical).
 
-- **Self-hosted harness (CI, seconds, no model calls)**: deterministic-fixture eval smoke gate (`.github/workflows/eval-smoke.yml`) plus the full versioned suite — concurrent, resumable, replay-safe, with release gates.
-- **Inspect alignment (authoritative)**: `repo_maintenance_agent/inspect/` provides the bridge as a **scaffold** — dataset conversion, a SWE-bench progress scorer, a `.eval` log parser, and an agent-bridge skeleton — so official runs can reuse the industry-standard framework and baselines. The bridge is a designed integration plan, not yet a shipped official submission; Inspect executes and scores, while statistical conclusions remain the single authority of the AegisEvo gates.
-- **Red-team case set**: `examples/evaluation/redteam/` covers prompt-injection / unauthorized-tool / secret-exfiltration / path-traversal cases and asserts 100% deny-by-default interception — execution-time governance that attack-surface scanners do not provide.
+**Why**: Forces the agent to think before acting. Risk level determines whether human approval is needed — high-risk tasks must enter the approval stage.
 
-## Related Work
+### Approval (Human Approval)
 
-The design builds on established work in agent benchmarking, hybrid retrieval, agent safety, model evaluation, and statistics:
+**What it does**: High-risk tasks enter the human approval stage. The ApprovalEnvelope contains plan_hash (SHA-256 tamper-proof digest), declared_files, allowed_tools, and verification_plan. plan_hash uses canonical JSON + SHA-256 to generate an irreversible digest.
 
-- **Agent benchmarking.** SWE-bench frames issue resolution as a reproducible benchmark judged by a Docker harness [1], and SWE-bench Verified provides a human-validated 500-task subset [2]. RepoAegis reports official-harness results with per-instance evidence and separates one-shot generation from feedback-assisted calibration.
-- **Hybrid retrieval.** Dense passage retrieval demonstrates the value of dense representations over sparse baselines [3]; reciprocal rank fusion (RRF) provides a deterministic, parameter-free fusion of multiple ranked lists [4]. RepoAegis combines lexical (BM25), symbol, and optional dense adapters with RRF, keeping fusion deterministic and auditable.
-- **Agent safety.** Indirect prompt injection demonstrates that attacker-controlled retrieved content can compromise LLM-integrated applications [5]; InjecAgent formalizes a benchmark for such attacks against tool-integrated agents [6]. RepoAegis treats issue text, repository files, and model output as untrusted data and enforces deny-by-default tool authorization, approval-bound remote writes, and sandboxed execution.
-- **Model evaluation.** LLM-as-a-judge establishes agreement and bias characteristics of LLM judges against human preferences [7]. RepoAegis pairs deterministic harness scores with rubric-based LLM judging and reports agreement between paradigms.
-- **Statistics.** The bootstrap [8], Holm's sequentially rejective procedure [9], and the Wilson [10] and Clopper–Pearson [11] binomial intervals underpin the significance gates in `evaluation/significance.py`.
-- **Evolutionary prompt optimization.** EvoPrompt shows that LLMs can drive evolutionary search over prompt strategies [12]; AegisEvo applies the same evidence-gated evolutionary discipline to agent-configuration genomes with paired-bootstrap significance plus a safety veto.
+**Why**: Remote writes may directly affect production repositories. The approval envelope ensures human confirmation before execution, and plan_hash guarantees the plan can't be tampered with after approval.
 
-Positioning against adjacent tooling:
+### Coding (Code Generation)
 
-| Tool / line of work | Focus | RepoAegis / AegisEvo position |
-|---|---|---|
-| Inspect AI (UK AISI) | Authoritative agent evaluation harness | Ships an Inspect bridge scaffold so official runs reuse the standard framework; Inspect executes and scores, RepoAegis adds release gates, safety, and cost accounting |
-| OpenAI Evals / DeepEval / promptfoo | LLM evaluation frameworks | Score model outputs; RepoAegis evaluates agent side effects (tools, sandbox, cost, safety) end to end |
-| LangSmith / Braintrust | Eval + trace + gates for LLM applications | Gate prompt/model-call regression by threshold; AegisEvo gates agent-configuration genomes by paired bootstrap plus safety veto |
-| MLflow / SageMaker Model Registry | Model-weight versioning and promotion | AegisEvo governs agent-configuration genomes (not weights) with content-addressed lineage and statistical gates |
-| Garak / PyRIT / HarmBench | Attack-surface scanning | Complementary: probe the model attack surface; RepoAegis enforces deny-by-default execution-time boundaries |
+**What it does**: Generates patches based on the plan using exact-text replacement (old_text → new_text), ensuring undeclared files are not modified.
 
-### References
+**Why**: Exact-text replacement is more reliable than line-number patches, and won't break if code lines shift. Declared file lists ensure the agent doesn't modify files outside the plan.
 
-1. John Yang, Carlos E. Jimenez, Alexander Wettig, Kilian Lieret, Shunyu Yao, Karthik Narasimhan, Ofir Press. *SWE-bench: Can Language Models Resolve Real-World GitHub Issues?* ICLR 2024. arXiv:2310.06770.
-2. OpenAI. *SWE-bench Verified.* 2024. https://openai.com/index/introducing-swe-bench-verified/.
-3. Vladimir Karpukhin, Barlas Oğuz, Sewon Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, Wen-tau Yih. *Dense Passage Retrieval for Open-Domain Question Answering.* EMNLP 2020. arXiv:2004.04906.
-4. Gordon V. Cormack, Charles L. A. Clarke, Stefan Büttcher. *Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods.* SIGIR 2009.
-5. Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten Holz, Mario Fritz. *Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection.* AISec 2023. arXiv:2302.12173.
-6. Qiusi Zhan, Zhixiang Liang, Zifan Ying, Daniel Kang. *InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents.* ACL 2024 Findings. arXiv:2403.02691.
-7. Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, et al. *Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena.* NeurIPS 2023. arXiv:2306.05685.
-8. Bradley Efron. *Bootstrap Methods: Another Look at the Jackknife.* The Annals of Statistics, 7(1), 1979.
-9. Sture Holm. *A Simple Sequentially Rejective Multiple Test Procedure.* Scandinavian Journal of Statistics, 6(2), 1979.
-10. Edwin B. Wilson. *Probable Inference, the Law of Succession, and Statistical Inference.* Journal of the American Statistical Association, 22, 1927.
-11. C. J. Clopper, E. S. Pearson. *The Use of Confidence or Fiducial Limits Illustrated in the Case of the Binomial.* Biometrika, 26, 1934.
-12. Qingyan Guo, Rui Wang, Junliang Guo, Bei Li, Kaitao Song, Xu Tan, Guoqing Liu, Jiang Bian, Yujiu Yang. *EvoPrompt: Connecting LLMs with Evolutionary Algorithms Yields Powerful Prompt Optimizers.* ICLR 2024. arXiv:2309.08532.
+### Verification (Sandbox Verification)
 
-## Web Workbench (AI Full-Stack)
+**What it does**: Runs tests in a Docker sandbox to verify patch correctness.
 
-A React + Vite workbench that talks to the API and a hybrid-search code Q&A endpoint:
+**Why**: Isolated execution prevents malicious code from affecting the host. The sandbox uses digest-pinned images for immutability, non-root users for reduced privileges, read-only root to prevent persistence, and all capabilities dropped to minimize attack surface.
 
-- **Code Q&A (hybrid retrieval)** `POST /v1/chat`: BM25 + symbol hybrid retrieval over the repo, cited answers via an OpenAI-compatible model (DeepSeek), reference paths/line ranges returned.
-- **Task console** `/v1/tasks`: list, create, and inspect repository maintenance tasks.
-- **Evaluation dashboard** `/v1/evaluations/runs`: evaluation runs and release gates.
+### Review (Code Review)
 
-Build the frontend and serve it:
+**What it does**: LLM reviews the generated patch, checking if it meets the acceptance criteria.
 
-```bash
-cd web
-npm --registry=https://registry.npmmirror.com install
-npm run build          # outputs web/dist
-```
+**Why**: Adds an automated quality assurance layer to ensure the patch doesn't introduce new issues and meets the original requirements. Review and Verification complement each other — verification ensures "doesn't break", review ensures "does it right".
 
-Set `REPO_AGENT_CHAT_REPO_ROOT` to a repo checkout to enable code Q&A. The chat engine is `repo_maintenance_agent/chat.py`; retrieval lives in `search/index.py` (BM25/symbol/vector) and `search/embeddings.py`.
+### Localizer (Localization Loop)
+
+**What it does**: Planner + Explorer loop, up to 3 rounds, supporting 4 actions (search / read / blame / finish).
+
+**Why**: Search results may not be precise enough. The Localizer narrows down through multi-round interaction, from file-level to function-level to line-level, eventually giving precise modification locations.
 
 ## Quick Start
 
-Requirements:
+### Prerequisites
 
-- Python 3.12
-- Git
-- Docker for sandbox and image execution
+- Python 3.12+
+- Node.js 18+
+- Docker (optional, for sandbox verification)
+- OpenAI API Key (or compatible endpoint)
 
-```bash
-python -m venv .venv
-.venv/bin/python -m pip install -e ".[dev,postgres,observability]"
-.venv/bin/python -m pytest --cov=repo_maintenance_agent --cov-report=term-missing
-.venv/bin/python -m ruff check src tests
-.venv/bin/python -m mypy src
-```
-
-Start the local API with a development-only identity:
+### Installation
 
 ```bash
-export REPO_AGENT_API_TOKENS='{"local-api-token":{"tenant_id":"tenant-local","subject":"local-reviewer"}}'
-export REPO_AGENT_ENVIRONMENT='development'
-.venv/bin/python -m uvicorn repo_maintenance_agent.main:build_application --factory
+# Clone the repository
+git clone https://github.com/ETOLucy/RepoAegis.git
+cd RepoAegis
+
+# Backend
+python3 -m venv .venv
+source .venv/Scripts/activate
+pip install -e ".[dev]"
+
+# Frontend
+cd web && npm install && cd ..
 ```
 
-Open:
+### Configuration
 
-- Operations console: `http://127.0.0.1:8000/console`
-- OpenAPI: `http://127.0.0.1:8000/docs`
-- Health check: `http://127.0.0.1:8000/health`
-
-The console requests the bearer identity after load and keeps it only in JavaScript memory. It does not use cookies, local storage, session storage, or URL parameters.
-
-## CLI
-
-Set the API identity only in the current process:
+Create a `.env` file (or set environment variables):
 
 ```bash
-export REPO_AGENT_API_TOKEN='local-api-token'
-
-repo-agent run owner/repository aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa "Fix empty config"
-repo-agent status TASK_ID
-repo-agent approve TASK_ID PLAN_HASH --reason "Reviewed scope and verification plan"
-repo-agent resume TASK_ID PLAN_HASH --reason "Approved for sandbox execution"
-repo-agent cancel TASK_ID
+export OPENAI_API_KEY="sk-your-api-key"
+export OPENAI_BASE_URL="https://api.openai.com/v1"  # optional, for compatible endpoints
+export REPO_AGENT_API_TOKENS='{"dev-token":"dev-tenant"}'
 ```
 
-`status` returns the reviewable plan, deterministic risk and reasons, plan hash, evidence summaries, declared files, verification plan, and allowed tools. `approve` reads that envelope and submits its target commit and tool scope with the decision. The API rejects stale hashes, commits, or tool sets; any changed envelope requires a new decision. `approve --reject` records a rejection.
+### Start Development Servers
 
-## API Surface
-
-Authenticated task routes:
-
-```text
-POST /v1/tasks
-GET  /v1/tasks
-GET  /v1/tasks/{task_id}
-POST /v1/tasks/{task_id}/approval
-POST /v1/tasks/{task_id}/cancel
-```
-
-Task responses deliberately omit tenant identity and full retrieved content. Evidence summaries contain only source, locator, and bounded summary fields needed for review.
-
-Authenticated evaluation routes:
-
-```text
-POST /v1/evaluations/runs
-GET  /v1/evaluations/runs
-GET  /v1/evaluations/runs/{run_id}
-POST /v1/evaluations/runs/{run_id}/replay
-GET  /v1/evaluations/runs/{run_id}/report.json
-GET  /v1/evaluations/runs/{run_id}/report.md
-```
-
-Cross-tenant and unknown object IDs have the same 404 response. Public response models omit tenant identifiers and internal queue state.
-
-## Local Infrastructure
-
-The Compose profile defines the API, worker, PostgreSQL, OpenSearch, authenticated sandbox runner, and a project-owned rootless Docker daemon. The worker and daemon share no network; the runner is the only bridge, and no Docker socket or daemon port is exposed to the host. Exposed application ports bind to loopback. OpenSearch security is disabled only in this local profile.
+Two terminals are needed:
 
 ```bash
-export POSTGRES_PASSWORD='choose-a-local-password'
-export REPO_AGENT_API_TOKENS='{"local-api-token":{"tenant_id":"tenant-local","subject":"local-reviewer"}}'
-export SANDBOX_RUNNER_TOKEN='choose-a-separate-runner-token'
-export REPO_AGENT_REPOSITORY_LOCATORS='{"owner/repository":"/operator/pinned/repository.git"}'
-export REPO_AGENT_WORKER_TENANT_IDS='["tenant-local"]'
-docker compose config
-docker compose up --build
+# Terminal 1: Backend API
+cd RepoAegis
+export REPO_AGENT_API_TOKENS='{"dev-token":"dev-tenant"}'
+export OPENAI_API_KEY="sk-your-api-key"
+.venv/Scripts/python.exe -m uvicorn repo_maintenance_agent.main:build_application --host 127.0.0.1 --port 8000
+
+# Terminal 2: Frontend Console
+cd RepoAegis/web
+npx vite --host 127.0.0.1 --port 5173
 ```
 
-Application and task sandbox containers run as UID 10001 with a read-only root filesystem, dropped capabilities, `no-new-privileges`, and immutable base-image digests. The dedicated rootless daemon is isolated from worker and host sockets. Sandbox dependency setup is a separate auditable phase; test and lint phases run without network access. Compose syntax, isolation topology, image build, six-service startup, and one local submitted-task lifecycle are verified. Production availability, hostile multi-tenant operation, and capacity are not claimed.
+### Verify
 
-## Configuration
+```bash
+curl http://127.0.0.1:8000/v1/health
+# Expected: {"status":"ok"}
+```
 
-| Variable | Purpose | Secret |
+### Run a Fix Task
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/tasks \
+  -H "Authorization: Bearer dev-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "issue_url": "https://github.com/owner/repo/issues/1",
+    "repo_url": "https://github.com/owner/repo.git",
+    "commit_sha": "abc123..."
+  }'
+```
+
+## Tech Stack
+
+| Layer | Technology | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | Optional live OpenAI model calls | yes |
-| `OPENAI_MODEL` | Model recorded and selected by the model gateway | no |
-| `REPO_AGENT_API_TOKENS` | API bearer identities mapped to tenant and subject | yes |
-| `REPO_AGENT_API_TOKEN` | CLI bearer identity | yes |
-| `REPO_AGENT_API_URL` | CLI API URL | no |
-| `REPO_AGENT_DATABASE_URL` | SQLAlchemy task and evaluation database | usually |
-| `REPO_AGENT_ARTIFACT_ROOT` | Artifact storage root | no |
-| `REPO_AGENT_WORKSPACE_ROOT` | Operator-owned task workspace root | no |
-| `REPO_AGENT_REPOSITORY_LOCATORS` | Allowlisted repository source registry | usually |
-| `REPO_AGENT_WORKER_TENANT_IDS` | Explicit worker tenant scope | no |
-| `REPO_AGENT_SANDBOX_RUNNER_TOKEN` | Worker-to-runner bearer credential | yes |
-| `REPO_AGENT_ALLOWED_HOSTS` | Trusted Host allowlist | no |
-| `REPO_AGENT_MAX_ITERATIONS` | Bounded graph correction budget | no |
+| Language | Python 3.12+ | pyproject.toml requires >=3.12 |
+| Orchestration | LangGraph (StateGraph) | interrupt + conditional edges |
+| Model Access | openai SDK (Responses API) | structured() unified entry, Pydantic schema validation |
+| Web | FastAPI + uvicorn | API service |
+| Search | Custom: BM25 / AST symbol / Vector / LEXICAL / History / OpenSearch | 18 SearchKind mappings, RRF fusion |
+| Storage | SQLAlchemy + Postgres (optional) / in-memory | artifacts / memory / queue |
+| Sandbox | Docker (digest-pinned images, non-root, read-only root) | Isolated execution |
+| Frontend | React + Vite console | web/ |
+| Evaluation | Custom harness + UK AISI Inspect bridge | Dual-track evaluation |
 
-The application never loads a repository `.env` file. `.env.example` contains names and blank placeholders only. Production credentials belong in a secret manager; GitHub access should use short-lived App installation tokens.
+## Security Design
 
-## Security Model
+- **Deny-by-default tool authorization**: Tools are denied by default; capabilities are granted only per stage. The agent cannot invoke tools beyond its authority.
+- **Approval envelope**: Remote writes are bound to an approval envelope with plan_hash (SHA-256) tamper protection. Any plan change after approval causes a hash mismatch.
+- **Recursive redaction**: Redactor recursively detects and replaces secrets, tokens, passwords, API keys, and other sensitive information to prevent leaks.
+- **Path traversal protection**: Checks all file paths against the workspace root, rejecting any path containing `..` or absolute path traversal attempts.
+- **Sandbox isolation**: Docker sandbox runs tests with digest-pinned images for immutability, non-root users for reduced privileges, read-only root filesystem, and all capabilities dropped.
 
-Issue text, repository files, model output, search results, test logs, and documentation are untrusted data. None can grant permissions. Every side effect crosses a typed adapter and the Tool Gateway.
+## Related Projects
 
-Publication gate:
-
-```bash
-.venv/bin/python -m repo_maintenance_agent.security.scanner
-```
-
-The scanner checks tracked and non-ignored files plus all reachable Git history for credential shapes, private keys, personal Windows paths, and private proxy configuration.
-
-## Repository Layout
-
-```text
-src/repo_maintenance_agent/
-  agents/          typed specialist nodes and outputs
-  api/             authenticated API and console routes
-  console/         zero-build operations workspace
-  domain/          framework-independent state and ports
-  evaluation/      harness, aggregation, gates, reports, and persistence
-  graph/           LangGraph construction and deterministic routing
-  models/          model-provider boundary
-  observability/   redacted traces and normalized metrics
-  policies/        tool authorization and recursive redaction
-  sandbox/         language profiles and Docker verification
-  search/          routing, adapters, and rank fusion
-  security/        privacy and credential scanner
-  storage/         task state, queue leases, and artifacts
-  tools/           Git, GitHub, Context7, patch, and process adapters
-examples/          credential-free evaluation inputs
-sandbox/           immutable worker image and seccomp profile
-tests/             unit and integration contracts
-```
-
-## Documentation
-
-- [Authoritative system design](RepoAegis_Design.md)
-- [Threat model](docs/threat-model.md)
-- [Security best-practices report](security_best_practices_report.md)
-
-## Joint Governance Flow With AegisEvo
-
-RepoAegis and AegisEvo form one governed pipeline. RepoAegis executes repository maintenance tasks; AegisEvo is the search, evaluation, and promotion platform that drives the pinned RepoAegis runtime through a versioned, content-addressed target pack.
-
-- **RepoAegis** executes real repository tasks: materialize the pinned commit → plan → approve → patch → container verification → review → commit/push → draft PR.
-- **Target pack** freezes the RepoAegis commit, runtime source, images, and policy digests (`repoaegis-target-pack/v2`). The separate SWE-bench protocol binds task IDs, model, orchestration metadata, and token-accounting policy.
-- **AegisEvo** consumes the target pack through the versioned `repoaegis-http-v1` adapter, runs equal-budget baseline / random / evolution search, and reports resolution, safety, usage, and latency evidence (`evaluation-observation/v1`).
-- **Controlled promotion** requires absolute quality, statistical significance, zero safety regression, budget compliance, and human approval. A new RepoAegis release creates a new target pack instead of overwriting the previous one.
-
-### Version Compatibility
-
-| RepoAegis | Target pack | AegisEvo | Contract |
-|---|---|---|---|
-| `978d24e` (evaluated revision) | `repoaegis-target-pack/v2` (`repoaegis-v2`) | `ed1f445` (evaluated revision) | `repoaegis-http-v1` adapter + `evaluation-observation/v1` |
-
-Cross-language digest checks and the live joint demo verify runtime compatibility: AegisEvo drives a real RepoAegis task to `completed`. That historical demo did not prove task resolution; only an official verifier report may establish `resolved`. See [AegisEvo](https://github.com/ETOLucy/AegisEvo) for the evaluation side.
+- [AegisEvo](https://github.com/ETOLucy/AegisEvo) — Agent configuration genome evolution optimization, companion to RepoAegis.
+- [UK AISI Inspect](https://github.com/UKGovernmentBEIS/inspect_ai) — Industry-standard agent evaluation framework, bridged by RepoAegis.
 
 ## License
 

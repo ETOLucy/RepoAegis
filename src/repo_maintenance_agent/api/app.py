@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import asyncio
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, FastAPI, Request, Response, status
@@ -17,9 +14,6 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from repo_maintenance_agent.api.auth import Principal, StaticTokenAuthenticator
 from repo_maintenance_agent.api.schemas import (
     ApprovalRequest,
-    ChatHit,
-    ChatRequest,
-    ChatResponse,
     EvaluationReplayRequest,
     EvaluationRunCreateRequest,
     EvaluationRunListResponse,
@@ -28,8 +22,6 @@ from repo_maintenance_agent.api.schemas import (
     TaskListResponse,
     TaskResponse,
 )
-from repo_maintenance_agent.chat import ChatEngine
-from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.domain.errors import (
     ConcurrentUpdate,
     InvalidStateTransition,
@@ -50,40 +42,6 @@ from repo_maintenance_agent.evaluation.storage import (
     EvaluationRepository,
     InMemoryEvaluationRepository,
 )
-
-chat_router = APIRouter(prefix="/v1", tags=["chat"])
-
-_chat_engine: ChatEngine | None = None
-_chat_engine_lock = asyncio.Lock()
-
-
-async def _get_chat_engine() -> ChatEngine | None:
-    global _chat_engine
-    if _chat_engine is not None:
-        return _chat_engine
-    async with _chat_engine_lock:
-        if _chat_engine is not None:
-            return _chat_engine
-        repo_root = os.environ.get("REPO_AGENT_CHAT_REPO_ROOT")
-        if not repo_root:
-            return None
-        _chat_engine = ChatEngine(Settings(), repo_root=Path(repo_root))
-        return _chat_engine
-
-
-@chat_router.post("/chat", response_model=ChatResponse)
-async def chat(body: ChatRequest) -> ChatResponse:
-    engine = await _get_chat_engine()
-    if engine is None:
-        raise ConcurrentUpdate("chat is not configured (REPO_AGENT_CHAT_REPO_ROOT missing)")
-    result = await engine.answer(body.query, top_k=body.top_k)
-    raw_hits = cast(list[dict[str, Any]], result["hits"])
-    return ChatResponse(
-        answer=cast(str, result["answer"]),
-        hits=tuple(ChatHit(**hit) for hit in raw_hits),
-        repo_id=cast(str, result["repo_id"]),
-        commit_sha=cast(str, result["commit_sha"]),
-    )
 
 
 def create_app(
@@ -140,38 +98,36 @@ def create_app(
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Cache-Control"] = "no-store"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self'; "
-            "img-src 'self' data:; connect-src 'self'; object-src 'none'; "
-            "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
         )
-        response.headers["Referrer-Policy"] = "no-referrer"
         return response
 
-    bearer = HTTPBearer(auto_error=False)
-    bearer_dependency = Depends(bearer)
+    security = HTTPBearer(auto_error=False)
 
-    def principal_dependency(
-        credentials: HTTPAuthorizationCredentials | None = bearer_dependency,
+    async def resolve_principal(
+        credentials: HTTPAuthorizationCredentials | None = Depends(security),
     ) -> Principal:
         return authenticator.authenticate(credentials)
 
-    principal_marker = Depends(principal_dependency)
-    router = APIRouter(prefix="/v1", dependencies=[])
+    principal_marker = Depends(resolve_principal)
+
+    router = APIRouter(prefix="/v1", tags=["tasks"])
 
     @router.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
     async def create_task(
         body: TaskCreateRequest,
         principal: Principal = principal_marker,
     ) -> TaskResponse:
-        state = RepoTaskState(
+        state = RepoTaskState.create(
             tenant_id=principal.tenant_id,
+            subject=principal.subject,
             repo_id=body.repo_id,
             commit_sha=body.commit_sha,
             base_branch=body.base_branch,
             issue=body.issue,
         )
-        created = await repository.create(state)
-        return TaskResponse.from_state(created)
+        await repository.save(state)
+        return TaskResponse.from_state(state)
 
     @router.get("/tasks", response_model=TaskListResponse)
     async def list_tasks(
@@ -180,41 +136,28 @@ def create_app(
     ) -> TaskListResponse:
         if not 1 <= limit <= 200:
             raise ConcurrentUpdate("task list limit is invalid")
-        tasks = await repository.list(principal.tenant_id, limit=limit)
-        return TaskListResponse(items=[TaskResponse.from_state(task) for task in tasks])
+        states = await repository.list(principal.tenant_id, limit=limit)
+        return TaskListResponse(items=[TaskResponse.from_state(s) for s in states])
 
     @router.get("/tasks/{task_id}", response_model=TaskResponse)
     async def get_task(
         task_id: str,
         principal: Principal = principal_marker,
     ) -> TaskResponse:
-        task = await repository.get(principal.tenant_id, task_id)
-        return TaskResponse.from_state(task)
+        state = await repository.get(principal.tenant_id, task_id)
+        return TaskResponse.from_state(state)
 
-    @router.post("/tasks/{task_id}/cancel", response_model=TaskResponse)
-    async def cancel_task(
-        task_id: str,
-        principal: Principal = principal_marker,
-    ) -> TaskResponse:
-        task = await repository.get(principal.tenant_id, task_id)
-        cancelled = task.transition(TaskStatus.CANCELLED)
-        saved = await repository.save(cancelled, expected_version=task.version)
-        return TaskResponse.from_state(saved)
-
-    @router.post("/tasks/{task_id}/approval", response_model=TaskResponse)
-    async def decide_approval(
+    @router.post("/tasks/{task_id}/approve", response_model=TaskResponse)
+    async def approve_task(
         task_id: str,
         body: ApprovalRequest,
         principal: Principal = principal_marker,
     ) -> TaskResponse:
-        task = await repository.get(principal.tenant_id, task_id)
-        if (
-            task.status is not TaskStatus.NEEDS_APPROVAL
-            or task.plan_hash != body.plan_hash
-            or task.commit_sha != body.target_commit
-            or task.allowed_tools != body.allowed_tools
-        ):
-            raise ConcurrentUpdate("approval does not match the active plan")
+        state = await repository.get(principal.tenant_id, task_id)
+        if state.status is not TaskStatus.NEEDS_APPROVAL:
+            raise InvalidStateTransition("task is not awaiting approval")
+        if body.plan_hash != state.plan_hash:
+            raise ConcurrentUpdate("plan hash mismatch — plan has changed since approval was requested")
         decision = ApprovalDecision(
             approved=body.approved,
             approver=principal.subject,
@@ -223,10 +166,9 @@ def create_app(
             allowed_tools=body.allowed_tools,
             reason=body.reason,
         )
-        target = TaskStatus.CODING if body.approved else TaskStatus.FAILED
-        decided = task.model_copy(update={"approval": decision}).transition(target)
-        saved = await repository.save(decided, expected_version=task.version)
-        return TaskResponse.from_state(saved)
+        updated = state.apply_approval(decision)
+        await repository.save(updated)
+        return TaskResponse.from_state(updated)
 
     @router.post(
         "/evaluations/runs",
@@ -330,7 +272,6 @@ def create_app(
         return PlainTextResponse(markdown, media_type="text/markdown")
 
     app.include_router(router)
-    app.include_router(chat_router)
 
     console_root = Path(__file__).resolve().parents[1] / "console"
 
@@ -353,8 +294,12 @@ def create_app(
     async def favicon() -> Response:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+    @router.get("/health", include_in_schema=False)
+    async def v1_health() -> dict[str, str]:
+        return {"status": "ok"}
+
     @app.get("/health", include_in_schema=False)
-    async def health() -> dict[str, str]:
+    async def root_health() -> dict[str, str]:
         return {"status": "ok"}
 
     return app

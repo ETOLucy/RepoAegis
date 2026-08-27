@@ -314,3 +314,7 @@ flowchart TD
 - **route_after_approval**：CODING → code；其他 → failure
 - **route_after_verification**：passed → review；CODE error + iteration < max_iterations → code（重试）；其他 → failure
 - **route_after_review**：approve → pr；request_changes + iteration < max → code（重试）；evidence-driven fallback（已验证通过 + 低风险 + 文件在声明范围内）→ pr；其他 → failure
+
+## 完整架构流程图（PNG）
+
+![RepoAegis Architecture Flow](assets/architecture-flow.png)

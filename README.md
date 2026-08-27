@@ -182,6 +182,78 @@ flowchart TD
 
 **为什么这么做**：搜索返回的代码片段可能不够精确。Localizer 通过多轮交互逐步缩小范围，从文件级定位到函数级再到行级，最终给出精确的待修改位置。
 
+
+## 快速开始
+
+### 前置要求
+
+- Python 3.12+
+- Node.js 18+
+- Docker（可选，用于沙箱验证）
+- OpenAI API Key（或兼容接口）
+
+### 安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/ETOLucy/RepoAegis.git
+cd RepoAegis
+
+# 后端
+python3 -m venv .venv
+source .venv/Scripts/activate
+pip install -e ".[dev]"
+
+# 前端
+cd web && npm install && cd ..
+```
+
+### 配置
+
+创建 `.env` 文件（或设置环境变量）：
+
+```bash
+export OPENAI_API_KEY="sk-your-api-key"
+export OPENAI_BASE_URL="https://api.openai.com/v1"  # 可选，兼容接口
+export REPO_AGENT_API_TOKENS='{"dev-token":"dev-tenant"}'
+```
+
+### 启动开发服务器
+
+需要两个终端：
+
+```bash
+# 终端 1：后端 API 服务
+cd RepoAegis
+export REPO_AGENT_API_TOKENS='{"dev-token":"dev-tenant"}'
+export OPENAI_API_KEY="sk-your-api-key"
+.venv/Scripts/python.exe -m uvicorn repo_maintenance_agent.main:build_application --host 127.0.0.1 --port 8000
+
+# 终端 2：前端控制台
+cd RepoAegis/web
+npx vite --host 127.0.0.1 --port 5173
+```
+
+### 验证
+
+```bash
+curl http://127.0.0.1:8000/v1/health
+# 预期返回：{"status":"ok"}
+```
+
+### 运行一个修复任务
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/tasks \
+  -H "Authorization: Bearer dev-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "issue_url": "https://github.com/owner/repo/issues/1",
+    "repo_url": "https://github.com/owner/repo.git",
+    "commit_sha": "abc123..."
+  }'
+```
+
 ## 技术栈
 
 | 层 | 技术 | 说明 |
@@ -208,3 +280,4 @@ flowchart TD
 
 - [AegisEvo](https://github.com/ETOLucy/AegisEvo) — Agent 配置基因组进化优化，配套 RepoAegis 使用。
 - [UK AISI Inspect](https://github.com/UKGovernmentBEIS/inspect_ai) — 行业标准 Agent 评测框架，RepoAegis 提供桥接。
+
