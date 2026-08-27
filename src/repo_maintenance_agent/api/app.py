@@ -98,17 +98,17 @@ def create_app(
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Cache-Control"] = "no-store"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+            "default-src 'self'; script-src 'self'; style-src 'self'"
         )
         return response
 
     security = HTTPBearer(auto_error=False)
 
     async def resolve_principal(
-        credentials: HTTPAuthorizationCredentials | None = Depends(security),
+        credentials: HTTPAuthorizationCredentials | None = None,
     ) -> Principal:
+        credentials = await security(credentials)  # resolve default Depends
         return authenticator.authenticate(credentials)
-
     principal_marker = Depends(resolve_principal)
 
     router = APIRouter(prefix="/v1", tags=["tasks"])
@@ -157,7 +157,9 @@ def create_app(
         if state.status is not TaskStatus.NEEDS_APPROVAL:
             raise InvalidStateTransition("task is not awaiting approval")
         if body.plan_hash != state.plan_hash:
-            raise ConcurrentUpdate("plan hash mismatch — plan has changed since approval was requested")
+            raise ConcurrentUpdate(
+                "plan hash mismatch - plan has changed since approval was requested"
+            )
         decision = ApprovalDecision(
             approved=body.approved,
             approver=principal.subject,
@@ -303,3 +305,4 @@ def create_app(
         return {"status": "ok"}
 
     return app
+
