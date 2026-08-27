@@ -1,9 +1,13 @@
-# Inspect 权威判分（RepoAegis × UK AISI Inspect）
+# Inspect Scaffold（RepoAegis × UK AISI Inspect）
 
 把 RepoAegis 的 SWE-bench predictions 交给 **Inspect**（UK AISI 官方框架）的
-官方 `swe_bench_scorer`，在 Docker 沙箱里重跑官方测试并判分。这是「权威评测
-轨道」的可运行实现，对应 `docs/inspect-integration.md` 描述的
-「**自研门控 + Inspect 权威判分**」双轨架构。
+官方 `swe_bench_scorer`，在 Docker 沙箱里重跑官方测试并判分。
+
+> **状态说明**：本模块是 scaffold 骨架，尚未完成正式 submission 接线。
+> 当前已验证的闭环是 **replay 判分**（3/8 resolved），generate 模式
+> 的 solver 参数接线尚未完成（见 `repoaegis_solver.py` 的 generate 分支）。
+> 真正的 SWE-bench 官方验证器是 `swebench` 包（4.1.0），Inspect 是调用
+> 该验证器的评测框架。
 
 > 本目录是 `.portfolio-eval/inspect_pilot/`（2026-08-11 试点）的仓库内版本：
 > 代码与试点一致（`pilot_task.py` / `repoaegis_solver.py` / `windows_shims.py`
