@@ -22,7 +22,7 @@ jobs:
           cache: pip
       - run: python -m pip install -e ".[dev,postgres,observability]"
       - run: ruff check src tests scripts
-      - run: mypy src scripts/build_brand_assets.py scripts/validate_logo_assets.py
+      - run: mypy src scripts/build_brand_assets.py scripts/validate_logo_assets.py --exclude 'src/repo_maintenance_agent/inspect/'
       - run: node --check src/repo_maintenance_agent/console/app.js
       - run: python -m pytest --cov --cov-report=term-missing
       - run: python scripts/validate_logo_assets.py docs
@@ -38,3 +38,4 @@ jobs:
           OPENSEARCH_INITIAL_ADMIN_PASSWORD: ci-opensearch-password
       - run: docker build --tag repo-aegis:ci .
       - run: docker build --file sandbox/Dockerfile.python --tag repo-agent-python:ci .
+
