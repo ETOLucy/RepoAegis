@@ -6,6 +6,7 @@ from pydantic import SecretStr
 
 from repo_maintenance_agent.config import Settings
 from repo_maintenance_agent.production_graph import ProductionGraphFactory
+from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
 from repo_maintenance_agent.storage.artifacts import FileArtifactStore
 from repo_maintenance_agent.tools.gateway import InMemoryOperationLog
 from repo_maintenance_agent.tools.github import LocalDraftRecordAdapter
@@ -31,11 +32,14 @@ def test_build_index_raises_when_no_embedding_keys(tmp_path: Path) -> None:
 
 
 @patch("repo_maintenance_agent.production_graph.OpenAIModelGateway")
+@patch("repo_maintenance_agent.production_graph.default_lexical_search")
 def test_production_graph_registers_complete_local_delivery_toolset(
+    mock_lexical,
     mock_gateway_class,
     tmp_path: Path,
 ) -> None:
     mock_gateway_class.from_settings.return_value = AsyncMock()
+    mock_lexical.return_value = LocalLexicalSearch(tmp_path)
     seccomp = tmp_path / "seccomp.json"
     seccomp.write_text('{"defaultAction":"SCMP_ACT_ERRNO"}', encoding="utf-8")
     factory = ProductionGraphFactory(

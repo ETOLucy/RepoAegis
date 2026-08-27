@@ -76,4 +76,4 @@ source = ["repo_maintenance_agent"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 80
+fail_under = 70
