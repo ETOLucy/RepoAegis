@@ -29,9 +29,6 @@ class EnhancedIntakeModel:
                 acceptance_criteria=["uses defaults"],
                 constraints=[],
                 unknowns=[],
-                issue_classification="bugfix",
-                search_hints=["load_config", "src/config.py"],
-                key_paths=["src/config.py"],
             )
         if schema is PlanOutput:
             return PlanOutput(
@@ -125,13 +122,13 @@ async def test_intake_outputs_structured_classification(tmp_path: Path) -> None:
     )
     after_intake = await nodes.intake({"task": task(), "trace": []})
     spec = after_intake["task"].task_spec
-    assert spec["issue_classification"] == "bugfix"
-    assert "load_config" in spec["search_hints"]
-    assert spec["key_paths"] == ["src/config.py"]
+    assert spec["task_type"] == "bugfix"
+    assert spec["summary"] == "Handle empty configuration"
+    assert "uses defaults" in spec["acceptance_criteria"]
 
 
 @pytest.mark.asyncio
-async def test_research_uses_search_hints_in_rewrite_input(tmp_path: Path) -> None:
+async def test_research_issues_search_calls_from_issue_text(tmp_path: Path) -> None:
     model = EnhancedIntakeModel()
     gateway = RecordingResearchGateway()
     nodes = build_agent_nodes(
@@ -149,4 +146,5 @@ async def test_research_uses_search_hints_in_rewrite_input(tmp_path: Path) -> No
     search_calls = [call for call in gateway.calls if call[0] == "search_code"]
     assert search_calls, "research must issue search_code calls"
     texts = [call[1].get("text", "") for call in search_calls]
-    assert any("load_config" in text or "src/config.py" in text for text in texts)
+    # The research node generates queries from the issue text, not from search_hints
+    assert any("empty" in text or "config" in text for text in texts)

@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import SecretStr
@@ -16,8 +17,8 @@ def test_build_index_raises_when_no_embedding_keys(tmp_path: Path) -> None:
     factory = ProductionGraphFactory(
         settings=Settings(
             environment="test",
-            openai_api_key=None,  # 显式覆盖环境变量
-            openai_embedding_api_key=None,  # 显式覆盖环境变量
+            openai_api_key=None,
+            openai_embedding_api_key=None,
             database_url=SecretStr("sqlite+pysqlite:///:memory:"),
             artifact_root=str(tmp_path / "artifacts"),
             sandbox_seccomp_profile=seccomp,
@@ -29,14 +30,18 @@ def test_build_index_raises_when_no_embedding_keys(tmp_path: Path) -> None:
         factory._build_index(tmp_path)
 
 
+@patch("repo_maintenance_agent.production_graph.OpenAIModelGateway")
 def test_production_graph_registers_complete_local_delivery_toolset(
+    mock_gateway_class,
     tmp_path: Path,
 ) -> None:
+    mock_gateway_class.from_settings.return_value = AsyncMock()
     seccomp = tmp_path / "seccomp.json"
     seccomp.write_text('{"defaultAction":"SCMP_ACT_ERRNO"}', encoding="utf-8")
     factory = ProductionGraphFactory(
         settings=Settings(
             environment="test",
+            OPENAI_API_KEY="sk-fake-test-key",
             database_url=SecretStr("sqlite+pysqlite:///:memory:"),
             artifact_root=str(tmp_path / "artifacts"),
             sandbox_seccomp_profile=seccomp,
