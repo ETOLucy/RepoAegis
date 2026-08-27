@@ -105,10 +105,10 @@ def create_app(
     security = HTTPBearer(auto_error=False)
 
     async def resolve_principal(
-        credentials: HTTPAuthorizationCredentials | None = None,
+        credentials: HTTPAuthorizationCredentials | None = Depends(security),  # noqa: B008
     ) -> Principal:
-        credentials = await security(credentials)  # resolve default Depends
         return authenticator.authenticate(credentials)
+
     principal_marker = Depends(resolve_principal)
 
     router = APIRouter(prefix="/v1", tags=["tasks"])
@@ -118,15 +118,14 @@ def create_app(
         body: TaskCreateRequest,
         principal: Principal = principal_marker,
     ) -> TaskResponse:
-        state = RepoTaskState.create(
+        state = RepoTaskState(
             tenant_id=principal.tenant_id,
-            subject=principal.subject,
             repo_id=body.repo_id,
             commit_sha=body.commit_sha,
             base_branch=body.base_branch,
             issue=body.issue,
         )
-        await repository.save(state)
+        await repository.create(state)
         return TaskResponse.from_state(state)
 
     @router.get("/tasks", response_model=TaskListResponse)
@@ -158,7 +157,7 @@ def create_app(
             raise InvalidStateTransition("task is not awaiting approval")
         if body.plan_hash != state.plan_hash:
             raise ConcurrentUpdate(
-                "plan hash mismatch - plan has changed since approval was requested"
+                "plan hash mismatch — plan has changed since approval was requested"
             )
         decision = ApprovalDecision(
             approved=body.approved,
@@ -168,8 +167,11 @@ def create_app(
             allowed_tools=body.allowed_tools,
             reason=body.reason,
         )
-        updated = state.apply_approval(decision)
-        await repository.save(updated)
+        updated = state.model_copy(update={
+            "approval": decision,
+            "status": TaskStatus.CODING if decision.approved else TaskStatus.FAILED,
+        })
+        await repository.save(updated, expected_version=state.version)
         return TaskResponse.from_state(updated)
 
     @router.post(
@@ -305,4 +307,3 @@ def create_app(
         return {"status": "ok"}
 
     return app
-
