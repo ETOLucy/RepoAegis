@@ -266,7 +266,7 @@ curl -X POST http://127.0.0.1:8000/v1/tasks \
 | 存储 | SQLAlchemy + Postgres（可选）/ 内存 | artifacts / memory / queue |
 | 沙箱 | Docker（digest-pinned 镜像、非 root、只读根） | 隔离执行 |
 | 前端 | React + Vite 控制台 | web/ |
-| 评测 | 自研 harness + UK AISI Inspect 桥接 | 双轨评测 |
+| 评测 | 自研 harness（SWE-bench 官方 swebench 包验证器 + Inspect scaffold 骨架） | 自研单轨 |
 
 ## 安全设计
 
@@ -279,5 +279,5 @@ curl -X POST http://127.0.0.1:8000/v1/tasks \
 ## 相关项目
 
 - [AegisEvo](https://github.com/ETOLucy/AegisEvo) — Agent 配置基因组进化优化，配套 RepoAegis 使用。
-- [UK AISI Inspect](https://github.com/UKGovernmentBEIS/inspect_ai) — 行业标准 Agent 评测框架，RepoAegis 提供桥接。
+- [UK AISI Inspect](https://github.com/UKGovernmentBEIS/inspect_ai) — 行业标准 Agent 评测框架。RepoAegis 提供 scaffold 骨架（`inspect/`），基于 `swe_bench_scorer` 的 replay 判分已验证（3/8 resolved），generate 模式接线尚未完成。
 
