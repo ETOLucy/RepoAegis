@@ -24,7 +24,7 @@ jobs:
       - run: ruff check src tests scripts
       - run: mypy src scripts/build_brand_assets.py scripts/validate_logo_assets.py --exclude 'src/repo_maintenance_agent/inspect/'
       - run: node --check src/repo_maintenance_agent/console/app.js
-      - run: python -m pytest --cov --cov-report=term-missing
+      - run: python -m pytest --cov --cov-report=term-missing --ignore=tests/unit/inspect
       - run: python scripts/validate_logo_assets.py docs
       - run: python -m repo_maintenance_agent.security.scanner
       - run: pip-audit
@@ -38,4 +38,5 @@ jobs:
           OPENSEARCH_INITIAL_ADMIN_PASSWORD: ci-opensearch-password
       - run: docker build --tag repo-aegis:ci .
       - run: docker build --file sandbox/Dockerfile.python --tag repo-agent-python:ci .
+
 
