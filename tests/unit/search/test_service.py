@@ -43,7 +43,7 @@ async def test_hybrid_service_fuses_selected_retrievers_and_collapses_duplicates
     hits = await service.search(query)
 
     assert hits[0].hit_id == "shared"
-    assert hits[0].source == "bm25+vector"
+    assert hits[0].source == "bm25+bm25+vector"
     assert len(hits) == 3
 
 

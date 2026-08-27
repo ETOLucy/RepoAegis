@@ -1,0 +1,55 @@
+{
+  "now_consumed": true,
+  "generation": {
+    "frozen_tasks": 8,
+    "predictions_generated": 4,
+    "generation_failures": 4,
+    "usage": {
+      "cache_hit_input_tokens": 100000,
+      "cache_miss_input_tokens": 200000,
+      "output_tokens": 87775,
+      "total_tokens": 387775
+    }
+  },
+  "official_grading": {
+    "strict_total": 8,
+    "submitted_predictions": 4,
+    "resolved_predictions": 3,
+    "strict_resolved": 3,
+    "strict_resolved_rate": 0.375
+  },
+  "cases": [
+    {
+      "instance_id": "swebench__test-0",
+      "resolved": true
+    },
+    {
+      "instance_id": "swebench__test-1",
+      "resolved": true
+    },
+    {
+      "instance_id": "swebench__test-2",
+      "resolved": true
+    },
+    {
+      "instance_id": "swebench__test-3",
+      "resolved": false
+    },
+    {
+      "instance_id": "swebench__test-4",
+      "resolved": false
+    },
+    {
+      "instance_id": "swebench__test-5",
+      "resolved": false
+    },
+    {
+      "instance_id": "swebench__test-6",
+      "resolved": false
+    },
+    {
+      "instance_id": "swebench__test-7",
+      "resolved": false
+    }
+  ]
+}

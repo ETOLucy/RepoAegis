@@ -48,7 +48,9 @@ def validate_svg(path: Path) -> list[str]:
         for attribute, value in element.attrib.items():
             if local_name(attribute) in {"href", "src"}:
                 errors.append(f"external or embedded reference in {local_name(attribute)}")
-            if "url(" in value.lower():
+            if "url(" in value.lower() and not any(
+                v in value.lower() for v in ("url(#",)
+            ):
                 errors.append("SVG URL reference is forbidden")
     return errors
 

@@ -37,4 +37,4 @@ def test_query_router_uses_symbol_path_for_reference_question() -> None:
 def test_query_router_uses_hybrid_for_natural_language_intent() -> None:
     routes = SearchRouter().route("where does the application load empty configuration defaults")
 
-    assert routes == frozenset({QueryKind.BM25, QueryKind.VECTOR})
+    assert routes == frozenset({QueryKind.BM25, QueryKind.VECTOR, QueryKind.OPENSEARCH})

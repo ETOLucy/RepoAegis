@@ -1,0 +1,43 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="300 300 400 400">
+  <ns0:title>RepoAegis Mark</ns0:title><ns0:defs>
+    
+    <ns0:linearGradient id="facet2" x1="0" y1="0" x2="1" y2="1">
+      <ns0:stop offset="0" stop-color="#22D3EE" />
+      <ns0:stop offset="1" stop-color="#0E7490" />
+    </ns0:linearGradient>
+    <ns0:linearGradient id="facet3" x1="0" y1="0" x2="1" y2="1">
+      <ns0:stop offset="0" stop-color="#F472B6" />
+      <ns0:stop offset="1" stop-color="#BE185D" />
+    </ns0:linearGradient>
+    <ns0:linearGradient id="facet4" x1="0" y1="0" x2="1" y2="1">
+      <ns0:stop offset="0" stop-color="#FB923C" />
+      <ns0:stop offset="1" stop-color="#C2410C" />
+    </ns0:linearGradient>
+    <ns0:linearGradient id="facet5" x1="0" y1="0" x2="1" y2="1">
+      <ns0:stop offset="0" stop-color="#60A5FA" />
+      <ns0:stop offset="1" stop-color="#1D4ED8" />
+    </ns0:linearGradient>
+    <ns0:linearGradient id="topB" x1="0" y1="0" x2="1" y2="1">
+      <ns0:stop offset="0" stop-color="#FACC15" />
+      <ns0:stop offset="1" stop-color="#EAB308" />
+    </ns0:linearGradient>
+    <ns0:linearGradient id="facet1" x1="0" y1="0" x2="1" y2="1">
+      <ns0:stop offset="0" stop-color="#79E3AE" />
+      <ns0:stop offset="1" stop-color="#00A141" />
+    </ns0:linearGradient>
+  </ns0:defs>
+
+  
+  <ns0:g transform="translate(512 497) scale(0.75)">
+    <ns0:path d="M0 292 L-176 92 L-118 -86 L118 -86 L176 92 Z" fill="#0D1726" stroke="#E2E8F0" stroke-width="8" stroke-linejoin="round" />
+    <ns0:path d="M0 292 L-176 92 L-118 -86 L0 -16 Z" fill="url(#facet2)" />
+    <ns0:path d="M0 292 L176 92 L118 -86 L0 -16 Z" fill="url(#facet3)" />
+    <ns0:path d="M0 -16 L-118 -86 L-62 -196 L0 -126 Z" fill="url(#facet5)" />
+    <ns0:path d="M0 -16 L118 -86 L62 -196 L0 -126 Z" fill="url(#facet4)" />
+    <ns0:path d="M0 -126 L-62 -196 L0 -252 L62 -196 Z" fill="url(#topB)" />
+    <ns0:path d="M0 292 L-176 92 L0 66 Z" fill="#FFFFFF" opacity="0.14" />
+    <ns0:path d="M0 292 L176 92 L0 66 Z" fill="#FFFFFF" opacity="0.14" />
+    <ns0:path d="M0 -126 L-62 -196 L0 -160 Z" fill="#FFFFFF" opacity="0.22" />
+  </ns0:g>
+</ns0:svg>
