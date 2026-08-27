@@ -9,13 +9,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 PARQUET_CACHE = Path(
-    r"C:\Users\20705\.cache\huggingface\hub\datasets--princeton-nlp--SWE-bench_Verified"
-    r"\snapshots\c104f840cc67f8b6eec6f759ebc8b2693d585d4a\data\test-00000-of-00001.parquet"
+    os.environ.get(
+        "SWE_BENCH_PARQUET_CACHE",
+        os.path.expanduser(
+            "~/.cache/huggingface/hub/datasets--princeton-nlp--SWE-bench_Verified/"
+            "snapshots/c104f840cc67f8b6eec6f759ebc8b2693d585d4a/data/test-00000-of-00001.parquet"
+        )
+    )
 )
 
 REQUIRED_COLUMNS = (

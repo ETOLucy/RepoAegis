@@ -39,12 +39,36 @@ _MAX_HISTORY_BYTES = 50_000_000
 _KNOWN_TEST_MARKERS = frozenset({"sk-secret-target-pack-test"})
 
 
-def scan_paths(paths: list[Path], *, root: Path) -> list[PrivacyFinding]:
+def _match_exclude(path: str, excludes: list[str]) -> bool:
+    """Return True if *path* matches any glob-like exclude pattern."""
+    return any(pattern in path or path.startswith(pattern) for pattern in excludes)
+
+
+def _active_rules(
+    exclude_rules: list[str],
+) -> list[tuple[str, re.Pattern[str]]]:
+    """Return _RULES filtered by exclude_rules rule IDs."""
+    return [(rid, pat) for rid, pat in _RULES if rid not in exclude_rules]
+
+
+def scan_paths(
+    paths: list[Path],
+    *,
+    root: Path,
+    excludes: list[str] | None = None,
+    exclude_rules: list[str] | None = None,
+) -> list[PrivacyFinding]:
+    excludes = excludes or []
+    exclude_rules = exclude_rules or []
+    rules = _active_rules(exclude_rules)
     findings: list[PrivacyFinding] = []
     resolved_root = root.resolve()
     for path in paths:
         resolved = path.resolve()
         if not resolved.is_relative_to(resolved_root) or not resolved.is_file():
+            continue
+        display_path = resolved.relative_to(resolved_root).as_posix()
+        if _match_exclude(display_path, excludes):
             continue
         try:
             if resolved.stat().st_size > _MAX_BYTES:
@@ -53,10 +77,7 @@ def scan_paths(paths: list[Path], *, root: Path) -> list[PrivacyFinding]:
         except (OSError, UnicodeError):
             continue
         findings.extend(
-            _scan_text(
-                text,
-                display_path=resolved.relative_to(resolved_root).as_posix(),
-            )
+            _scan_text(text, display_path=display_path, rules=rules)
         )
     return findings
 
@@ -79,7 +100,15 @@ def repository_files(root: Path) -> list[Path]:
     return [root / raw.decode() for raw in result.stdout.split(b"\0") if raw]
 
 
-def scan_history(root: Path) -> list[PrivacyFinding]:
+def scan_history(
+    root: Path,
+    *,
+    excludes: list[str] | None = None,
+    exclude_rules: list[str] | None = None,
+) -> list[PrivacyFinding]:
+    excludes = excludes or []
+    exclude_rules = exclude_rules or []
+    rules = _active_rules(exclude_rules)
     git = _git_executable()
     result = subprocess.run(  # noqa: S603 - resolved executable and fixed arguments
         [
@@ -101,15 +130,28 @@ def scan_history(root: Path) -> list[PrivacyFinding]:
     return _scan_text(
         result.stdout.decode("utf-8", errors="replace"),
         display_path="<git-history>",
+        excludes=excludes,
+        rules=rules,
     )
 
 
-def _scan_text(text: str, *, display_path: str) -> list[PrivacyFinding]:
+def _scan_text(
+    text: str,
+    *,
+    display_path: str,
+    excludes: list[str] | None = None,
+    rules: list[tuple[str, re.Pattern[str]]] | None = None,
+) -> list[PrivacyFinding]:
+    excludes = excludes or []
+    rules = rules or list(_RULES)
     findings: list[PrivacyFinding] = []
     for line_number, line in enumerate(text.splitlines(), start=1):
         if any(marker in line for marker in _KNOWN_TEST_MARKERS):
             continue
-        for rule_id, pattern in _RULES:
+        # Skip lines that match any exclude pattern (e.g. file paths in history)
+        if _match_exclude(line, excludes):
+            continue
+        for rule_id, pattern in rules:
             if pattern.search(line):
                 findings.append(
                     PrivacyFinding(
@@ -134,11 +176,35 @@ def main() -> int:
         description="Scan tracked files for credentials and privacy data."
     )
     parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="Exclude paths matching this substring (can be specified multiple times).",
+    )
+    parser.add_argument(
+        "--exclude-rule",
+        action="append",
+        default=[],
+        help="Exclude rule IDs (e.g. privacy.windows-user-path).",
+    )
     args = parser.parse_args()
-    findings = scan_paths(repository_files(args.root), root=args.root)
-    findings.extend(scan_history(args.root))
+    findings = scan_paths(
+        repository_files(args.root),
+        root=args.root,
+        excludes=args.exclude,
+        exclude_rules=args.exclude_rule,
+    )
+    findings.extend(
+        scan_history(
+            args.root, excludes=args.exclude, exclude_rules=args.exclude_rule
+        )
+    )
     for finding in findings:
-        print(f"{finding.path}:{finding.line}: {finding.rule_id} {finding.preview}")
+        print(
+            f"{finding.path}:{finding.line}:"
+            f" {finding.rule_id} {finding.preview}"
+        )
     return 1 if findings else 0
 
 
