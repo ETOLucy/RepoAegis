@@ -44,6 +44,18 @@ def repoaegis_verified(
     arch: str | None = None,
     allow_internet: bool = False,
     compose_dir: str | None = None,
+    # Generate-mode parameters (forwarded to repoaegis_solver).
+    repoaegis_root: Path | None = None,
+    locators: dict[str, str] | None = None,
+    cc_switch_db: Path | None = None,
+    task_root: Path | None = None,
+    model_alias: str | None = None,
+    api_style: str = "chat-json",
+    protocol_digest: str | None = None,
+    arm: str = "candidate",
+    maximum_call_cost_cny: str = "0.5",
+    rates: dict[str, str] | None = None,
+    configuration: tuple[int, int, int, int] | None = None,
     **kwargs: Any,
 ) -> Task:
     """Evaluate RepoAegis on a local SWE-bench Verified subset.
@@ -59,6 +71,7 @@ def repoaegis_verified(
         allow_internet: Whether sandboxes may reach the internet.
         compose_dir: Directory for generated compose files (defaults to a
             temp directory under the pilot package).
+        **generate_mode_kwargs: Forwarded to repoaegis_solver for generate mode.
         **kwargs: Forwarded to Task.
     """
     samples = json_dataset(
@@ -122,7 +135,20 @@ def repoaegis_verified(
 
     return Task(
         dataset=samples,
-        solver=repoaegis_solver(predictions_path=predictions_path),
+        solver=repoaegis_solver(
+            predictions_path=predictions_path,
+            repoaegis_root=repoaegis_root,
+            locators=locators,
+            cc_switch_db=cc_switch_db,
+            task_root=task_root,
+            model_alias=model_alias,
+            api_style=api_style,
+            protocol_digest=protocol_digest,
+            arm=arm,
+            maximum_call_cost_cny=maximum_call_cost_cny,
+            rates=rates,
+            configuration=configuration,
+        ),
         scorer=scorer or swe_bench_scorer(),
         **kwargs,
     )

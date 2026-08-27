@@ -78,6 +78,17 @@ flowchart TD
     FAIL --> END
 ```
 
+## 前端看板
+
+RepoAegis 提供基于 Web 的前端看板，支持流水线监控、任务管理和评测结果查看：
+
+| 模块 | 截图 |
+|------|------|
+| 流水线监控 | ![流水线监控](docs/assets/screenshot-pipelineview.png) |
+| 任务控制台 | ![任务控制台](docs/assets/screenshot-tasksview.png) |
+| 评测看板 | ![评测看板](docs/assets/screenshot-evalview.png) |
+
+
 - **条件路由图**：不是线性流水线——每个节点后是条件分支，由路由函数基于状态 + 迭代次数 + 验证结果动态决定下一步。从 START 到 END 有 5 个路由决策点（route_entry、route_after_planning、route_after_approval、route_after_verification、route_after_review）。route_entry 的 CODING → Code 分支仅用于任务中断后恢复（如 approval 审批通过后继续执行），正常流程走 PENDING → Intake。
 - **有界重试**：verification 失败（CODE 错误且 iteration < max）→ 回到 code 重试；review request_changes 且 iteration < max → 回到 code 重试。最多重试 max_iterations 次。
 - **证据驱动兜底**：review 阶段 LLM 反复 request_changes 但验证通过、改动在声明文件内、风险低时仍放行（保留警告记录）。

@@ -3,6 +3,23 @@
 This mirrors the frozen-candidate runner (run_frozen_candidate.py) but is
 parameterised: a single Inspect Sample is turned into a SWEbenchTask, RepoAegis
 runs its real agent graph, and the produced unified diff is returned.
+
+Wiring notes
+------------
+``generate_repoaegis_patch`` has a full signature with all required host
+configuration parameters (repoaegis_root, locators, cc_switch_db, task_root,
+model_alias, protocol_digest, ...).  These are NOT available by default from
+the Inspect Sample or TaskState — they must be plumbed through the call chain::
+
+    run.py CLI args
+      -> pilot_task.py ``repoaegis_verified()`` task params
+        -> repoaegis_solver.py ``repoaegis_solver()`` solver params
+          -> ``generate_repoaegis_patch()``
+
+Current status: the plumbing is complete in this file; the caller chain
+(run.py -> pilot_task.py -> repoaegis_solver.py) must accept and forward the
+same parameters.  When any required parameter is missing the caller should
+raise a clear error or fall back to replay mode.
 """
 
 # mypy: ignore-errors

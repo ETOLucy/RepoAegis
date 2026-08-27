@@ -78,6 +78,17 @@ flowchart TD
     FAIL --> END
 ```
 
+## Frontend Dashboard
+
+RepoAegis provides a web-based frontend dashboard for pipeline monitoring, task management, and evaluation results:
+
+| Module | Screenshot |
+|--------|-----------|
+| Pipeline Monitor | ![Pipeline Monitor](docs/assets/screenshot-pipelineview.png) |
+| Task Console | ![Task Console](docs/assets/screenshot-tasksview.png) |
+| Evaluation Dashboard | ![Evaluation Dashboard](docs/assets/screenshot-evalview.png) |
+
+
 - **Conditional routing graph**: Not a linear pipeline — each node is followed by a conditional branch, dynamically determined by routing functions based on state + iteration count + verification results. There are 5 routing decision points (route_entry, route_after_planning, route_after_approval, route_after_verification, route_after_review).
 - **Bounded retry**: Verification failure (CODE error + iteration < max) → retry code; review request_changes + iteration < max → retry code. Maximum retries: max_iterations.
 - **Evidence-driven fallback**: If review repeatedly requests changes but verification passes, changes are within declared files, and risk is low, the pipeline still proceeds (with a warning record).
