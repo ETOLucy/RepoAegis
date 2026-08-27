@@ -39,6 +39,27 @@ _SCHEMA_PATTERN = re.compile(
 )
 
 
+_PERFORMANCE_PATTERN = re.compile(
+    r"\b(performance|optimize|slow|latency|bottleneck|throughput|cache|memory|speed|fast)\b",
+    re.IGNORECASE,
+)
+_SECURITY_PATTERN = re.compile(
+    r"\b(security|vulnerability|injection|xss|csrf|auth|permission|sanitize|escape|encrypt|sql_injection)\b",
+    re.IGNORECASE,
+)
+_API_PATTERN = re.compile(
+    r"\b(api|endpoint|route|rest|graphql|rpc|swagger|openapi|handler|middleware|request|response)\b",
+    re.IGNORECASE,
+)
+_UI_PATTERN = re.compile(
+    r"\b(ui|ux|component|template|render|html|css|style|layout|button|form|modal|dropdown|navbar|sidebar|frontend|widget)\b",
+    re.IGNORECASE,
+)
+_CI_CD_PATTERN = re.compile(
+    r"\b(ci|cd|pipeline|github.actions|workflow|deploy|release|build|action|runner|stage|job)\b",
+    re.IGNORECASE,
+)
+
 _EXPLORE_PATTERN = re.compile(
     r"\b(how does|what does|explain|overview|architecture|structure|design)\b",
     re.IGNORECASE,
@@ -93,6 +114,16 @@ def _detect_kind(text: str) -> str:
         return SearchKind.REGEX.value
     if _SCHEMA_PATTERN.search(text):
         return SearchKind.SCHEMA.value
+    if _PERFORMANCE_PATTERN.search(text):
+        return SearchKind.PERFORMANCE.value
+    if _SECURITY_PATTERN.search(text):
+        return SearchKind.SECURITY.value
+    if _API_PATTERN.search(text):
+        return SearchKind.API.value
+    if _UI_PATTERN.search(text):
+        return SearchKind.UI.value
+    if _CI_CD_PATTERN.search(text):
+        return SearchKind.CI_CD.value
     if _EXPLORE_PATTERN.search(text):
         return SearchKind.EXPLORE.value
     return SearchKind.GENERAL.value
@@ -159,7 +190,32 @@ def rewrite_queries(issue_text: str, *, max_queries: int = 4) -> QueryRewritePla
     if schema_match:
         queries.append(RewrittenQuery(text=schema_match.group(0), kind=SearchKind.SCHEMA.value))
 
-    # 8. Always add the full issue text as a General fallback
+    # 8. Performance optimization hints
+    perf_match = _PERFORMANCE_PATTERN.search(issue_text)
+    if perf_match:
+        queries.append(RewrittenQuery(text=perf_match.group(0), kind=SearchKind.PERFORMANCE.value))
+
+    # 9. Security vulnerability hints
+    sec_match = _SECURITY_PATTERN.search(issue_text)
+    if sec_match:
+        queries.append(RewrittenQuery(text=sec_match.group(0), kind=SearchKind.SECURITY.value))
+
+    # 10. API interface hints
+    api_match = _API_PATTERN.search(issue_text)
+    if api_match:
+        queries.append(RewrittenQuery(text=api_match.group(0), kind=SearchKind.API.value))
+
+    # 11. UI component hints
+    ui_match = _UI_PATTERN.search(issue_text)
+    if ui_match:
+        queries.append(RewrittenQuery(text=ui_match.group(0), kind=SearchKind.UI.value))
+
+    # 12. CI/CD pipeline hints
+    cicd_match = _CI_CD_PATTERN.search(issue_text)
+    if cicd_match:
+        queries.append(RewrittenQuery(text=cicd_match.group(0), kind=SearchKind.CI_CD.value))
+
+    # 13. Always add the full issue text as a General fallback
     queries.append(RewrittenQuery(text=issue_text.strip(), kind=SearchKind.GENERAL.value))
 
     # Deduplicate by (text.casefold(), kind)
