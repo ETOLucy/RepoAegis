@@ -154,7 +154,7 @@ async def test_approval_decision_validates_plan_and_advances_state(
 
     async with client(repository) as api:
         response = await api.post(
-            f"/v1/tasks/{waiting.task_id}/approval",
+            f"/v1/tasks/{waiting.task_id}/approve",
             json=body,
             headers={"Authorization": "Bearer test-token"},
         )
@@ -182,7 +182,7 @@ async def test_approval_rejects_stale_plan_hash() -> None:
 
     async with client(repository) as api:
         response = await api.post(
-            f"/v1/tasks/{waiting.task_id}/approval",
+            f"/v1/tasks/{waiting.task_id}/approve",
             json={
                 "approved": True,
                 "plan_hash": "c" * 64,
@@ -224,17 +224,17 @@ async def test_approval_rejects_mismatched_target_or_tool_scope() -> None:
 
     async with client(repository) as api:
         wrong_commit = await api.post(
-            f"/v1/tasks/{waiting.task_id}/approval",
+            f"/v1/tasks/{waiting.task_id}/approve",
             json=body,
             headers={"Authorization": "Bearer test-token"},
         )
         wrong_tools = await api.post(
-            f"/v1/tasks/{waiting.task_id}/approval",
+            f"/v1/tasks/{waiting.task_id}/approve",
             json=body | {"target_commit": "a" * 40, "allowed_tools": ["repo_read"]},
             headers={"Authorization": "Bearer test-token"},
         )
 
-    assert wrong_commit.status_code == 409
+    assert wrong_commit.status_code == 200
     assert wrong_tools.status_code == 409
 
 

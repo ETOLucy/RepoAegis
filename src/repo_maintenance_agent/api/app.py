@@ -170,10 +170,26 @@ def create_app(
         updated = state.model_copy(update={
             "approval": decision,
             "status": TaskStatus.CODING if decision.approved else TaskStatus.FAILED,
+            "version": state.version + 1,
         })
         await repository.save(updated, expected_version=state.version)
         return TaskResponse.from_state(updated)
 
+
+    @router.post("/tasks/{task_id}/cancel", response_model=TaskResponse)
+    async def cancel_task(
+        task_id: str,
+        principal: Principal = principal_marker,
+    ) -> TaskResponse:
+        state = await repository.get(principal.tenant_id, task_id)
+        if state.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED):
+            raise ConcurrentUpdate("task is already in a terminal state")
+        updated = state.model_copy(update={
+            "status": TaskStatus.CANCELLED,
+            "version": state.version + 1,
+        })
+        await repository.save(updated, expected_version=state.version)
+        return TaskResponse.from_state(updated)
     @router.post(
         "/evaluations/runs",
         response_model=EvaluationRunResponse,
@@ -307,3 +323,4 @@ def create_app(
         return {"status": "ok"}
 
     return app
+
