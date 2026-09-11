@@ -4,15 +4,12 @@
 官方 `swe_bench_scorer`，在 Docker 沙箱里重跑官方测试并判分。
 
 > **状态说明**：本模块是 scaffold 骨架，尚未完成正式 submission 接线。
-> 当前已验证的闭环是 **replay 判分**（3/8 resolved），generate 模式
-> 的 solver 参数接线尚未完成（见 `repoaegis_solver.py` 的 generate 分支）。
-> 真正的 SWE-bench 官方验证器是 `swebench` 包（4.1.0），Inspect 是调用
-> 该验证器的评测框架。
-
-> 本目录是 `.portfolio-eval/inspect_pilot/`（2026-08-11 试点）的仓库内版本：
-> 代码与试点一致（`pilot_task.py` / `repoaegis_solver.py` / `windows_shims.py`
-> / `generate.py` / `prepare_dataset.py`），导入路径改为
-> `repo_maintenance_agent.inspect`。
+> generate 模式的 solver 参数接线尚未完成（见 `repoaegis_solver.py` 的
+> generate 分支），当前只有 **replay 判分** 路径可用。真正的 SWE-bench
+> 官方验证器是 `swebench` 包（4.1.0），Inspect 是调用该验证器的评测框架。
+>
+> 之前引用的占位评测数据（`docs/evidence/` 下的旧结果）已删除，替换用的
+> 真实金标准数据集尚未建好，见 `改造计划.md` 六、评测方法论。
 
 ## 文件
 
@@ -51,9 +48,8 @@
 `patch`（gold patch）、`FAIL_TO_PASS`、`PASS_TO_PASS`、`test_patch`、
 `version`、`repo`、`environment_setup_commit`、`hints_text`、`created_at`。
 
-现成数据集可直接复用
-`.portfolio-eval/inspect_pilot/data/verified.jsonl`（8 条 holdout），或用
-`prepare_dataset.py` 从本地 HF 缓存重新导出（只导出指定 id）：
+目前仓库内没有现成数据集（旧的占位数据已删除），用
+`prepare_dataset.py` 从本地 HF 缓存导出（只导出指定 id）：
 
 ```bash
 .venv/Scripts/python.exe -m repo_maintenance_agent.inspect.prepare_dataset \
@@ -132,8 +128,9 @@ for row in rows:
     print(row.sample_id, row.score, row.status)
 ```
 
-## 已验证（试点结论，2026-08-11）
+## 试点结论（2026-08-11，仅供参考）
 
-用 4 条历史 prediction 在 Inspect 官方 `swe_bench_scorer` 下 replay，与官方
-SWE-bench 4.1.0 harness 判分完全一致（3/4 resolved，mean=0.75）。详见
-`.portfolio-eval/inspect_pilot/README.md` 的验证结论表。
+早期用少量历史 prediction 在 Inspect 官方 `swe_bench_scorer` 下 replay，与
+官方 SWE-bench 4.1.0 harness 判分一致，验证了 replay 管线本身是通的。具体
+数字来自已删除的占位数据集，不再作为评测结论引用；正式结论待
+`改造计划.md` 的真实金标准数据集建好后重新产出。
