@@ -58,6 +58,8 @@ def test_production_graph_registers_complete_local_delivery_toolset(
 
     assert set(adapters) == {
         "search_code",
+        "goto_definition",
+        "find_references",
         "apply_patch",
         "run_verification",
         "git_diff",

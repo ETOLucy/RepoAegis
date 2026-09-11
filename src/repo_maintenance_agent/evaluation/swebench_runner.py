@@ -34,8 +34,10 @@ from repo_maintenance_agent.models.usage import UsageLedger
 from repo_maintenance_agent.policies.permissions import PermissionPolicy
 from repo_maintenance_agent.policies.risk import deterministic_risk
 from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
+from repo_maintenance_agent.search.codegraph import build_repo_graph
 from repo_maintenance_agent.storage.artifacts import FileArtifactStore
 from repo_maintenance_agent.tools.agent_actions import (
+    GraphAdapter,
     PatchArtifactAdapter,
     SearchAdapter,
     WorkspaceReadAdapter,
@@ -154,10 +156,13 @@ class RepoAegisPatchAgent:
         development_feedback: SWEbenchDevelopmentFeedback | None = None,
     ) -> None:
         git_runner = ProcessRunner(allowed_executables={"git"})
+        graph = build_repo_graph(workspace)
         gateway = ToolGateway(
             policy=PermissionPolicy(),
             adapters={
                 "search_code": SearchAdapter(LocalLexicalSearch(workspace)),
+                "goto_definition": GraphAdapter(workspace, graph),
+                "find_references": GraphAdapter(workspace, graph),
                 "read_files": WorkspaceReadAdapter(),
                 "apply_patch": PatchArtifactAdapter(
                     artifacts=self._artifacts,

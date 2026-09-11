@@ -10,6 +10,8 @@ from repo_maintenance_agent.domain.models import (
     VerificationResult,
 )
 from repo_maintenance_agent.domain.ports import ArtifactStore, SearchPort
+from repo_maintenance_agent.search.adapters.graph import make_hit
+from repo_maintenance_agent.search.codegraph import RepoGraph
 
 
 class PatchApplier(Protocol):
@@ -113,6 +115,62 @@ class SearchAdapter:
             success=True,
             output={"hits": [hit.model_dump(mode="json") for hit in hits]},
         )
+
+
+class GraphAdapter:
+    """Backs the Localizer's goto_definition/find_references actions with the
+    call graph built by search/codegraph.py. The graph is built once (bound
+    to a workspace at construction, same pattern as SearchAdapter) and reused
+    across every tool call for the task."""
+
+    def __init__(self, workspace: Path, graph: RepoGraph) -> None:
+        self._workspace = workspace.resolve()
+        self._graph = graph
+
+    async def execute(self, call: ToolCall, workspace: Path) -> ToolResult:
+        del workspace  # bound to self._workspace at construction
+        symbol = call.arguments.get("symbol")
+        if not isinstance(symbol, str) or not symbol.strip():
+            raise ValueError("symbol is required")
+        if call.name == "goto_definition":
+            hits = [
+                make_hit(
+                    workspace=self._workspace,
+                    commit_sha=call.commit_sha,
+                    path=d.path,
+                    line=d.line_start,
+                    end_line=d.line_end,
+                    symbol=d.symbol,
+                    score=1.0,
+                    source=f"goto_definition:{d.kind}",
+                )
+                for d in self._graph.definitions_for(symbol)
+            ]
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={"definitions": [hit.model_dump(mode="json") for hit in hits]},
+            )
+        if call.name == "find_references":
+            hits = [
+                make_hit(
+                    workspace=self._workspace,
+                    commit_sha=call.commit_sha,
+                    path=r.path,
+                    line=r.line,
+                    end_line=r.line,
+                    symbol=r.symbol,
+                    score=1.0,
+                    source="find_references",
+                )
+                for r in self._graph.references_for(symbol)
+            ]
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={"references": [hit.model_dump(mode="json") for hit in hits]},
+            )
+        raise ValueError(f"unsupported graph tool: {call.name}")
 
 
 class WorkspaceReadAdapter:

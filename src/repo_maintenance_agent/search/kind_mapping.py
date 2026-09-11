@@ -89,14 +89,16 @@ KIND_TO_STRATEGY: dict[SearchKind, SearchStrategy] = {
     ),
 
     # ---- 符号/定义类 ----
+    # GRAPH(调用图/import 图, 见 search/codegraph.py)加入主搜: 这几种 kind
+    # 本质是"这个符号在哪/谁用了它", 图查询比纯文本/语义检索更精确。
     SearchKind.SYMBOL: SearchStrategy(
-        primary_kinds=frozenset({QueryKind.SYMBOL, QueryKind.BM25}),
+        primary_kinds=frozenset({QueryKind.SYMBOL, QueryKind.GRAPH, QueryKind.BM25}),
         secondary_kinds=frozenset({QueryKind.BM25, QueryKind.VECTOR}),
         # 符号查询可以启用 reranker 来精选最相关的定义
         enable_reranker=True,
     ),
     SearchKind.DEFINITION: SearchStrategy(
-        primary_kinds=frozenset({QueryKind.SYMBOL, QueryKind.BM25}),
+        primary_kinds=frozenset({QueryKind.SYMBOL, QueryKind.GRAPH, QueryKind.BM25}),
         secondary_kinds=frozenset({QueryKind.BM25, QueryKind.VECTOR}),
         enable_reranker=True,
     ),
@@ -135,9 +137,9 @@ KIND_TO_STRATEGY: dict[SearchKind, SearchStrategy] = {
         enable_reranker=False,
     ),
     SearchKind.DEPENDENCY: SearchStrategy(
-        primary_kinds=frozenset({QueryKind.LEXICAL, QueryKind.BM25, QueryKind.SYMBOL}),
+        primary_kinds=frozenset({QueryKind.LEXICAL, QueryKind.BM25, QueryKind.GRAPH}),
         secondary_kinds=frozenset({QueryKind.BM25}),
-        # 依赖查询可能涉及 import 语句(符号解析)
+        # 依赖查询问的是 import 关系, GRAPH 直接查 import 图, LEXICAL 兜底裸文本匹配
         enable_reranker=False,
     ),
     SearchKind.REGEX: SearchStrategy(

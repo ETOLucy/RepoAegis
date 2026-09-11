@@ -19,11 +19,13 @@ from repo_maintenance_agent.search.adapters.opensearch import (
     OpenSearchHybridAdapter,
 )
 from repo_maintenance_agent.search.adapters.ripgrep import default_lexical_search
+from repo_maintenance_agent.search.codegraph import RepoGraph, build_repo_graph
 from repo_maintenance_agent.search.embeddings import OpenAIEmbeddingClient
 from repo_maintenance_agent.search.history import GitHistorySearch
 from repo_maintenance_agent.search.production import WorkspaceIndex
 from repo_maintenance_agent.search.reranker import LLMReranker
 from repo_maintenance_agent.tools.agent_actions import (
+    GraphAdapter,
     PatchArtifactAdapter,
     SearchAdapter,
     VerificationAdapter,
@@ -61,7 +63,11 @@ class ProductionGraphFactory:
         )
 
     def _build_index(
-        self, workspace: Path, *, model: OpenAIModelGateway | None = None
+        self,
+        workspace: Path,
+        *,
+        model: OpenAIModelGateway | None = None,
+        graph: RepoGraph | None = None,
     ) -> WorkspaceIndex:
         if self.settings.openai_embedding_api_key is None and self.settings.openai_api_key is None:
             raise RuntimeError(
@@ -95,11 +101,15 @@ class ProductionGraphFactory:
             history=GitHistorySearch(workspace, ProcessRunner(allowed_executables={"git"})),
             opensearch=opensearch,
             reranker=LLMReranker(model=model, candidate_pool=20, final_k=10),
+            graph=graph,
         )
 
     def build_adapters(self, workspace: Path) -> dict[str, ToolAdapter]:
         model = OpenAIModelGateway.from_settings(self.settings)
         patch_runner = ProcessRunner(allowed_executables={"git"})
+        # Built once and shared with the search index's GRAPH channel below,
+        # so the workspace isn't parsed twice.
+        graph = build_repo_graph(workspace)
         sandbox = (
             RemoteSandbox(
                 base_url=self.settings.sandbox_runner_url,
@@ -130,7 +140,9 @@ class ProductionGraphFactory:
             else LocalDraftRecordAdapter(self.artifacts)
         )
         return {
-            "search_code": SearchAdapter(self._build_index(workspace, model=model)),
+            "search_code": SearchAdapter(self._build_index(workspace, model=model, graph=graph)),
+            "goto_definition": GraphAdapter(workspace, graph),
+            "find_references": GraphAdapter(workspace, graph),
             "apply_patch": PatchArtifactAdapter(
                 artifacts=self.artifacts,
                 applier=GitPatchApplier(patch_runner),

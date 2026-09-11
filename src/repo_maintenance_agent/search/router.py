@@ -16,6 +16,7 @@ class QueryKind(StrEnum):
     SYMBOL = "symbol"         # AST 符号检索(SymbolSearch)
     HISTORY = "history"       # Git 历史检索(未完整实现)
     OPENSEARCH = "opensearch" # OpenSearch 混合检索(OpenSearchHybridAdapter)
+    GRAPH = "graph"           # 调用图/import 图检索(GraphSearch, 见 search/codegraph.py)
 
 
 _SYMBOL = re.compile(

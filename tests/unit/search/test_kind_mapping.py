@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from repo_maintenance_agent.search.kind_mapping import (
-    SearchKind,
-    KIND_TO_STRATEGY,
     FALLBACK_STRATEGY,
-    get_strategy,
+    KIND_TO_STRATEGY,
+    SearchKind,
     get_all_kinds,
+    get_strategy,
 )
 from repo_maintenance_agent.search.router import QueryKind
 
@@ -15,7 +15,8 @@ from repo_maintenance_agent.search.router import QueryKind
 def test_all_18_search_kinds_have_strategies() -> None:
     """All 18 SearchKind enum values must have a strategy entry."""
     expected_count = 18
-    assert len(SearchKind) == expected_count, f"Expected {expected_count} kinds, got {len(SearchKind)}"
+    got = len(SearchKind)
+    assert got == expected_count, f"Expected {expected_count} kinds, got {got}"
     assert len(KIND_TO_STRATEGY) == expected_count
 
 
@@ -57,7 +58,7 @@ def test_opensearch_only_in_general() -> None:
     for kind, strategy in KIND_TO_STRATEGY.items():
         all_kinds = strategy.primary_kinds | strategy.secondary_kinds
         if QueryKind.OPENSEARCH in all_kinds:
-            assert kind == SearchKind.GENERAL, f"OPENSEARCH found in {kind}, should only be in GENERAL"
+            assert kind == SearchKind.GENERAL, f"OPENSEARCH found in {kind}, should be GENERAL only"
 
 
 def test_get_all_kinds_returns_all() -> None:
@@ -85,6 +86,14 @@ def test_reranker_enabled_for_semantic_kinds() -> None:
     }
     for kind in reranker_kinds:
         assert KIND_TO_STRATEGY[kind].enable_reranker, f"{kind} should have reranker enabled"
+
+
+def test_graph_query_kind_used_for_symbol_definition_dependency() -> None:
+    """symbol/definition/dependency ask "where is X defined / who uses X" —
+    the call graph/import graph (search/codegraph.py) answers that directly,
+    so GRAPH should be one of their primary (not just secondary) retrievers."""
+    for kind in (SearchKind.SYMBOL, SearchKind.DEFINITION, SearchKind.DEPENDENCY):
+        assert QueryKind.GRAPH in KIND_TO_STRATEGY[kind].primary_kinds, f"{kind} missing GRAPH"
 
 
 def test_reranker_disabled_for_exact_kinds() -> None:

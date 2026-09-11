@@ -20,9 +20,10 @@ class FakeLocalizerModel:
     async def structured(self, *, system, input_text, schema, max_attempts: int = 3):
         self.inputs.append(json.loads(input_text))
         action = self.actions.pop(0)
+        query = "load_config" if action in ("search", "goto_definition", "find_references") else ""
         return LocalizerAction(
             action=action,
-            query="load_config" if action == "search" else "",
+            query=query,
             files=["src/config.py"] if action == "read" else [],
             rationale="follow evidence",
         )
@@ -59,6 +60,44 @@ class FakeGateway:
                 success=True,
                 output={"blame": "abc123 (Author 2026-01-01) def load_config()"},
             )
+        if call.name == "goto_definition":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={
+                    "definitions": [
+                        SearchHit(
+                            hit_id="d1",
+                            path="src/config.py",
+                            content="def load_config(): ...",
+                            score=3.0,
+                            source="goto_definition:function",
+                            symbol="load_config",
+                            line_start=1,
+                            line_end=1,
+                        ).model_dump(mode="json")
+                    ]
+                },
+            )
+        if call.name == "find_references":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={
+                    "references": [
+                        SearchHit(
+                            hit_id="r1",
+                            path="src/app.py",
+                            content="load_config()",
+                            score=2.0,
+                            source="find_references",
+                            symbol="load_config",
+                            line_start=10,
+                            line_end=10,
+                        ).model_dump(mode="json")
+                    ]
+                },
+            )
         raise AssertionError(f"unexpected tool: {call.name}")
 
 
@@ -90,6 +129,24 @@ async def test_localizer_reads_and_blames() -> None:
     outcome = await localizer.localize(issue_text="fix config", task=_task())
     assert any(hit.source == "localizer-read" for hit in outcome.evidence)
     assert any(hit.source == "localizer-blame" for hit in outcome.evidence)
+
+
+@pytest.mark.asyncio
+async def test_localizer_goto_definition_adds_definition_evidence() -> None:
+    model = FakeLocalizerModel(["goto_definition", "finish"])
+    localizer = Localizer(model=model, gateway=FakeGateway(), max_rounds=3)
+    outcome = await localizer.localize(issue_text="fix config", task=_task())
+    assert outcome.queries == ["goto_definition load_config"]
+    assert any(hit.source == "goto_definition:function" for hit in outcome.evidence)
+
+
+@pytest.mark.asyncio
+async def test_localizer_find_references_adds_reference_evidence() -> None:
+    model = FakeLocalizerModel(["find_references", "finish"])
+    localizer = Localizer(model=model, gateway=FakeGateway(), max_rounds=3)
+    outcome = await localizer.localize(issue_text="fix config", task=_task())
+    assert outcome.queries == ["find_references load_config"]
+    assert any(hit.source == "find_references" for hit in outcome.evidence)
 
 
 @pytest.mark.asyncio

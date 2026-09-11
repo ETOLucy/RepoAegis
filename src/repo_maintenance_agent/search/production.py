@@ -7,7 +7,9 @@ from pathlib import Path
 
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
 from repo_maintenance_agent.domain.ports import SearchPort
+from repo_maintenance_agent.search.adapters.graph import GraphSearch
 from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
+from repo_maintenance_agent.search.codegraph import RepoGraph, build_repo_graph
 from repo_maintenance_agent.search.index import (
     BM25Search,
     CodeChunk,
@@ -29,6 +31,7 @@ class _IndexBundle:
     bm25: BM25Search
     symbol: SymbolSearch
     vector: VectorSearch | None
+    graph: GraphSearch
 
 
 class WorkspaceIndex:
@@ -59,6 +62,7 @@ class WorkspaceIndex:
         history: SearchPort | None = None,
         opensearch: SearchPort | None = None,
         reranker: LLMReranker | None = None,
+        graph: RepoGraph | None = None,
     ) -> None:
         self._workspace = workspace.resolve()
         self._tenant_id = tenant_id
@@ -68,6 +72,10 @@ class WorkspaceIndex:
         self._history = history
         self._opensearch = opensearch
         self._reranker = reranker
+        # Pass a pre-built graph when the caller already built one (e.g. the
+        # Localizer's goto_definition/find_references tool needs its own copy
+        # anyway) so the workspace isn't parsed twice.
+        self._graph = graph
         self._bundles: OrderedDict[str, _IndexBundle] = OrderedDict()
         self._lock = asyncio.Lock()
 
@@ -76,6 +84,7 @@ class WorkspaceIndex:
         retrievers: dict[QueryKind, SearchPort] = {
             QueryKind.BM25: bundle.bm25,
             QueryKind.SYMBOL: bundle.symbol,
+            QueryKind.GRAPH: bundle.graph,
         }
         if bundle.vector is not None:
             retrievers[QueryKind.VECTOR] = bundle.vector
@@ -106,6 +115,10 @@ class WorkspaceIndex:
                 repo_id=query.repo_id,
                 commit_sha=query.commit_sha,
             )
+            # The call/import graph only depends on the checked-out files, not
+            # on chunking, so it's built straight from the workspace (unless
+            # the caller already built one for us).
+            graph = self._graph if self._graph is not None else build_repo_graph(self._workspace)
             bundle = _IndexBundle(
                 chunks=chunks,
                 bm25=BM25Search(chunks),
@@ -113,6 +126,7 @@ class WorkspaceIndex:
                 vector=(
                     VectorSearch(chunks, self._embeddings) if self._embeddings is not None else None
                 ),
+                graph=GraphSearch(self._workspace, graph),
             )
             self._bundles[query.commit_sha] = bundle
             self._bundles.move_to_end(query.commit_sha)

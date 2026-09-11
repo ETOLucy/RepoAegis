@@ -8,8 +8,10 @@ from repo_maintenance_agent.domain.models import (
     ToolPermission,
     VerificationResult,
 )
+from repo_maintenance_agent.search.codegraph import build_repo_graph
 from repo_maintenance_agent.storage.artifacts import FileArtifactStore
 from repo_maintenance_agent.tools.agent_actions import (
+    GraphAdapter,
     PatchArtifactAdapter,
     SearchAdapter,
     VerificationAdapter,
@@ -182,6 +184,8 @@ def _call(
             "run_verification": "verification",
             "search_code": "research",
             "read_files": "review",
+            "goto_definition": "localizer",
+            "find_references": "localizer",
         }[name],
         name=name,
         permission=permission,
@@ -207,3 +211,72 @@ async def test_workspace_reader_marks_missing_files_without_aborting(tmp_path: P
     assert result.output["files"]["src/app.py"] == "def app():\n    return 1\n"
     assert result.output["files"]["missing/release.yml"] == {"error": "not_found"}
     assert result.output["files"]["README.md"] == {"error": "not_found"}
+
+
+@pytest.mark.asyncio
+async def test_graph_adapter_goto_definition_returns_matching_definitions(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "svc.py").write_text(
+        "class Service:\n    def handle(self, request):\n        return True\n",
+        encoding="utf-8",
+    )
+    adapter = GraphAdapter(tmp_path, build_repo_graph(tmp_path))
+    call = _call(
+        name="goto_definition",
+        permission=ToolPermission.REPO_READ,
+        arguments={"symbol": "Service.handle"},
+    )
+
+    result = await adapter.execute(call, tmp_path)
+
+    assert result.success is True
+    definitions = result.output["definitions"]
+    assert len(definitions) == 1
+    assert definitions[0]["path"] == "svc.py"
+    assert definitions[0]["line_start"] == 2
+
+
+@pytest.mark.asyncio
+async def test_graph_adapter_find_references_returns_call_sites(tmp_path: Path) -> None:
+    (tmp_path / "a.py").write_text(
+        "def helper():\n    pass\n\ndef caller():\n    helper()\n",
+        encoding="utf-8",
+    )
+    adapter = GraphAdapter(tmp_path, build_repo_graph(tmp_path))
+    call = _call(
+        name="find_references",
+        permission=ToolPermission.REPO_READ,
+        arguments={"symbol": "helper"},
+    )
+
+    result = await adapter.execute(call, tmp_path)
+
+    assert result.success is True
+    references = result.output["references"]
+    assert len(references) == 1
+    assert references[0]["line_start"] == 5
+
+
+@pytest.mark.asyncio
+async def test_graph_adapter_requires_a_symbol_argument(tmp_path: Path) -> None:
+    adapter = GraphAdapter(tmp_path, build_repo_graph(tmp_path))
+    call = _call(name="goto_definition", permission=ToolPermission.REPO_READ, arguments={})
+
+    with pytest.raises(ValueError, match="symbol"):
+        await adapter.execute(call, tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_graph_adapter_unknown_symbol_returns_empty_list(tmp_path: Path) -> None:
+    (tmp_path / "a.py").write_text("def known():\n    pass\n", encoding="utf-8")
+    adapter = GraphAdapter(tmp_path, build_repo_graph(tmp_path))
+    call = _call(
+        name="goto_definition",
+        permission=ToolPermission.REPO_READ,
+        arguments={"symbol": "nope"},
+    )
+
+    result = await adapter.execute(call, tmp_path)
+
+    assert result.output["definitions"] == []
