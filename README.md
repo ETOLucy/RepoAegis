@@ -18,10 +18,6 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-177245.svg" alt="License: Apache-2.0"></a>
 </p>
 
-<p align="center">
-  <a href="README-EN.md">English</a>
-</p>
-
 ---
 
 ## 项目定位
