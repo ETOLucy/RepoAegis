@@ -61,6 +61,7 @@ def test_production_graph_registers_complete_local_delivery_toolset(
         "apply_patch",
         "run_verification",
         "git_diff",
+        "git_blame",
         "read_files",
         "git_commit",
         "git_push",

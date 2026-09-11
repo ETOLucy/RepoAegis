@@ -164,6 +164,7 @@ class RepoAegisPatchAgent:
                     applier=GitPatchApplier(git_runner),
                 ),
                 "git_diff": GitToolAdapter(git_runner),
+                "git_blame": GitToolAdapter(git_runner),
             },
             operation_log=InMemoryOperationLog(),
             workspace_root=workspace,

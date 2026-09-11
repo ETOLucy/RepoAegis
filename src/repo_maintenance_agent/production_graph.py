@@ -138,6 +138,7 @@ class ProductionGraphFactory:
             "run_verification": VerificationAdapter(verifier),
             "read_files": WorkspaceReadAdapter(),
             "git_diff": git_adapter,
+            "git_blame": git_adapter,
             "git_commit": git_adapter,
             "git_push": git_adapter,
             "create_draft_pr": draft_adapter,

@@ -15,6 +15,10 @@ from repo_maintenance_agent.domain.models import (
 _AGENT_PERMISSIONS: dict[str, frozenset[ToolPermission]] = {
     "intake": frozenset({ToolPermission.GITHUB_READ}),
     "research": frozenset({ToolPermission.GITHUB_READ, ToolPermission.REPO_READ}),
+    # Localizer (agents/localizer.py) runs inside the research node and issues
+    # its own ToolCall(agent="localizer", ...) for search/read/blame rounds —
+    # it needs the same read-only grant "research" has, nothing more.
+    "localizer": frozenset({ToolPermission.REPO_READ}),
     "planning": frozenset({ToolPermission.REPO_READ}),
     "coding": frozenset(
         {
