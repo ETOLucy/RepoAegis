@@ -12,6 +12,7 @@
 其他相关文档：
 
 - [`../RepoAegis_Design.md`](../RepoAegis_Design.md) — 完整的生产级参考架构，覆盖尚未落地的阶段性规划（Phase 2/3），是"蓝图"而非"现状"。
-- [`refactor-plan.md`](refactor-plan.md) — 对照源码的现状核实、已知差距、改造优先级和进展记录。
+- [`rebuild-plan.md`](rebuild-plan.md) — **当前唯一有效的执行计划**：从零设计的完全重写方案，按 agent / 后端 / 前端三条能力线展开，含推翻清单与分阶段路线。
+- [`refactor-plan.md`](refactor-plan.md) — 已被取代的增量改造计划，保留作为旧实现核查与已完成工作的历史记录。
 - [`industry-survey.md`](industry-survey.md) — 业界 coding agent 全流程调研（2026-09）：主流方案、关键论文与数据、RepoAegis 每一环的选型与理由，以及对改造计划的逐项评估。
 - [`interview-prep-complete.md`](interview-prep-complete.md) — 个人面试准备笔记（Q&A 形式），非项目通用文档。

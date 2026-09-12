@@ -248,6 +248,8 @@
 
 ## 六、推荐的目标架构与路线
 
+> **注**：本节原本给出的是"保留外层、分阶段替换内层"的增量路线。用户已明确要求完全重写、接受推翻全部旧代码，因此实际执行以 [`rebuild-plan.md`](rebuild-plan.md) 为准；本节保留作为选型依据和增量方案的对照。
+
 ### 6.1 目标架构（一句话）
 
 **外层是治理状态机，内层是 mini-SWE-agent。** 外层用 LangGraph（接 checkpointer）驱动 Intake → Plan（含风险与审批信封）→ Solve（内层循环，在沙箱内）→ Verify（harness 侧独立验证 + 回归精选）→ Review（静态门 + LLM）→ PR；每个工具调用经过 `authorize()` 单一收口并发射事件；事件同时流向日志、数据库、SSE。
