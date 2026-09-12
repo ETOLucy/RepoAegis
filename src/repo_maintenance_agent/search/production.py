@@ -10,15 +10,7 @@ from repo_maintenance_agent.domain.ports import SearchPort
 from repo_maintenance_agent.search.adapters.graph import GraphSearch
 from repo_maintenance_agent.search.adapters.local import LocalLexicalSearch
 from repo_maintenance_agent.search.codegraph import RepoGraph, build_repo_graph
-from repo_maintenance_agent.search.index import (
-    BM25Search,
-    CodeChunk,
-    EmbeddingPort,
-    SymbolSearch,
-    VectorSearch,
-    ingest_workspace,
-)
-from repo_maintenance_agent.search.reranker import LLMReranker
+from repo_maintenance_agent.search.index import BM25Search, CodeChunk, SymbolSearch, ingest_workspace
 from repo_maintenance_agent.search.router import QueryKind
 from repo_maintenance_agent.search.service import HybridSearchService
 
@@ -30,17 +22,15 @@ class _IndexBundle:
     chunks: tuple[CodeChunk, ...]
     bm25: BM25Search
     symbol: SymbolSearch
-    vector: VectorSearch | None
     graph: GraphSearch
 
 
 class WorkspaceIndex:
     """Production-ready code index over a workspace checkout.
-    S1 (default): BM25 + Symbol — both already implemented in search/index.py,
-    previously wired only into the chat module.
-    M1 (opt-in): pass ``embeddings`` to enable BM25 + Symbol + Vector hybrid
-    retrieval fused with reciprocal rank fusion.
-    M2 (opt-in): pass ``lexical`` (e.g. RipgrepSearch) to add a fast exact
+    Default channels: BM25 + Symbol (search/index.py) + Graph (the
+    dependency-aware call/import graph, search/codegraph.py) — the precise
+    channel for "where is X defined"/"who uses X" — fused with reciprocal
+    rank fusion. Pass ``lexical`` (e.g. RipgrepSearch) to add a fast exact
     substring channel for error-string / quoted-identifier queries.
     The index is built lazily on first search and cached per commit SHA (the
     chunk identity and scoping depend on the commit), with a small LRU so a
@@ -57,21 +47,15 @@ class WorkspaceIndex:
         *,
         tenant_id: str | None = None,
         repo_id: str | None = None,
-        embeddings: EmbeddingPort | None = None,
         lexical: SearchPort | None = None,
         history: SearchPort | None = None,
-        opensearch: SearchPort | None = None,
-        reranker: LLMReranker | None = None,
         graph: RepoGraph | None = None,
     ) -> None:
         self._workspace = workspace.resolve()
         self._tenant_id = tenant_id
         self._repo_id = repo_id
-        self._embeddings = embeddings
         self._lexical = lexical or LocalLexicalSearch(workspace)
         self._history = history
-        self._opensearch = opensearch
-        self._reranker = reranker
         # Pass a pre-built graph when the caller already built one (e.g. the
         # Localizer's goto_definition/find_references tool needs its own copy
         # anyway) so the workspace isn't parsed twice.
@@ -86,18 +70,12 @@ class WorkspaceIndex:
             QueryKind.SYMBOL: bundle.symbol,
             QueryKind.GRAPH: bundle.graph,
         }
-        if bundle.vector is not None:
-            retrievers[QueryKind.VECTOR] = bundle.vector
         if self._lexical is not None:
             retrievers[QueryKind.LEXICAL] = self._lexical
         if self._history is not None:
             retrievers[QueryKind.HISTORY] = self._history
-        if self._opensearch is not None:
-            retrievers[QueryKind.OPENSEARCH] = self._opensearch
         service = HybridSearchService(retrievers)
         fused = await service.search(query, kind=query.kind)
-        if self._reranker is not None:
-            fused = await self._reranker.rerank(query, fused)
         return _dedupe_by_location(fused, limit=query.top_k)
 
     async def _bundle_for(self, query: SearchQuery) -> _IndexBundle:
@@ -123,9 +101,6 @@ class WorkspaceIndex:
                 chunks=chunks,
                 bm25=BM25Search(chunks),
                 symbol=SymbolSearch(chunks),
-                vector=(
-                    VectorSearch(chunks, self._embeddings) if self._embeddings is not None else None
-                ),
                 graph=GraphSearch(self._workspace, graph),
             )
             self._bundles[query.commit_sha] = bundle

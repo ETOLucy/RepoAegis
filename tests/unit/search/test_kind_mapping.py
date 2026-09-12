@@ -1,4 +1,4 @@
-"""Tests for kind_mapping: all 18 SearchKinds have valid strategies."""
+"""Tests for kind_mapping: all 5 SearchKinds have valid strategies."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ from repo_maintenance_agent.search.kind_mapping import (
 from repo_maintenance_agent.search.router import QueryKind
 
 
-def test_all_18_search_kinds_have_strategies() -> None:
-    """All 18 SearchKind enum values must have a strategy entry."""
-    expected_count = 18
+def test_all_5_search_kinds_have_strategies() -> None:
+    """All 5 SearchKind enum values must have a strategy entry."""
+    expected_count = 5
     got = len(SearchKind)
     assert got == expected_count, f"Expected {expected_count} kinds, got {got}"
     assert len(KIND_TO_STRATEGY) == expected_count
@@ -53,63 +53,28 @@ def test_all_kinds_include_bm25() -> None:
         assert QueryKind.BM25 in all_kinds, f"{kind} does not include BM25"
 
 
-def test_opensearch_only_in_general() -> None:
-    """OPENSEARCH QueryKind should only appear in the GENERAL strategy."""
-    for kind, strategy in KIND_TO_STRATEGY.items():
-        all_kinds = strategy.primary_kinds | strategy.secondary_kinds
-        if QueryKind.OPENSEARCH in all_kinds:
-            assert kind == SearchKind.GENERAL, f"OPENSEARCH found in {kind}, should be GENERAL only"
-
-
 def test_get_all_kinds_returns_all() -> None:
-    """get_all_kinds() returns all 18 SearchKinds."""
+    """get_all_kinds() returns all 5 SearchKinds."""
     kinds = get_all_kinds()
-    assert len(kinds) == 18
+    assert len(kinds) == 5
     assert SearchKind.GENERAL in kinds
-    assert SearchKind.PERFORMANCE in kinds
-    assert SearchKind.SECURITY in kinds
-    assert SearchKind.API in kinds
-    assert SearchKind.UI in kinds
-    assert SearchKind.CI_CD in kinds
+    assert SearchKind.EXACT in kinds
+    assert SearchKind.SYMBOL in kinds
+    assert SearchKind.HISTORY in kinds
+    assert SearchKind.DEPENDENCY in kinds
 
 
-def test_reranker_enabled_for_semantic_kinds() -> None:
-    """Kinds that benefit from semantic search should have reranker enabled."""
-    reranker_kinds = {
-        SearchKind.SYMBOL,
-        SearchKind.DEFINITION,
-        SearchKind.GENERAL,
-        SearchKind.EXPLORE,
-        SearchKind.SCHEMA,
-        SearchKind.PERFORMANCE,
-        SearchKind.API,
-    }
-    for kind in reranker_kinds:
-        assert KIND_TO_STRATEGY[kind].enable_reranker, f"{kind} should have reranker enabled"
-
-
-def test_graph_query_kind_used_for_symbol_definition_dependency() -> None:
-    """symbol/definition/dependency ask "where is X defined / who uses X" —
-    the call graph/import graph (search/codegraph.py) answers that directly,
-    so GRAPH should be one of their primary (not just secondary) retrievers."""
-    for kind in (SearchKind.SYMBOL, SearchKind.DEFINITION, SearchKind.DEPENDENCY):
+def test_graph_query_kind_used_for_symbol_and_dependency() -> None:
+    """symbol/dependency ask "where is X defined / who uses X" — the call
+    graph/import graph (search/codegraph.py) answers that directly, so GRAPH
+    should be one of their primary (not just secondary) retrievers."""
+    for kind in (SearchKind.SYMBOL, SearchKind.DEPENDENCY):
         assert QueryKind.GRAPH in KIND_TO_STRATEGY[kind].primary_kinds, f"{kind} missing GRAPH"
 
 
-def test_reranker_disabled_for_exact_kinds() -> None:
-    """Kinds that rely on exact matching should not have reranker."""
-    no_reranker_kinds = {
-        SearchKind.EXACT,
-        SearchKind.PATH,
-        SearchKind.ERROR,
-        SearchKind.HISTORY,
-        SearchKind.TEST,
-        SearchKind.CONFIG,
-        SearchKind.DEPENDENCY,
-        SearchKind.REGEX,
-        SearchKind.SECURITY,
-        SearchKind.UI,
-        SearchKind.CI_CD,
-    }
-    for kind in no_reranker_kinds:
-        assert not KIND_TO_STRATEGY[kind].enable_reranker, f"{kind} should not have reranker"
+def test_no_removed_query_kinds_referenced() -> None:
+    """VECTOR/OPENSEARCH channels were removed (needed external API/cluster
+    credentials); no strategy should reference them."""
+    for kind, strategy in KIND_TO_STRATEGY.items():
+        all_kinds = strategy.primary_kinds | strategy.secondary_kinds
+        assert all(k in QueryKind for k in all_kinds), f"{kind} references an unknown QueryKind"

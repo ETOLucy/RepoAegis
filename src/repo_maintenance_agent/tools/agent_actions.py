@@ -75,6 +75,29 @@ class VerificationAdapter:
         )
 
 
+class ReproductionAdapter:
+    """Runs the same sandboxed test/lint commands as verification, but before
+    any patch is applied — so research can seed localization from a real
+    failing-test stack trace instead of only semantic search guessing
+    (docs/refactor-plan.md 三、1). Reuses TaskVerifier as-is: "reproduce the bug" and
+    "verify the fix" are the same mechanical action (run the test suite),
+    just at different points in the pipeline, so no new sandbox code needed."""
+
+    def __init__(self, verifier: TaskVerifier) -> None:
+        self._verifier = verifier
+
+    async def execute(self, call: ToolCall, workspace: Path) -> ToolResult:
+        del workspace
+        if call.name != "run_repro":
+            raise ValueError(f"unsupported reproduction tool: {call.name}")
+        result = await self._verifier.verify_task(call.task_id)
+        return ToolResult(
+            call_id=call.call_id,
+            success=True,
+            output={"reproduction": result.model_dump(mode="json")},
+        )
+
+
 class SearchAdapter:
     def __init__(self, search: SearchPort) -> None:
         self._search = search

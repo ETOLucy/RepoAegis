@@ -9,7 +9,7 @@
 > 官方验证器是 `swebench` 包（4.1.0），Inspect 是调用该验证器的评测框架。
 >
 > 之前引用的占位评测数据（`docs/evidence/` 下的旧结果）已删除，替换用的
-> 真实金标准数据集尚未建好，见 `改造计划.md` 六、评测方法论。
+> 真实金标准数据集尚未建好，见 `docs/refactor-plan.md` 六、评测方法论。
 
 ## 文件
 
@@ -133,4 +133,4 @@ for row in rows:
 早期用少量历史 prediction 在 Inspect 官方 `swe_bench_scorer` 下 replay，与
 官方 SWE-bench 4.1.0 harness 判分一致，验证了 replay 管线本身是通的。具体
 数字来自已删除的占位数据集，不再作为评测结论引用；正式结论待
-`改造计划.md` 的真实金标准数据集建好后重新产出。
+`docs/refactor-plan.md` 的真实金标准数据集建好后重新产出。

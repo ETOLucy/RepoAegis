@@ -12,7 +12,12 @@ from repo_maintenance_agent.agents.schemas import (
     PullRequestDraft,
     TaskSpecOutput,
 )
-from repo_maintenance_agent.domain.models import RepoTaskState, SearchHit, ToolResult
+from repo_maintenance_agent.domain.models import (
+    RepoTaskState,
+    SearchHit,
+    ToolResult,
+    VerificationResult,
+)
 from repo_maintenance_agent.storage.artifacts import FileArtifactStore
 
 
@@ -68,6 +73,18 @@ class RecordingResearchGateway:
 
     async def execute(self, call, state):
         self.calls.append((call.name, call.arguments))
+        if call.name == "run_repro":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={
+                    "reproduction": VerificationResult(
+                        passed=True,
+                        commands=("pytest",),
+                        summary="no pre-existing failure",
+                    ).model_dump(mode="json")
+                },
+            )
         if call.name == "search_code":
             hit = SearchHit(
                 hit_id=f"hit-{len(self.calls)}",

@@ -31,10 +31,9 @@ def test_query_router_uses_symbol_path_for_reference_question() -> None:
     routes = SearchRouter().route("find callers of ConfigLoader.load")
 
     assert QueryKind.SYMBOL in routes
-    assert QueryKind.VECTOR not in routes
 
 
-def test_query_router_uses_hybrid_for_natural_language_intent() -> None:
+def test_query_router_uses_bm25_fallback_for_natural_language_intent() -> None:
     routes = SearchRouter().route("where does the application load empty configuration defaults")
 
-    assert routes == frozenset({QueryKind.BM25, QueryKind.VECTOR, QueryKind.OPENSEARCH})
+    assert routes == frozenset({QueryKind.BM25})

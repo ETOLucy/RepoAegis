@@ -28,7 +28,7 @@ RepoAegis 是一个 **policy-controlled、evidence-backed** 的 Issue 修复流�
 
 ## 项目状态
 
-当前正按 [`改造计划.md`](改造计划.md) 推进重构（重点：真实评测数据、依赖感知的代码导航、多 agent 编排消融实验等）。详细架构、模块设计和搜索策略说明见 [`架构记忆文档.md`](架构记忆文档.md)，改造过程中会持续变化，本 README 暂时只保留可直接操作的信息，避免和实现脱节。
+当前正按 [`docs/refactor-plan.md`](docs/refactor-plan.md) 推进重构（重点：真实评测数据、依赖感知的代码导航、多 agent 编排消融实验等）。详细架构、模块设计和搜索策略说明见 [`docs/`](docs/)（从 [`docs/README.md`](docs/README.md) 开始），改造过程中会持续变化，本 README 暂时只保留可直接操作的信息，避免和实现脱节。
 
 ## 快速开始
 

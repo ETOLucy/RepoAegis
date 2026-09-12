@@ -46,20 +46,6 @@ class Settings(BaseSettings):
             )
         }
     )
-    openai_embedding_model: str = "text-embedding-3-small"
-    openai_embedding_api_key: SecretStr | None = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "OPENAI_EMBEDDING_API_KEY", "REPO_AGENT_OPENAI_EMBEDDING_API_KEY"
-        ),
-        repr=False,
-    )
-    openai_embedding_base_url: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "OPENAI_EMBEDDING_BASE_URL", "REPO_AGENT_OPENAI_EMBEDDING_BASE_URL"
-        ),
-    )
     chat_repo_root: str | None = None
     github_token: SecretStr | None = Field(default=None, repr=False)
     sandbox_seccomp_profile: Path = Path("sandbox/seccomp.json")
@@ -76,26 +62,14 @@ class Settings(BaseSettings):
     worker_tenant_ids: tuple[str, ...] = ()
     worker_poll_seconds: float = Field(default=1.0, gt=0, le=60)
 
-    # ── OpenSearch 配置 ──
-    opensearch_hosts: tuple[str, ...] = ("localhost",)
-    opensearch_port: int = 9200
-    opensearch_user: str | None = None
-    opensearch_password: SecretStr | None = Field(default=None, repr=False)
-    opensearch_use_ssl: bool = False
-    opensearch_verify_certs: bool = False
-    opensearch_index_alias: str = "repo-aegis-chunks"
-
     @model_validator(mode="after")
     def complete_sandbox_runner_configuration(self) -> Settings:
         if self.sandbox_runner_url is not None and self.sandbox_runner_token is None:
             raise ValueError("sandbox runner URL requires a matching token")
-        # OPENAI_API_KEY / OPENAI_EMBEDDING_API_KEY are intentionally NOT
-        # required here: constructing Settings() (CLI doctor, control-plane
-        # tasks, tests) must not crash before any model call is attempted.
-        # Fail-fast is enforced at the actual point of use:
-        #   - production_graph.build_index() raises when both keys are absent
-        #   - search/embeddings.py falls back to the chat key when embedding
-        #     key is absent, and raises when neither is configured
+        # OPENAI_API_KEY is intentionally NOT required here: constructing
+        # Settings() (CLI doctor, control-plane tasks, tests) must not crash
+        # before any model call is attempted. Fail-fast is enforced at the
+        # actual point of use (OpenAIModelGateway.from_settings()).
         return self
 
     @property

@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -12,14 +13,16 @@ from repo_maintenance_agent.tools.gateway import InMemoryOperationLog
 from repo_maintenance_agent.tools.github import LocalDraftRecordAdapter
 
 
-def test_build_index_raises_when_no_embedding_keys(tmp_path: Path) -> None:
+@pytest.mark.skipif(shutil.which("rg") is None, reason="ripgrep binary not installed")
+def test_build_index_works_without_any_openai_credentials(tmp_path: Path) -> None:
+    """The dependency-aware index (BM25 + Symbol + Graph + lexical/history) needs
+    no embedding/OpenSearch credentials — unlike the old vector/hybrid channel."""
     seccomp = tmp_path / "seccomp.json"
     seccomp.write_text('{"defaultAction":"SCMP_ACT_ERRNO"}', encoding="utf-8")
     factory = ProductionGraphFactory(
         settings=Settings(
             environment="test",
             openai_api_key=None,
-            openai_embedding_api_key=None,
             database_url=SecretStr("sqlite+pysqlite:///:memory:"),
             artifact_root=str(tmp_path / "artifacts"),
             sandbox_seccomp_profile=seccomp,
@@ -27,8 +30,8 @@ def test_build_index_raises_when_no_embedding_keys(tmp_path: Path) -> None:
         artifacts=FileArtifactStore(tmp_path / "artifacts"),
         operations=InMemoryOperationLog(),
     )
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY or OPENAI_EMBEDDING_API_KEY"):
-        factory._build_index(tmp_path)
+    index = factory._build_index(tmp_path)
+    assert index is not None
 
 
 @patch("repo_maintenance_agent.production_graph.OpenAIModelGateway")
@@ -62,6 +65,7 @@ def test_production_graph_registers_complete_local_delivery_toolset(
         "find_references",
         "apply_patch",
         "run_verification",
+        "run_repro",
         "git_diff",
         "git_blame",
         "read_files",

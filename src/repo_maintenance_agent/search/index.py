@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import ast
-import asyncio
 import hashlib
 import math
 import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from repo_maintenance_agent.domain.models import SearchHit, SearchQuery
 
@@ -46,16 +45,6 @@ class CodeChunk:
     line_start: int
     line_end: int
     symbol: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class EmbeddingBatch:
-    vectors: tuple[tuple[float, ...], ...]
-    input_tokens: int
-
-
-class EmbeddingPort(Protocol):
-    async def embed(self, texts: list[str]) -> EmbeddingBatch: ...
 
 
 def ingest_workspace(
@@ -150,52 +139,6 @@ class SymbolSearch:
             scored.append((len(overlap) + exact_bonus, chunk))
         scored.sort(key=lambda item: (-item[0], item[1].path, item[1].line_start))
         return [_hit(chunk, score, "symbol") for score, chunk in scored[: query.top_k]]
-
-
-class VectorSearch:
-    def __init__(
-        self,
-        chunks: tuple[CodeChunk, ...],
-        embeddings: EmbeddingPort,
-        *,
-        batch_size: int = 64,
-    ) -> None:
-        if not 1 <= batch_size <= 256:
-            raise ValueError("embedding batch size must be between 1 and 256")
-        self._chunks = chunks
-        self._embeddings = embeddings
-        self._batch_size = batch_size
-        self._vectors: dict[str, tuple[float, ...]] = {}
-        self._lock = asyncio.Lock()
-
-    async def search(self, query: SearchQuery) -> list[SearchHit]:
-        candidates = _scoped_chunks(self._chunks, query)
-        if not candidates:
-            return []
-        await self._embed_missing(candidates)
-        query_batch = await self._embeddings.embed([query.text])
-        if len(query_batch.vectors) != 1:
-            raise ValueError("embedding provider returned the wrong query vector count")
-        query_vector = query_batch.vectors[0]
-        scored = [
-            (_cosine(query_vector, self._vectors[chunk.chunk_id]), chunk) for chunk in candidates
-        ]
-        scored = [item for item in scored if item[0] > 0]
-        scored.sort(key=lambda item: (-item[0], item[1].path, item[1].line_start))
-        return [_hit(chunk, score, "vector") for score, chunk in scored[: query.top_k]]
-
-    async def _embed_missing(self, candidates: list[CodeChunk]) -> None:
-        async with self._lock:
-            missing = [chunk for chunk in candidates if chunk.chunk_id not in self._vectors]
-            for offset in range(0, len(missing), self._batch_size):
-                batch = missing[offset : offset + self._batch_size]
-                response = await self._embeddings.embed([chunk.content for chunk in batch])
-                if len(response.vectors) != len(batch):
-                    raise ValueError("embedding provider returned the wrong vector count")
-                for chunk, vector in zip(batch, response.vectors, strict=True):
-                    if not vector:
-                        raise ValueError("embedding provider returned an empty vector")
-                    self._vectors[chunk.chunk_id] = vector
 
 
 def _line_chunks(
@@ -311,16 +254,6 @@ def _path_allowed(path: str, allowed_paths: tuple[str, ...]) -> bool:
 
 def _tokens(value: str) -> list[str]:
     return [token.casefold() for token in _TOKEN.findall(value)]
-
-
-def _cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
-    if len(left) != len(right) or not left:
-        raise ValueError("embedding dimensions do not match")
-    left_norm = math.sqrt(sum(value * value for value in left))
-    right_norm = math.sqrt(sum(value * value for value in right))
-    if left_norm == 0 or right_norm == 0:
-        return 0.0
-    return sum(a * b for a, b in zip(left, right, strict=True)) / (left_norm * right_norm)
 
 
 def _hit(chunk: CodeChunk, score: float, source: str) -> SearchHit:

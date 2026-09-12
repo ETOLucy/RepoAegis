@@ -11,7 +11,7 @@ def test_rewrite_queries_extracts_quoted_exact_strings() -> None:
     assert "NoSuchKey" in texts
     assert "src/config.py" in texts
     assert any(q.kind == "exact" for q in plan.queries)
-    assert any(q.kind == "path" for q in plan.queries)
+    assert any(q.key_paths == ("src/config.py",) for q in plan.queries)
 
 
 def test_rewrite_queries_extracts_camelcase_symbols() -> None:

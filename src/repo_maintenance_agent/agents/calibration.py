@@ -94,6 +94,8 @@ class CalibrationJudge:
         """Rule-based calibration: simple consistency checks.
 
         Rules:
+        0. If evidence includes a reproduced test failure (a real stack trace,
+           not a guess), trust it over the fuzzy checks below and flag "bugfix"
         1. If evidence contains test files but task_type is not "test", flag mismatch
         2. If evidence contains error messages but task_type is not "bugfix", flag mismatch
         3. If evidence is empty, mark as "insufficient evidence"
@@ -114,6 +116,17 @@ class CalibrationJudge:
             return result
 
         current_type = task_spec.get("task_type", "")
+        # Reproduce-first evidence (docs/refactor-plan.md 三、1) is a real stack trace, not
+        # a substring guess — it outranks the fuzzy checks below.
+        has_repro_evidence = any(e.source == "reproduction" for e in evidence)
+        if has_repro_evidence and current_type != "bugfix":
+            result["calibrated_task_type"] = "bugfix"
+            result["calibration_reason"] = (
+                "evidence includes a reproduced test failure (real stack trace); "
+                f"task_type was '{current_type}', trace confirms 'bugfix'"
+            )
+            return result
+
         has_test_evidence = any(
             "test_" in e.source or "/test/" in e.source or "/tests/" in e.source
             for e in evidence

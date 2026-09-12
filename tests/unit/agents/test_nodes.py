@@ -89,6 +89,22 @@ class LowRiskDependencyModel(FakeModel):
         return await super().structured(system=system, input_text=input_text, schema=schema)
 
 
+class FeatureIntakeModel(FakeModel):
+    """Same as FakeModel but intake classifies the issue as "feature", so
+    tests can check whether later evidence should have recalibrated it."""
+
+    async def structured(self, *, system, input_text, schema, max_attempts: int = 3):
+        if schema is TaskSpecOutput:
+            return TaskSpecOutput(
+                task_type="feature",
+                summary="Add optional configuration override",
+                acceptance_criteria=["supports override"],
+                constraints=[],
+                unknowns=[],
+            )
+        return await super().structured(system=system, input_text=input_text, schema=schema)
+
+
 class RecordingReviewModel(FakeModel):
     def __init__(self) -> None:
         self.review_input: dict[str, object] = {}
@@ -176,6 +192,18 @@ class RecordingGateway:
                     ).model_dump(mode="json")
                 },
             )
+        if call.name == "run_repro":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={
+                    "reproduction": VerificationResult(
+                        passed=True,
+                        commands=("pytest",),
+                        summary="no pre-existing failure",
+                    ).model_dump(mode="json")
+                },
+            )
         if call.name == "git_diff":
             return ToolResult(
                 call_id=call.call_id,
@@ -203,6 +231,33 @@ class RecordingGateway:
                 output={"url": "https://example.invalid/pr/1", "draft": True},
             )
         raise AssertionError(f"unexpected tool call: {call.name}")
+
+
+class ReproducingGateway(RecordingGateway):
+    """Same as RecordingGateway, but "run_repro" reports a real pre-existing
+    test failure, so tests can check the reproduce-first seeding path."""
+
+    async def execute(self, call, state):
+        if call.name == "run_repro":
+            return ToolResult(
+                call_id=call.call_id,
+                success=True,
+                output={
+                    "reproduction": VerificationResult(
+                        passed=False,
+                        commands=("pytest",),
+                        summary="1 failed",
+                        failures=(
+                            {
+                                "name": "test_load_config",
+                                "message": "AssertionError: expected default, got None",
+                                "location": "src/config.py:42",
+                            },
+                        ),
+                    ).model_dump(mode="json")
+                },
+            )
+        return await super().execute(call, state)
 
 
 def task() -> RepoTaskState:
@@ -237,6 +292,28 @@ async def test_intake_research_and_planning_produce_evidence_backed_approval(
     assert planned.evidence[0].locator == "src/config.py:10-20"
     assert planned.plan_hash is not None
     assert after_plan["trace"] == ["planning"]
+
+
+@pytest.mark.asyncio
+async def test_research_seeds_evidence_from_a_reproduced_failure(tmp_path: Path) -> None:
+    nodes = build_agent_nodes(
+        AgentRuntime(
+            model=FeatureIntakeModel(),
+            artifacts=FileArtifactStore(tmp_path),
+            gateway=ReproducingGateway(),
+        )
+    )
+    after_intake = await nodes.intake({"task": task(), "trace": []})
+    after_research = await nodes.research({"task": after_intake["task"], "trace": []})
+    researched = after_research["task"]
+
+    repro_evidence = [e for e in researched.evidence if e.source == "reproduction"]
+    assert len(repro_evidence) == 1
+    assert repro_evidence[0].locator == "src/config.py:42-42"
+    assert "AssertionError" in repro_evidence[0].summary
+    assert researched.repo_profile["reproduction"]["passed"] is False
+    # CalibrationJudge should trust the reproduced trace over its fuzzy checks.
+    assert researched.task_spec["calibration"]["calibrated_task_type"] == "bugfix"
 
 
 @pytest.mark.asyncio

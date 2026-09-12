@@ -12,10 +12,8 @@ class QueryKind(StrEnum):
     """
     LEXICAL = "lexical"       # 精确子串匹配(LocalLexicalSearch)
     BM25 = "bm25"             # BM25 全文检索(BM25Search)
-    VECTOR = "vector"         # 向量嵌入检索(VectorSearch)
     SYMBOL = "symbol"         # AST 符号检索(SymbolSearch)
     HISTORY = "history"       # Git 历史检索(未完整实现)
-    OPENSEARCH = "opensearch" # OpenSearch 混合检索(OpenSearchHybridAdapter)
     GRAPH = "graph"           # 调用图/import 图检索(GraphSearch, 见 search/codegraph.py)
 
 
@@ -59,4 +57,4 @@ class SearchRouter:
             return frozenset({QueryKind.HISTORY, QueryKind.BM25})
         if _EXACT.search(text):
             return frozenset({QueryKind.LEXICAL, QueryKind.BM25})
-        return frozenset({QueryKind.BM25, QueryKind.VECTOR, QueryKind.OPENSEARCH})
+        return frozenset({QueryKind.BM25})

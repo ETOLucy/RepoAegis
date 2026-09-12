@@ -1,7 +1,7 @@
 """SearchPort adapter over a pre-built RepoGraph (search/codegraph.py).
 
 Answers "where is X defined" / "who calls or imports X" from the call graph
-and import graph instead of text/BM25 matching — see 改造计划.md 三、2.
+and import graph instead of text/BM25 matching — see docs/refactor-plan.md 三、2.
 
 The hit-building helpers here are also reused by ``tools/agent_actions.py``'s
 ``GraphToolAdapter`` (the Localizer's goto_definition/find_references

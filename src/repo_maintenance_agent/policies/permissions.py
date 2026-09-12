@@ -14,7 +14,15 @@ from repo_maintenance_agent.domain.models import (
 
 _AGENT_PERMISSIONS: dict[str, frozenset[ToolPermission]] = {
     "intake": frozenset({ToolPermission.GITHUB_READ}),
-    "research": frozenset({ToolPermission.GITHUB_READ, ToolPermission.REPO_READ}),
+    # SANDBOX_EXECUTE lets research call "run_repro" (docs/refactor-plan.md 三、1) to run
+    # the existing test suite before any patch, for a reproduce-first seed.
+    "research": frozenset(
+        {
+            ToolPermission.GITHUB_READ,
+            ToolPermission.REPO_READ,
+            ToolPermission.SANDBOX_EXECUTE,
+        }
+    ),
     # Localizer (agents/localizer.py) runs inside the research node and issues
     # its own ToolCall(agent="localizer", ...) for search/read/blame rounds —
     # it needs the same read-only grant "research" has, nothing more.

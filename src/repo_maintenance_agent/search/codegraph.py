@@ -1,6 +1,6 @@
 """Call graph + import graph over a Python workspace (tree-sitter based).
 
-Scope is deliberately narrow (see 改造计划.md 三、2): a call graph and an
+Scope is deliberately narrow (see docs/refactor-plan.md 三、2): a call graph and an
 import graph, built with tree-sitter so the same walker generalizes to other
 languages later. No data-flow analysis, no full Code Property Graph — this
 answers exactly two navigation questions the Localizer's four existing

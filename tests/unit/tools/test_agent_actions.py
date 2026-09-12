@@ -13,6 +13,7 @@ from repo_maintenance_agent.storage.artifacts import FileArtifactStore
 from repo_maintenance_agent.tools.agent_actions import (
     GraphAdapter,
     PatchArtifactAdapter,
+    ReproductionAdapter,
     SearchAdapter,
     VerificationAdapter,
     WorkspaceReadAdapter,
@@ -101,6 +102,24 @@ async def test_verification_adapter_returns_structured_verifier_result(
 
 
 @pytest.mark.asyncio
+async def test_reproduction_adapter_returns_structured_verifier_result(
+    tmp_path: Path,
+) -> None:
+    verifier = PassingVerifier()
+    adapter = ReproductionAdapter(verifier)
+    call = _call(
+        name="run_repro",
+        permission=ToolPermission.SANDBOX_EXECUTE,
+    )
+
+    result = await adapter.execute(call, tmp_path)
+
+    assert result.success
+    assert result.output["reproduction"]["passed"] is True
+    assert verifier.task_ids == ["task-1"]
+
+
+@pytest.mark.asyncio
 async def test_search_adapter_returns_structured_hits(tmp_path: Path) -> None:
     adapter = SearchAdapter(FixedSearch())
     call = _call(
@@ -182,6 +201,7 @@ def _call(
         agent={
             "apply_patch": "coding",
             "run_verification": "verification",
+            "run_repro": "research",
             "search_code": "research",
             "read_files": "review",
             "goto_definition": "localizer",

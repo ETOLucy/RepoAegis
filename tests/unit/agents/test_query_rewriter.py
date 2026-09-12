@@ -24,7 +24,7 @@ class FakeRewriterModel:
             queries=[
                 RewrittenQuery(text="load_config default", kind="general"),
                 RewrittenQuery(
-                    text="src/config.py", kind="path", key_paths=("src/config.py",)
+                    text="src/config.py", kind="exact", key_paths=("src/config.py",)
                 ),
             ],
             raw="{}",
@@ -41,4 +41,4 @@ async def test_rewrite_with_model_falls_back_to_rules_on_failure() -> None:
     assert model.calls == 1
     texts = [q.text for q in plan.queries]
     assert "NoSuchKey" in texts
-    assert any(q.kind == "path" for q in plan.queries)
+    assert any(q.key_paths == ("src/config.py",) for q in plan.queries)

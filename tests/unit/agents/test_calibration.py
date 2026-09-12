@@ -67,6 +67,25 @@ async def test_calibration_rule_based_error_evidence() -> None:
 
 
 @pytest.mark.asyncio
+async def test_calibration_rule_based_reproduction_evidence_outranks_fuzzy_checks() -> None:
+    judge = CalibrationJudge(model=None)
+    evidence = [
+        Evidence(
+            source="reproduction",
+            locator="src/config.py:42",
+            summary="test_load_config: AssertionError: expected default, got None",
+        )
+    ]
+    result = await judge.calibrate(
+        task_spec={"task_type": "feature"},
+        evidence=evidence,
+        stage="research",
+    )
+    assert result["calibrated_task_type"] == "bugfix"
+    assert "reproduced test failure" in result["calibration_reason"]
+
+
+@pytest.mark.asyncio
 async def test_calibration_empty_evidence() -> None:
     judge = CalibrationJudge(model=None)
     result = await judge.calibrate(
