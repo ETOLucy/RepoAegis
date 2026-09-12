@@ -26,6 +26,7 @@ const LABEL: Record<TaskStatus, string> = {
   padding: 0.1rem 0.55rem;
   border-radius: 999px;
   font-size: 0.8rem;
+  white-space: nowrap;
   border: 1px solid var(--color-border);
   color: var(--color-text);
 }
