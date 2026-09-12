@@ -25,9 +25,17 @@ uv sync                 # Python 依赖
 uv run pytest           # 测试
 uv run ruff check .     # lint
 uv run mypy             # 类型检查
+uv run uvicorn repoaegis.server.api:app --reload   # 后端，http://127.0.0.1:8000
 
 cd web && npm install   # 前端依赖
-npm run dev             # 控制台开发服务器
+npm run dev             # 控制台，http://127.0.0.1:5173，/api 代理到后端
+npm run gen:api         # 后端 schema 变了之后重新生成 TS 类型
+```
+
+后端 schema 改动后同步类型：
+
+```bash
+uv run python -m repoaegis.server.openapi > web/openapi.json && (cd web && npm run gen:api)
 ```
 
 ## 许可证

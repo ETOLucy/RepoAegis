@@ -4,7 +4,14 @@ version = "0.1.0"
 description = "Policy-controlled issue-to-PR coding agent"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "fastapi>=0.141.1",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy[asyncio]>=2.0.52",
+    "structlog>=26.1.0",
+    "uvicorn[standard]>=0.52.4",
+]
 
 [dependency-groups]
 dev = [
@@ -12,6 +19,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.16",
     "mypy>=1.14",
+    "httpx>=0.28.1",
 ]
 
 [build-system]
