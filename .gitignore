@@ -22,3 +22,4 @@ output/
 private/
 *.log
 .pytest-tmp
+.claude/settings.local.json
