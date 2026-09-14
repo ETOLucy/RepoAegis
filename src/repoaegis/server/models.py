@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from datetime import datetime
 from enum import StrEnum
@@ -55,3 +57,65 @@ class Event(BaseModel):
     type: str
     payload: dict[str, Any]
     ts: datetime
+
+
+class ApprovalKind(StrEnum):
+    """What is being approved. ``PLAN`` gates the task; the rest gate one tool call."""
+
+    PLAN = "plan"
+    SHELL = "shell"
+    PUSH = "push"
+
+
+class ApprovalStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
+class Decision(StrEnum):
+    APPROVE = "approve"
+    REJECT = "reject"
+
+
+def payload_digest(payload: dict[str, Any]) -> str:
+    """Content address of an approval payload.
+
+    Canonical JSON (sorted keys, no incidental whitespace) so that the same
+    action always hashes the same way, and a swapped argument never does. This
+    is what the executor re-checks before it runs anything: approval is bound to
+    this exact content, not to a boolean somewhere.
+    """
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+class Approval(BaseModel):
+    """One approval envelope: subject, content hash, verdict, expiry."""
+
+    id: str
+    task_id: str
+    kind: ApprovalKind
+    subject: str
+    payload: dict[str, Any]
+    payload_hash: str
+    status: ApprovalStatus
+    policy: str
+    reason: str
+    decided_by: str | None
+    created_at: datetime
+    expires_at: datetime
+    decided_at: datetime | None
+
+    @property
+    def is_open(self) -> bool:
+        return self.status is ApprovalStatus.PENDING
+
+
+class DecisionRequest(BaseModel):
+    """A human's answer. ``payload_hash`` is optional but verified when sent."""
+
+    decision: Decision
+    payload_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    note: str | None = Field(default=None, max_length=500)

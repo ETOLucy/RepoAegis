@@ -13,10 +13,17 @@ from fastapi.responses import StreamingResponse
 from repoaegis import __version__
 from repoaegis.server.config import Settings, configure_logging
 from repoaegis.server.events import EventBus
-from repoaegis.server.models import Event, Task, TaskCreate
+from repoaegis.server.gate import (
+    ApprovalClosed,
+    ApprovalGate,
+    ApprovalNotFound,
+    PayloadMismatch,
+)
+from repoaegis.server.models import Approval, DecisionRequest, Event, Task, TaskCreate
+from repoaegis.server.policy import get_policy
 from repoaegis.server.sse import event_stream
 from repoaegis.server.state import TaskMachine
-from repoaegis.server.storage import Database, TaskRepo
+from repoaegis.server.storage import ApprovalRepo, Database, TaskRepo
 from repoaegis.server.worker import Worker
 
 
@@ -36,10 +43,20 @@ def _settings(request: Request) -> Settings:
     return cast(Settings, request.app.state.settings)
 
 
+def _gate(request: Request) -> ApprovalGate:
+    return cast(ApprovalGate, request.app.state.gate)
+
+
+def _approvals(request: Request) -> ApprovalRepo:
+    return cast(ApprovalRepo, request.app.state.approvals)
+
+
 Machine = Annotated[TaskMachine, Depends(_machine)]
 Repo = Annotated[TaskRepo, Depends(_repo)]
 Bus = Annotated[EventBus, Depends(_bus)]
 Config = Annotated[Settings, Depends(_settings)]
+Gate = Annotated[ApprovalGate, Depends(_gate)]
+Approvals = Annotated[ApprovalRepo, Depends(_approvals)]
 
 router = APIRouter()
 
@@ -74,6 +91,50 @@ async def list_task_events(task_id: str, repo: Repo) -> list[Event]:
     return await repo.list_events(task_id=task_id)
 
 
+@router.get("/tasks/{task_id}/approvals")
+async def list_task_approvals(task_id: str, repo: Repo, approvals: Approvals) -> list[Approval]:
+    if await repo.get(task_id) is None:
+        raise HTTPException(status_code=404, detail="task not found")
+    return await approvals.list_for_task(task_id)
+
+
+@router.get("/approvals/{approval_id}")
+async def get_approval(approval_id: str, approvals: Approvals) -> Approval:
+    approval = await approvals.get(approval_id)
+    if approval is None:
+        raise HTTPException(status_code=404, detail="approval not found")
+    return approval
+
+
+@router.post("/approvals/{approval_id}/decision")
+async def decide_approval(
+    approval_id: str,
+    body: DecisionRequest,
+    gate: Gate,
+    actor: Annotated[str, Header(alias="X-Actor")] = "anonymous",
+) -> Approval:
+    """Answer one gate.
+
+    Repeating the same answer is a no-op that returns the same envelope, so a
+    double-click or a client retry cannot advance the task twice. A different
+    answer to an already-decided gate is a conflict, not an overwrite.
+    """
+    try:
+        return await gate.decide(
+            approval_id, body.decision, actor=actor, payload_hash=body.payload_hash
+        )
+    except ApprovalNotFound:
+        raise HTTPException(status_code=404, detail="approval not found") from None
+    except PayloadMismatch as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except ApprovalClosed as exc:
+        if exc.idempotent:
+            return exc.approval
+        raise HTTPException(
+            status_code=409, detail=f"approval already {exc.approval.status.value}"
+        ) from None
+
+
 @router.get("/events")
 async def stream_events(
     bus: Bus,
@@ -99,16 +160,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db = Database(settings.database_url)
         await db.create_all()
         repo = TaskRepo(db.sessions)
+        approvals = ApprovalRepo(db.sessions)
         bus = EventBus()
+        machine = TaskMachine(repo, bus)
+        gate = ApprovalGate(
+            approvals,
+            machine,
+            policy=get_policy(settings.approval_policy),
+            ttl_seconds=settings.approval_ttl_seconds,
+        )
         app.state.settings = settings
         app.state.repo = repo
+        app.state.approvals = approvals
         app.state.bus = bus
-        app.state.machine = TaskMachine(repo, bus)
+        app.state.machine = machine
+        app.state.gate = gate
 
         stop = asyncio.Event()
         worker_task: asyncio.Task[None] | None = None
         if settings.worker_enabled:
-            worker = Worker(app.state.machine, repo, poll_seconds=settings.worker_poll_seconds)
+            worker = Worker(machine, repo, gate, poll_seconds=settings.worker_poll_seconds)
             worker_task = asyncio.create_task(worker.run(stop))
         try:
             yield

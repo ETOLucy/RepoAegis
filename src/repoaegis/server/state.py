@@ -69,7 +69,7 @@ class TaskMachine:
         task = await self._repo.create(
             issue_url=issue_url, title=data.title or default_title(issue_url)
         )
-        await self._emit(task.id, "task.created", {"title": task.title, "issue_url": issue_url})
+        await self.emit(task.id, "task.created", {"title": task.title, "issue_url": issue_url})
         return task
 
     async def advance(
@@ -82,14 +82,15 @@ class TaskMachine:
         updated = await self._repo.transition(task_id, expected=task.status, to=to)
         if updated is None:
             raise ConcurrentTransition(task_id)
-        await self._emit(
+        await self.emit(
             task_id,
             "task.status_changed",
             {"from": task.status.value, "to": to.value, **(payload or {})},
         )
         return updated
 
-    async def _emit(self, task_id: str, type: str, payload: dict[str, Any]) -> Event:
+    async def emit(self, task_id: str, type: str, payload: dict[str, Any]) -> Event:
+        """Public because the approval gate records its own steps on the same log."""
         # Three consumers, in order: audit table (source of truth), log, live bus.
         event = await self._repo.append_event(task_id, type, payload)
         log.info(type, task_id=task_id, event_id=event.id, **payload)
