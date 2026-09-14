@@ -44,6 +44,16 @@ npm run dev             # 控制台，http://127.0.0.1:5173，/api 代理到后�
 npm run gen:api         # 后端 schema 变了之后重新生成 TS 类型
 ```
 
+改了数据模型之后，生成一份迁移脚本（应用启动时自动升到最新）：
+
+```bash
+uv run python -m alembic revision --autogenerate -m "加了什么"
+uv run python -m alembic upgrade head     # 也可手动执行
+```
+
+测试直接按模型建表以求快，`tests/server/test_migrations.py` 负责证明
+迁移脚本与模型描述的是同一套 schema——漏写迁移会让这道测试失败。
+
 后端 schema 改动后同步类型：
 
 ```bash

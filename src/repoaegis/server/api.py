@@ -22,6 +22,7 @@ from repoaegis.server.gate import (
     ApprovalNotFound,
     PayloadMismatch,
 )
+from repoaegis.server.migrate import upgrade_async
 from repoaegis.server.models import Approval, DecisionRequest, Event, Task, TaskCreate
 from repoaegis.server.planning import PlanningService
 from repoaegis.server.policy import get_policy
@@ -162,7 +163,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         db = Database(settings.database_url)
-        await db.create_all()
+        if settings.migrate_on_startup:
+            await upgrade_async(settings.database_url)
+        else:
+            await db.create_all()
         repo = TaskRepo(db.sessions)
         approvals = ApprovalRepo(db.sessions)
         bus = EventBus()

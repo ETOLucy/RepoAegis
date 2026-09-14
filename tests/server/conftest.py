@@ -21,7 +21,13 @@ def sqlite_url(tmp_path: Path) -> str:
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    return Settings(database_url=sqlite_url(tmp_path), worker_enabled=False)
+    return Settings(
+        database_url=sqlite_url(tmp_path),
+        worker_enabled=False,
+        # Build the schema from the models; test_migrations.py proves the
+        # migrations describe the same thing.
+        migrate_on_startup=False,
+    )
 
 
 @pytest.fixture

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="REPOAEGIS_", env_file=".env", extra="ignore")
 
     database_url: str = "sqlite+aiosqlite:///./data/repoaegis.db"
+    # Bring the schema to head on startup. Tests build the schema straight from
+    # the models instead, and a dedicated test proves the two agree.
+    migrate_on_startup: bool = True
     worker_enabled: bool = True
     worker_poll_seconds: float = 0.5
     # A tick can be inside a clone or a model call; do not cut it short.
