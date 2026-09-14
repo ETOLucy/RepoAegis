@@ -8,6 +8,18 @@
 
 给它一个 GitHub issue，它在沙箱里定位、修改、验证，然后开一个 PR。每一步写操作都要先经过人类批准，批准绑定到具体的工具调用和参数，事后无法调包。
 
+## 目标场景
+
+**单体 Python 仓库，测试套件能在数分钟内跑完。**
+
+这条边界对齐 SWE-bench / SWE-bench Verified 的仓库谱系（django、sympy、requests、flask、
+scikit-learn、matplotlib、astropy、pytest、pylint、seaborn、sphinx、xarray），因此本项目
+报出的分数与业界结果可比，而不是自定义了一套只对自己有利的题目。
+
+约束来自验证而非体积：浅克隆连 django 也只有 73 MB、11 秒，真正的成本是装依赖和跑测试，
+而每轮补丁都要重跑一遍。选择这个区间是范围判断，不是能力上限——工作区那一层换成托管
+沙箱即可扩展到更大的仓库，其余设计不变。
+
 ## 仓库结构
 
 ```
