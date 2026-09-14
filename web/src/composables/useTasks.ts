@@ -9,6 +9,10 @@ import { api, type Approval, type Task, type TaskEvent, type TaskStatus } from '
 // No accounts yet; the audit trail still wants to know who answered a gate.
 const ACTOR = 'user:console'
 
+// Any state whose name says a human is being waited on. Listing them by prefix
+// rather than one by one means the next gate is picked up without a change here.
+const WAITING_ON_A_HUMAN = (status: TaskStatus) => status.startsWith('awaiting')
+
 export function useTasks() {
   const tasks = ref<Task[]>([])
   // task id -> its still-open approval envelopes.
@@ -60,7 +64,7 @@ export function useTasks() {
       tasks.value = await api.listTasks()
       error.value = null
       await Promise.all(
-        tasks.value.filter((t) => t.status === 'awaiting_approval').map((t) => loadApprovals(t.id)),
+        tasks.value.filter((t) => WAITING_ON_A_HUMAN(t.status)).map((t) => loadApprovals(t.id)),
       )
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e)

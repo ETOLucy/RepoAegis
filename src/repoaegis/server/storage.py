@@ -225,6 +225,17 @@ class TaskRepo:
             row = (await s.execute(stmt)).scalar_one_or_none()
         return _task(row) if row else None
 
+    async def next_in(self, status: TaskStatus) -> Task | None:
+        stmt = (
+            select(TaskRow)
+            .where(TaskRow.status == status.value)
+            .order_by(TaskRow.created_at)
+            .limit(1)
+        )
+        async with self._sessions() as s:
+            row = (await s.execute(stmt)).scalar_one_or_none()
+        return _task(row) if row else None
+
     async def transition(
         self, task_id: str, *, expected: TaskStatus, to: TaskStatus
     ) -> Task | None:
@@ -331,6 +342,22 @@ class ApprovalRepo:
         async with self._sessions() as s:
             rows = (await s.execute(stmt)).scalars().all()
         return [_approval(r) for r in rows]
+
+    async def latest_approved(self, task_id: str, kind: ApprovalKind) -> Approval | None:
+        """The envelope that authorised this stage, so the next one can read it."""
+        stmt = (
+            select(ApprovalRow)
+            .where(
+                ApprovalRow.task_id == task_id,
+                ApprovalRow.kind == kind.value,
+                ApprovalRow.status == ApprovalStatus.APPROVED.value,
+            )
+            .order_by(ApprovalRow.decided_at.desc())
+            .limit(1)
+        )
+        async with self._sessions() as s:
+            row = (await s.execute(stmt)).scalar_one_or_none()
+        return _approval(row) if row else None
 
     async def decide(
         self, approval_id: str, *, to: ApprovalStatus, decided_by: str

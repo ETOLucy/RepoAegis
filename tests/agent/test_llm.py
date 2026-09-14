@@ -9,6 +9,7 @@ from repoaegis.agent.llm import (
     Budget,
     BudgetExceeded,
     DeepSeek,
+    LLMTimeout,
     Prices,
     Usage,
     is_peak,
@@ -155,3 +156,34 @@ async def test_an_exhausted_budget_blocks_the_request() -> None:
     with pytest.raises(BudgetExceeded):
         await llm.complete([{"role": "user", "content": "x"}])
     assert stub.calls == []  # nothing was sent
+
+
+async def test_an_empty_reply_never_becomes_an_invalid_assistant_turn() -> None:
+    """The bug this guards: a provider returned neither content nor tool calls,
+    we replayed that message, and the next request was rejected with 400
+    'content or tool_calls must be set' -- wedging the task for good."""
+    payload = reply(content=None)
+    llm = DeepSeek(api_key="x", client=StubClient(payload))
+    out = await llm.complete([{"role": "user", "content": "x"}])
+
+    assert out.tool_calls == ()
+    assert out.raw_message["role"] == "assistant"
+    assert out.raw_message["content"] == ""  # a string, never None
+    assert "tool_calls" not in out.raw_message
+
+
+async def test_a_hanging_provider_is_cut_off_by_our_own_clock() -> None:
+    """The SDK's timeout was set to 120s and a call still hung for sixteen
+    minutes, so the ceiling is enforced here rather than trusted to the library."""
+    import asyncio
+
+    class Hanging:
+        class chat:
+            class completions:
+                @staticmethod
+                async def create(**kwargs: Any) -> Any:
+                    await asyncio.sleep(60)
+
+    llm = DeepSeek(api_key="x", client=Hanging(), timeout_seconds=0.05, max_retries=0)
+    with pytest.raises(LLMTimeout, match="no reply within"):
+        await llm.complete([{"role": "user", "content": "x"}])

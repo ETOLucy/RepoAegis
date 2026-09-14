@@ -95,6 +95,7 @@
         "description": "What is being approved. ``PLAN`` gates the task; the rest gate one tool call.",
         "enum": [
           "plan",
+          "patch",
           "shell",
           "push"
         ],
@@ -300,6 +301,7 @@
           "planning",
           "awaiting_approval",
           "solving",
+          "awaiting_patch_approval",
           "verifying",
           "delivering",
           "done",

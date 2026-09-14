@@ -23,6 +23,7 @@ import structlog
 from repoaegis.server.gate import ApprovalGate
 from repoaegis.server.models import TaskStatus
 from repoaegis.server.planning import PlanningService
+from repoaegis.server.solving import SolvingService
 from repoaegis.server.state import ConcurrentTransition, TaskMachine
 from repoaegis.server.storage import TaskRepo
 
@@ -36,6 +37,7 @@ class Worker:
         repo: TaskRepo,
         gate: ApprovalGate,
         planning: PlanningService,
+        solving: SolvingService,
         *,
         poll_seconds: float,
     ) -> None:
@@ -43,11 +45,22 @@ class Worker:
         self._repo = repo
         self._gate = gate
         self._planning = planning
+        self._solving = solving
         self._poll = poll_seconds
 
     async def tick(self) -> bool:
-        """One unit of work: expire what is overdue, then plan at most one task."""
+        """Expire what is overdue, then advance at most one task by one stage.
+
+        Approved work is taken before new work: a task a human has already spent
+        attention on should not queue behind a task nobody has looked at yet.
+        """
         worked = bool(await self._gate.sweep_expired())
+
+        approved = await self._repo.next_in(TaskStatus.SOLVING)
+        if approved is not None:
+            await self._solving.solve(approved)
+            return True
+
         task = await self._repo.next_queued()
         if task is None:
             return worked

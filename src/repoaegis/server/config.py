@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     workspace_work_dir: Path = Path("data/work")
     git_timeout_seconds: float = 300.0
     agent_max_steps: int = 20
+    agent_max_edit_steps: int = 30
     sse_heartbeat_seconds: float = 15.0
     log_json: bool = False
 

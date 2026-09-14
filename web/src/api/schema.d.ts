@@ -195,7 +195,7 @@ export interface components {
          * @description What is being approved. ``PLAN`` gates the task; the rest gate one tool call.
          * @enum {string}
          */
-        ApprovalKind: "plan" | "shell" | "push";
+        ApprovalKind: "plan" | "patch" | "shell" | "push";
         /**
          * ApprovalStatus
          * @enum {string}
@@ -289,7 +289,7 @@ export interface components {
          * TaskStatus
          * @enum {string}
          */
-        TaskStatus: "queued" | "planning" | "awaiting_approval" | "solving" | "verifying" | "delivering" | "done" | "failed" | "rejected";
+        TaskStatus: "queued" | "planning" | "awaiting_approval" | "solving" | "awaiting_patch_approval" | "verifying" | "delivering" | "done" | "failed" | "rejected";
         /** ValidationError */
         ValidationError: {
             /** Context */

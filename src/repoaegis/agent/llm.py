@@ -13,6 +13,7 @@ run *while* it is running.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -104,6 +105,10 @@ class LLM(Protocol):
     ) -> Completion: ...
 
 
+class LLMTimeout(RuntimeError):
+    """The provider did not answer inside the ceiling we enforce ourselves."""
+
+
 class BudgetExceeded(RuntimeError):
     """The run spent its allowance. Raised before a call, never after."""
 
@@ -144,8 +149,12 @@ class Budget:
 class DeepSeek:
     """DeepSeek through its OpenAI-compatible endpoint.
 
-    The SDK already retries 429 and 5xx with backoff; we set the budget of
-    attempts and the per-request timeout and otherwise let it do that job.
+    The SDK retries 429 and 5xx with backoff, and takes a per-request timeout --
+    but a call has been observed hanging for sixteen minutes with that timeout
+    set to two, so the ceiling here is enforced with our own ``wait_for`` as
+    well. Trusting a library's timeout is trusting that every path inside it
+    honours it; a wall clock we hold ourselves does not have that problem.
+
     ``client`` is injectable so tests can hand in a stub.
     """
 
@@ -172,6 +181,8 @@ class DeepSeek:
             )
         self._client = client
         self._model = model
+        # Room for the SDK's own attempts, and not a second more.
+        self._ceiling = timeout_seconds * (max_retries + 1) + 10.0
         self._prices = prices or Prices()
         self.budget = budget or Budget(0.0)
 
@@ -182,7 +193,14 @@ class DeepSeek:
         kwargs: dict[str, Any] = {"model": self._model, "messages": list(messages)}
         if tools:
             kwargs["tools"] = list(tools)
-        response = await self._client.chat.completions.create(**kwargs)
+        try:
+            response = await asyncio.wait_for(
+                self._client.chat.completions.create(**kwargs), self._ceiling
+            )
+        except TimeoutError:
+            raise LLMTimeout(
+                f"no reply within {self._ceiling:.0f}s (model {self._model})"
+            ) from None
         completion = _parse(response, self._prices)
         self.budget.charge(completion.usage)
         log.info(
@@ -249,14 +267,18 @@ def _parse(response: Any, prices: Prices) -> Completion:
         usage.completion_tokens,
         price(usage, prices),
     )
+    text = str(_field(message, "content") or "")
+    # The wire format demands an assistant turn carry content or tool calls; a
+    # provider that returns neither would otherwise poison the next request with
+    # a message the API rejects. Normalising content to a string keeps the
+    # transcript replayable whatever came back.
+    raw: Message = {"role": "assistant", "content": text}
+    if raw_calls:
+        raw["tool_calls"] = raw_calls
     return Completion(
-        text=str(_field(message, "content") or ""),
+        text=text,
         tool_calls=tuple(calls),
         finish_reason=str(_field(choice, "finish_reason", "stop") or "stop"),
         usage=usage,
-        raw_message={
-            "role": "assistant",
-            "content": _field(message, "content"),
-            **({"tool_calls": raw_calls} if raw_calls else {}),
-        },
+        raw_message=raw,
     )

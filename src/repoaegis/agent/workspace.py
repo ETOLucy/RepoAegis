@@ -23,8 +23,11 @@ so a repository name can never turn into a command.
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import shutil
+import stat
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,6 +43,24 @@ _ISSUE_URL = re.compile(
 
 class GitError(RuntimeError):
     pass
+
+
+def _force_remove(action: Callable[..., object], path: str, _exc: BaseException) -> None:
+    """Retry a delete after clearing the read-only bit.
+
+    Git marks the files in .git/objects read-only, and on Windows that makes
+    them undeletable rather than merely protected. Without this, cleanup leaves
+    the whole checkout behind and the disk grows one task at a time.
+    """
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        action(path)
+    except OSError as exc:
+        log.warning("workspace.undeletable", path=path, error=str(exc))
+
+
+def remove_tree(path: Path) -> None:
+    shutil.rmtree(path, onexc=_force_remove)
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +151,22 @@ class Workspaces:
         log.info("workspace.ready", repo=ref.slug, sha=sha[:12], path=str(target))
         return target
 
+    async def diff(self, task_id: str) -> str:
+        """The unified diff of everything the solver changed in this checkout.
+
+        Staging first is what makes new files appear: ``git diff`` alone ignores
+        anything git has never seen. The index of a throwaway worktree has no
+        other purpose, so using it as scratch costs nothing.
+        """
+        target = self.work_dir / task_id
+        if not target.is_dir():
+            raise GitError(f"no checkout for task {task_id}")
+        await git("add", "-A", cwd=target, timeout=self._timeout)
+        return await git("diff", "--cached", cwd=target, timeout=self._timeout)
+
+    def checkout_of(self, task_id: str) -> Path:
+        return self.work_dir / task_id
+
     async def release(self, task_id: str) -> None:
         """Remove one checkout. The cached objects stay for the next task.
 
@@ -150,7 +187,7 @@ class Workspaces:
         except GitError:
             cache = None
 
-        shutil.rmtree(target, ignore_errors=True)
+        remove_tree(target)
         if cache is not None and cache.exists():
             try:
                 await git("worktree", "prune", cwd=cache, timeout=self._timeout)

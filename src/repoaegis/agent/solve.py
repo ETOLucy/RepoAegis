@@ -16,6 +16,7 @@ breach this round's rule that no repository code is run.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -98,6 +99,7 @@ class Solver:
         max_repairs: int = 2,
         budget: Budget | None = None,
         reserve_fraction: float = 0.15,
+        deadline_seconds: float = 600.0,
         on_step: StepReporter | None = None,
     ) -> None:
         self._llm = llm
@@ -106,6 +108,7 @@ class Solver:
         self._max_repairs = max_repairs
         self._budget = budget
         self._reserve = reserve_fraction
+        self._deadline = deadline_seconds
         self._on_step = on_step
 
     async def run(self, *, title: str, body: str, plan: Plan) -> SolveRun:
@@ -117,9 +120,10 @@ class Solver:
         usage = Usage()
         repairs = 0
         forced = False
+        started = time.monotonic()
 
         for step in range(1, self._max_steps + 1):
-            if not forced and (step == self._max_steps or self._nearly_broke()):
+            if not forced and (step == self._max_steps or self._out_of_room(started)):
                 forced = True
                 messages.append({"role": "user", "content": STEP_LIMIT_NOTICE})
 
@@ -192,7 +196,10 @@ class Solver:
             return run_tool(self._ws, call.name, call.arguments)
         return run_edit(self._ws, edits, call.name, call.arguments)
 
-    def _nearly_broke(self) -> bool:
+    def _out_of_room(self, started: float) -> bool:
+        """Money or wall clock nearly gone -- either way, wrap up while we can."""
+        if time.monotonic() - started >= self._deadline * (1 - self._reserve):
+            return True
         budget = self._budget
         if budget is None or not budget.limit:
             return False

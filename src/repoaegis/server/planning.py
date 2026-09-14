@@ -19,15 +19,20 @@ from typing import Any
 
 import structlog
 
-from repoaegis.agent.github import GitHub, GitHubError
+from repoaegis.agent.github import GitHub
 from repoaegis.agent.llm import LLM, Budget
 from repoaegis.agent.loop import Planner, PlanRun
 from repoaegis.agent.plan import Plan
 from repoaegis.agent.tools import Workspace
-from repoaegis.agent.workspace import GitError, Workspaces, parse_issue_url
+from repoaegis.agent.workspace import Workspaces, parse_issue_url
 from repoaegis.server.gate import ApprovalGate
 from repoaegis.server.models import ApprovalKind, Task, TaskStatus
-from repoaegis.server.state import TaskMachine
+from repoaegis.server.state import (
+    ConcurrentTransition,
+    IllegalTransition,
+    TaskMachine,
+    TaskNotFound,
+)
 from repoaegis.server.storage import TaskRepo
 
 log = structlog.get_logger(__name__)
@@ -60,8 +65,11 @@ class PlanningService:
     async def plan(self, task: Task) -> None:
         """Take a claimed task from PLANNING to the approval gate, or to FAILED."""
         try:
-            run, sha = await self._investigate(task)
-        except (GitHubError, GitError, ValueError) as exc:
+            run, sha, issue = await self._investigate(task)
+        except Exception as exc:
+            # Anything at all: a provider 400, a disk error, a bug of ours. The
+            # one outcome that must never happen is a task left in PLANNING
+            # forever, which is what an escaping exception used to produce.
             await self._fail(task, type(exc).__name__, str(exc))
             return
 
@@ -74,9 +82,9 @@ class PlanningService:
             )
             return
 
-        await self._open_gate(task, run, run.plan)
+        await self._open_gate(task, run, run.plan, issue)
 
-    async def _investigate(self, task: Task) -> tuple[PlanRun, str]:
+    async def _investigate(self, task: Task) -> tuple[PlanRun, str, dict[str, str]]:
         ref = parse_issue_url(task.issue_url)
         issue = await self._github.issue(ref)
         await self._machine.emit(
@@ -111,11 +119,14 @@ class PlanningService:
                 "tokens": run.usage.total_tokens,
             },
         )
-        return run, sha
+        return run, sha, {"title": issue.title, "body": issue.body}
 
-    async def _open_gate(self, task: Task, run: PlanRun, plan: Plan) -> None:
+    async def _open_gate(self, task: Task, run: PlanRun, plan: Plan, issue: dict[str, str]) -> None:
         payload: dict[str, Any] = {
             "plan": plan.model_dump(),
+            # The solver reads its brief from the approved envelope, so the text
+            # it works from is exactly the text the reviewer saw.
+            "issue": issue,
             "steps": run.steps,
             "forced": run.forced,
             "cost_usd": round(run.usage.cost_usd, 6),
@@ -125,9 +136,16 @@ class PlanningService:
 
     async def _fail(self, task: Task, reason: str, detail: str) -> None:
         log.warning("planning_failed", task_id=task.id, reason=reason, detail=detail)
-        await self._machine.advance(
-            task.id, TaskStatus.FAILED, payload={"reason": reason, "detail": detail[:1000]}
-        )
+        try:
+            await self._machine.advance(
+                task.id,
+                TaskStatus.FAILED,
+                payload={"reason": reason, "detail": detail[:1000]},
+            )
+        except (IllegalTransition, ConcurrentTransition, TaskNotFound) as exc:
+            # The task already moved or vanished. Raising here would re-open
+            # the very hole this handler exists to close.
+            log.warning("fail_transition_ignored", task_id=task.id, error=str(exc))
         # A task that will never be worked on has no use for its checkout. An
         # approved one keeps its workspace: the next round edits the code there.
         await self._workspaces.release(task.id)

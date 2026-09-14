@@ -147,3 +147,13 @@ async def test_usage_is_summed_across_steps(ws: Workspace) -> None:
 
     assert run.usage.cost_usd == pytest.approx(0.003)
     assert run.usage.total_tokens == 330
+
+
+async def test_a_run_that_takes_too_long_is_wrapped_up(ws: Workspace) -> None:
+    """One slow provider call can hang for minutes; a run with no deadline
+    hangs with it. The clock is a gate like the step count and the money."""
+    llm = ScriptedLLM(_submit(GOOD_PLAN))
+    run = await Planner(llm, ws, max_steps=20, deadline_seconds=0.0).run(title="t", body="b")
+
+    assert run.ok and run.forced is True and run.steps == 1
+    assert llm.offered[0] == ["submit_plan"]

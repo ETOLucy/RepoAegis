@@ -29,9 +29,29 @@ def test_every_non_terminal_state_can_reach_a_terminal_state() -> None:
 
 
 def test_happy_path_is_legal() -> None:
-    path = [S.QUEUED, S.PLANNING, S.AWAITING_APPROVAL, S.SOLVING, S.VERIFYING, S.DELIVERING, S.DONE]
+    """Two gates, one for the plan and one for the diff it produced."""
+    path = [
+        S.QUEUED,
+        S.PLANNING,
+        S.AWAITING_APPROVAL,
+        S.SOLVING,
+        S.AWAITING_PATCH_APPROVAL,
+        S.DELIVERING,
+        S.DONE,
+    ]
     for frm, to in pairwise(path):
         assert_transition(frm, to)
+
+
+def test_the_path_through_verification_is_reserved_but_legal() -> None:
+    """Running the tests is a later round; the edge is already drawn for it."""
+    for frm, to in pairwise([S.SOLVING, S.VERIFYING, S.AWAITING_PATCH_APPROVAL]):
+        assert_transition(frm, to)
+
+
+def test_a_patch_cannot_be_delivered_without_its_gate() -> None:
+    with pytest.raises(IllegalTransition):
+        assert_transition(S.SOLVING, S.DELIVERING)
 
 
 def test_skipping_the_approval_gate_is_illegal() -> None:

@@ -264,3 +264,34 @@ async def test_each_task_gets_its_own_budget(
 
     assert [b.limit for b in seen] == [0.25, 0.25]
     assert seen[0] is not seen[1]
+
+
+async def test_an_unexpected_error_fails_the_task_instead_of_wedging_it(
+    machine: TaskMachine,
+    repo: TaskRepo,
+    gate: ApprovalGate,
+    tmp_path: Path,
+    checkout: Path,
+) -> None:
+    """The bug this guards: a provider 400 escaped the handler, the worker
+    logged it, and the task sat in PLANNING forever -- never failed, never
+    retried, never releasing its checkout."""
+
+    class Exploding:
+        async def complete(self, messages: Any, *, tools: Any = None) -> Any:
+            raise RuntimeError("Error code: 400 - invalid assistant message")
+
+    spaces = FakeWorkspaces(tmp_path, checkout)
+    planning = service(machine, repo, gate, spaces, github_for(issue_response), Exploding())
+    task = await make_task(machine)
+
+    await planning.plan(task)
+
+    current = await repo.get(task.id)
+    assert current is not None and current.status is TaskStatus.FAILED
+    failure = [
+        e for e in await repo.list_events(task_id=task.id) if e.type == "task.status_changed"
+    ][-1]
+    assert failure.payload["reason"] == "RuntimeError"
+    assert "400" in failure.payload["detail"]
+    assert spaces.released == [task.id]

@@ -10,6 +10,7 @@
 // disappears once the event stream reports the decision.
 import { computed, ref } from 'vue'
 import type { Approval } from '@/api/client'
+import DiffView from '@/components/DiffView.vue'
 
 type Location = { file: string; line_start: number; line_end: number; why: string }
 type Plan = {
@@ -30,6 +31,7 @@ const error = ref<string | null>(null)
 
 const KIND: Record<string, string> = {
   plan: '修复计划',
+  patch: '代码改动',
   shell: 'Shell 命令',
   push: '推送分支',
 }
@@ -48,6 +50,16 @@ const plan = computed<Plan | null>(() => {
     verification: candidate.verification,
     confidence: candidate.confidence,
   }
+})
+
+const patch = computed(() => {
+  const candidate = props.approval.payload?.patch
+  return props.approval.kind === 'patch' && typeof candidate === 'string' ? candidate : null
+})
+
+const changed = computed(() => {
+  const files = props.approval.payload?.changed
+  return Array.isArray(files) ? (files as string[]) : []
 })
 
 const run = computed(() => {
@@ -118,6 +130,24 @@ async function send(decision: 'approve' | 'reject') {
       </details>
     </template>
 
+    <template v-else-if="patch !== null">
+      <p class="diagnosis">{{ approval.subject }}</p>
+
+      <ul v-if="changed.length" class="files">
+        <li v-for="file in changed" :key="file">
+          <code>{{ file }}</code>
+        </li>
+      </ul>
+
+      <DiffView :patch="patch" />
+
+      <p v-if="run" class="run muted">
+        <span>{{ run.steps }} 步</span>
+        <span>${{ run.cost.toFixed(6) }}</span>
+        <span v-if="run.forced" class="forced">步数/预算耗尽后被迫收尾</span>
+      </p>
+    </template>
+
     <template v-else>
       <p class="subject">{{ approval.subject }}</p>
       <pre>{{ body }}</pre>
@@ -171,6 +201,15 @@ async function send(decision: 'approve' | 'reject') {
 .locations {
   margin: 0 0 0.7rem;
   padding-left: 1.2rem;
+}
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
 }
 .locations li {
   margin-bottom: 0.35rem;

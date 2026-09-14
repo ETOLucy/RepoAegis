@@ -22,6 +22,7 @@ the server can turn it into events without the loop knowing what an event is.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -87,6 +88,7 @@ class Planner:
         max_repairs: int = 1,
         budget: Budget | None = None,
         reserve_fraction: float = 0.15,
+        deadline_seconds: float = 600.0,
         on_step: StepReporter | None = None,
     ) -> None:
         self._llm = llm
@@ -95,6 +97,7 @@ class Planner:
         self._max_repairs = max_repairs
         self._budget = budget
         self._reserve = reserve_fraction
+        self._deadline = deadline_seconds
         self._on_step = on_step
 
     async def run(self, *, title: str, body: str) -> PlanRun:
@@ -105,9 +108,10 @@ class Planner:
         usage = Usage()
         repairs = 0
         forced = False
+        started = time.monotonic()
 
         for step in range(1, self._max_steps + 1):
-            last_chance = forced or step == self._max_steps or self._nearly_broke()
+            last_chance = forced or step == self._max_steps or self._out_of_room(started)
             if last_chance and not forced:
                 forced = True
                 messages.append({"role": "user", "content": STEP_LIMIT_NOTICE})
@@ -164,8 +168,14 @@ class Planner:
 
         return PlanRun(None, self._max_steps, usage, "step_limit", (), tuple(messages), forced)
 
-    def _nearly_broke(self) -> bool:
-        """True while one more call is still affordable, but only just."""
+    def _out_of_room(self, started: float) -> bool:
+        """Money or wall clock nearly gone -- either way, wrap up while we can.
+
+        The clock matters as much as the money: one slow provider call can hang
+        for minutes, and a run with no deadline hangs with it.
+        """
+        if time.monotonic() - started >= self._deadline * (1 - self._reserve):
+            return True
         budget = self._budget
         if budget is None or not budget.limit:
             return False

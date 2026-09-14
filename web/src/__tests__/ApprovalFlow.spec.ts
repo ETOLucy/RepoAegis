@@ -165,3 +165,63 @@ describe('approval flow', () => {
     expect(wrapper.find('button.approve').exists()).toBe(true)
   })
 })
+
+const PATCH = `diff --git a/sessions.py b/sessions.py
+index 111..222 100644
+--- a/sessions.py
++++ b/sessions.py
+@@ -1,2 +1,2 @@
+ def resolve(resp):
+-    return resp
++    return resp.fixed
+`
+
+describe('patch gate', () => {
+  const fetchMock = vi.fn()
+  const envelope: Approval = {
+    ...APPROVAL,
+    id: 'gate-2',
+    kind: 'patch',
+    subject: '把片段带过去',
+    payload: { patch: PATCH, changed: ['sessions.py'], steps: 2, cost_usd: 0.004, forced: false },
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    vi.stubGlobal(
+      'fetch',
+      fetchMock.mockImplementation((url: string) => {
+        if (url === '/api/tasks')
+          return Promise.resolve(ok([{ ...TASK, status: 'awaiting_patch_approval' }]))
+        if (url === '/api/tasks/abc/approvals') return Promise.resolve(ok([envelope]))
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('colours the diff and counts the lines', async () => {
+    const wrapper = mount(TasksView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('代码改动')
+    expect(wrapper.text()).toContain('sessions.py')
+    expect(wrapper.text()).toContain('+1')
+    expect(wrapper.text()).toContain('−1')
+
+    const added = wrapper.findAll('[data-kind="add"]')
+    const removed = wrapper.findAll('[data-kind="remove"]')
+    expect(added).toHaveLength(1)
+    expect(removed).toHaveLength(1)
+    expect(added[0]!.text()).toContain('return resp.fixed')
+    // The +++/--- header lines must not be mistaken for changed code.
+    expect(wrapper.findAll('[data-kind="meta"]').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('still offers the same two buttons', async () => {
+    const wrapper = mount(TasksView)
+    await flushPromises()
+    expect(wrapper.find('button.approve').exists()).toBe(true)
+    expect(wrapper.find('button.reject').exists()).toBe(true)
+  })
+})

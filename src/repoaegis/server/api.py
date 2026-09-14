@@ -26,6 +26,7 @@ from repoaegis.server.migrate import upgrade_async
 from repoaegis.server.models import Approval, DecisionRequest, Event, Task, TaskCreate
 from repoaegis.server.planning import PlanningService
 from repoaegis.server.policy import get_policy
+from repoaegis.server.solving import SolvingService
 from repoaegis.server.sse import event_stream
 from repoaegis.server.state import TaskMachine
 from repoaegis.server.storage import ApprovalRepo, Database, TaskRepo
@@ -206,6 +207,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             max_steps=settings.agent_max_steps,
             budget_usd=settings.llm_budget_usd,
         )
+        solving = SolvingService(
+            machine,
+            repo,
+            approvals,
+            gate,
+            workspaces,
+            llm_for,
+            max_steps=settings.agent_max_edit_steps,
+            budget_usd=settings.llm_budget_usd,
+        )
         app.state.settings = settings
         app.state.repo = repo
         app.state.approvals = approvals
@@ -219,7 +230,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         worker_task: asyncio.Task[None] | None = None
         if settings.worker_enabled:
             worker = Worker(
-                machine, repo, gate, planning, poll_seconds=settings.worker_poll_seconds
+                machine, repo, gate, planning, solving, poll_seconds=settings.worker_poll_seconds
             )
             worker_task = asyncio.create_task(worker.run(stop))
         try:

@@ -17,6 +17,7 @@ class TaskStatus(StrEnum):
     PLANNING = "planning"
     AWAITING_APPROVAL = "awaiting_approval"
     SOLVING = "solving"
+    AWAITING_PATCH_APPROVAL = "awaiting_patch_approval"
     VERIFYING = "verifying"
     DELIVERING = "delivering"
     DONE = "done"
@@ -68,6 +69,7 @@ class ApprovalKind(StrEnum):
     """What is being approved. ``PLAN`` gates the task; the rest gate one tool call."""
 
     PLAN = "plan"
+    PATCH = "patch"
     SHELL = "shell"
     PUSH = "push"
 

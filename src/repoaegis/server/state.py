@@ -27,8 +27,11 @@ TRANSITIONS: Final = MappingProxyType(
         S.QUEUED: frozenset({S.PLANNING, S.FAILED}),
         S.PLANNING: frozenset({S.AWAITING_APPROVAL, S.FAILED}),
         S.AWAITING_APPROVAL: frozenset({S.SOLVING, S.REJECTED}),
-        S.SOLVING: frozenset({S.VERIFYING, S.FAILED}),
-        S.VERIFYING: frozenset({S.DELIVERING, S.SOLVING, S.FAILED}),
+        # VERIFYING is reserved for the round that runs the repository's tests;
+        # with only a syntax check, solving hands straight to the patch gate.
+        S.SOLVING: frozenset({S.AWAITING_PATCH_APPROVAL, S.VERIFYING, S.FAILED}),
+        S.AWAITING_PATCH_APPROVAL: frozenset({S.DELIVERING, S.REJECTED}),
+        S.VERIFYING: frozenset({S.AWAITING_PATCH_APPROVAL, S.SOLVING, S.FAILED}),
         S.DELIVERING: frozenset({S.DONE, S.FAILED}),
         S.DONE: frozenset[TaskStatus](),
         S.FAILED: frozenset[TaskStatus](),

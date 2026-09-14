@@ -20,12 +20,25 @@ class RecordingPlanning:
         await self._gate.request(task.id, ApprovalKind.PLAN, payload, subject="d")
 
 
+class RecordingSolving:
+    """Stands in for the solving service, including leaving the task settled."""
+
+    def __init__(self, machine: TaskMachine | None = None) -> None:
+        self._machine = machine
+        self.solved: list[str] = []
+
+    async def solve(self, task: Task) -> None:
+        self.solved.append(task.id)
+        if self._machine is not None:
+            await self._machine.advance(task.id, TaskStatus.AWAITING_PATCH_APPROVAL)
+
+
 async def test_tick_claims_one_task_and_hands_it_to_planning(
     machine: TaskMachine, repo: TaskRepo, approvals: ApprovalRepo, gate: ApprovalGate
 ) -> None:
     task = await machine.create(TaskCreate(issue_url="https://github.com/o/r/issues/1"))
     planning = RecordingPlanning(machine, gate)
-    worker = Worker(machine, repo, gate, planning, poll_seconds=0)  # type: ignore[arg-type]
+    worker = Worker(machine, repo, gate, planning, RecordingSolving(), poll_seconds=0)  # type: ignore[arg-type]
 
     assert await worker.tick() is True
     assert planning.planned == [task.id]
@@ -47,6 +60,25 @@ async def test_tick_does_nothing_when_the_queue_is_empty(
     machine: TaskMachine, repo: TaskRepo, gate: ApprovalGate
 ) -> None:
     planning = RecordingPlanning(machine, gate)
-    worker = Worker(machine, repo, gate, planning, poll_seconds=0)  # type: ignore[arg-type]
+    worker = Worker(machine, repo, gate, planning, RecordingSolving(), poll_seconds=0)  # type: ignore[arg-type]
     assert await worker.tick() is False
     assert planning.planned == []
+
+
+async def test_approved_work_is_taken_before_new_work(
+    machine: TaskMachine, repo: TaskRepo, gate: ApprovalGate
+) -> None:
+    """A task a human already looked at must not queue behind an untouched one."""
+    waiting = await machine.create(TaskCreate(issue_url="https://github.com/o/r/issues/1"))
+    approved = await machine.create(TaskCreate(issue_url="https://github.com/o/r/issues/2"))
+    for status in (TaskStatus.PLANNING, TaskStatus.AWAITING_APPROVAL, TaskStatus.SOLVING):
+        await machine.advance(approved.id, status)
+
+    planning, solving = RecordingPlanning(machine, gate), RecordingSolving(machine)
+    worker = Worker(machine, repo, gate, planning, solving, poll_seconds=0)  # type: ignore[arg-type]
+
+    assert await worker.tick() is True
+    assert solving.solved == [approved.id] and planning.planned == []
+
+    assert await worker.tick() is True
+    assert planning.planned == [waiting.id]
