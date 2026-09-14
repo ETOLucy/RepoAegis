@@ -11,6 +11,9 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from repoaegis import __version__
+from repoaegis.agent.github import GitHub
+from repoaegis.agent.llm import LLM, Budget, DeepSeek
+from repoaegis.agent.workspace import Workspaces
 from repoaegis.server.config import Settings, configure_logging
 from repoaegis.server.events import EventBus
 from repoaegis.server.gate import (
@@ -19,8 +22,11 @@ from repoaegis.server.gate import (
     ApprovalNotFound,
     PayloadMismatch,
 )
+from repoaegis.server.migrate import upgrade_async
 from repoaegis.server.models import Approval, DecisionRequest, Event, Task, TaskCreate
+from repoaegis.server.planning import PlanningService
 from repoaegis.server.policy import get_policy
+from repoaegis.server.solving import SolvingService
 from repoaegis.server.sse import event_stream
 from repoaegis.server.state import TaskMachine
 from repoaegis.server.storage import ApprovalRepo, Database, TaskRepo
@@ -158,16 +164,58 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         db = Database(settings.database_url)
-        await db.create_all()
+        if settings.migrate_on_startup:
+            await upgrade_async(settings.database_url)
+        else:
+            await db.create_all()
         repo = TaskRepo(db.sessions)
         approvals = ApprovalRepo(db.sessions)
         bus = EventBus()
         machine = TaskMachine(repo, bus)
+        workspaces = Workspaces(
+            settings.workspace_cache_dir,
+            settings.workspace_work_dir,
+            timeout_seconds=settings.git_timeout_seconds,
+        )
         gate = ApprovalGate(
             approvals,
             machine,
             policy=get_policy(settings.approval_policy),
             ttl_seconds=settings.approval_ttl_seconds,
+            on_task_rejected=workspaces.release,
+        )
+        github = GitHub(token=settings.github_token, base_url=settings.github_base_url)
+
+        def llm_for(budget: Budget) -> LLM:
+            # One client, and one budget, per task.
+            return DeepSeek(
+                api_key=settings.deepseek_api_key,
+                model=settings.llm_model,
+                base_url=settings.llm_base_url,
+                timeout_seconds=settings.llm_timeout_seconds,
+                max_retries=settings.llm_max_retries,
+                budget=budget,
+            )
+
+        planning = PlanningService(
+            machine,
+            repo,
+            gate,
+            workspaces,
+            github,
+            llm_for,
+            max_steps=settings.agent_max_steps,
+            budget_usd=settings.llm_budget_usd,
+        )
+        solving = SolvingService(
+            machine,
+            repo,
+            approvals,
+            gate,
+            workspaces,
+            llm_for,
+            max_steps=settings.agent_max_edit_steps,
+            budget_usd=settings.llm_budget_usd,
         )
         app.state.settings = settings
         app.state.repo = repo
@@ -175,18 +223,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.bus = bus
         app.state.machine = machine
         app.state.gate = gate
+        app.state.workspaces = workspaces
+        app.state.planning = planning
 
         stop = asyncio.Event()
         worker_task: asyncio.Task[None] | None = None
         if settings.worker_enabled:
-            worker = Worker(machine, repo, gate, poll_seconds=settings.worker_poll_seconds)
+            worker = Worker(
+                machine, repo, gate, planning, solving, poll_seconds=settings.worker_poll_seconds
+            )
             worker_task = asyncio.create_task(worker.run(stop))
         try:
             yield
         finally:
             stop.set()
             if worker_task is not None:
-                await asyncio.wait_for(worker_task, timeout=5)
+                # A tick can be mid-clone or mid-model-call; give it room to land.
+                await asyncio.wait_for(worker_task, timeout=settings.worker_shutdown_seconds)
+            await github.aclose()
             await db.dispose()
 
     app = FastAPI(title="RepoAegis", version=__version__, lifespan=lifespan)

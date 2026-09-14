@@ -17,6 +17,7 @@ class TaskStatus(StrEnum):
     PLANNING = "planning"
     AWAITING_APPROVAL = "awaiting_approval"
     SOLVING = "solving"
+    AWAITING_PATCH_APPROVAL = "awaiting_patch_approval"
     VERIFYING = "verifying"
     DELIVERING = "delivering"
     DONE = "done"
@@ -47,6 +48,11 @@ class Task(BaseModel):
     status: TaskStatus
     created_at: datetime
     updated_at: datetime
+    # Set once planning pins a commit; the console and the evaluation both need
+    # to know which revision a run actually looked at.
+    repo_sha: str | None = None
+    steps: int = 0
+    cost_usd: float = 0.0
 
 
 class Event(BaseModel):
@@ -63,6 +69,7 @@ class ApprovalKind(StrEnum):
     """What is being approved. ``PLAN`` gates the task; the rest gate one tool call."""
 
     PLAN = "plan"
+    PATCH = "patch"
     SHELL = "shell"
     PUSH = "push"
 

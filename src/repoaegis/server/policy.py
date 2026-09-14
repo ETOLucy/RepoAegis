@@ -73,6 +73,7 @@ DEFAULT: Final = Policy(
         Rule(Outcome.DENY, kind="shell", pattern=_DESTRUCTIVE, reason="destructive command"),
         Rule(Outcome.ALLOW, kind="shell", pattern=_READ_ONLY, reason="read-only command"),
         Rule(Outcome.ASK, kind="plan", reason="plans are reviewed before execution"),
+        Rule(Outcome.ASK, kind="patch", reason="the diff is reviewed before it leaves the machine"),
         Rule(Outcome.ASK, kind="push", reason="pushing is visible to other people"),
     ),
 )

@@ -95,6 +95,7 @@
         "description": "What is being approved. ``PLAN`` gates the task; the rest gate one tool call.",
         "enum": [
           "plan",
+          "patch",
           "shell",
           "push"
         ],
@@ -208,6 +209,11 @@
       },
       "Task": {
         "properties": {
+          "cost_usd": {
+            "default": 0.0,
+            "title": "Cost Usd",
+            "type": "number"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -221,8 +227,24 @@
             "title": "Issue Url",
             "type": "string"
           },
+          "repo_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Sha"
+          },
           "status": {
             "$ref": "#/components/schemas/TaskStatus"
+          },
+          "steps": {
+            "default": 0,
+            "title": "Steps",
+            "type": "integer"
           },
           "title": {
             "title": "Title",
@@ -279,6 +301,7 @@
           "planning",
           "awaiting_approval",
           "solving",
+          "awaiting_patch_approval",
           "verifying",
           "delivering",
           "done",

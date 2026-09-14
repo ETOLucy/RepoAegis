@@ -38,7 +38,12 @@ async def test_sqlite_runs_in_wal_mode(settings: Settings) -> None:
 async def test_worker_and_api_share_one_database(tmp_path: Path) -> None:
     """The regression: a concurrent worker used to roll back the API's writes."""
     settings = Settings(
-        database_url=sqlite_url(tmp_path), worker_enabled=True, worker_poll_seconds=0.01
+        database_url=sqlite_url(tmp_path),
+        worker_enabled=True,
+        worker_poll_seconds=0.01,
+        # Planning has to end somewhere; an unreachable API ends it immediately,
+        # which is all this test needs -- it is about the database, not GitHub.
+        github_base_url="http://127.0.0.1:9",
     )
     app = create_app(settings)
     async with app.router.lifespan_context(app):
@@ -50,13 +55,14 @@ async def test_worker_and_api_share_one_database(tmp_path: Path) -> None:
             assert created.status_code == 201
             task_id = created.json()["id"]
 
-            for _ in range(200):
+            settled = {TaskStatus.AWAITING_APPROVAL, TaskStatus.FAILED}
+            for _ in range(500):
                 fetched = await client.get(f"/api/tasks/{task_id}")
                 assert fetched.status_code == 200, "the task vanished mid-flight"
-                if fetched.json()["status"] == TaskStatus.AWAITING_APPROVAL:
+                if fetched.json()["status"] in settled:
                     break
                 await asyncio.sleep(0.01)
             else:
-                pytest.fail("worker never reached the approval gate")
+                pytest.fail("the worker never settled the task")
 
             assert [t["id"] for t in (await client.get("/api/tasks")).json()] == [task_id]

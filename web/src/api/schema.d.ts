@@ -195,7 +195,7 @@ export interface components {
          * @description What is being approved. ``PLAN`` gates the task; the rest gate one tool call.
          * @enum {string}
          */
-        ApprovalKind: "plan" | "shell" | "push";
+        ApprovalKind: "plan" | "patch" | "shell" | "push";
         /**
          * ApprovalStatus
          * @enum {string}
@@ -246,6 +246,11 @@ export interface components {
         /** Task */
         Task: {
             /**
+             * Cost Usd
+             * @default 0
+             */
+            cost_usd: number;
+            /**
              * Created At
              * Format: date-time
              */
@@ -254,7 +259,14 @@ export interface components {
             id: string;
             /** Issue Url */
             issue_url: string;
+            /** Repo Sha */
+            repo_sha?: string | null;
             status: components["schemas"]["TaskStatus"];
+            /**
+             * Steps
+             * @default 0
+             */
+            steps: number;
             /** Title */
             title: string;
             /**
@@ -277,7 +289,7 @@ export interface components {
          * TaskStatus
          * @enum {string}
          */
-        TaskStatus: "queued" | "planning" | "awaiting_approval" | "solving" | "verifying" | "delivering" | "done" | "failed" | "rejected";
+        TaskStatus: "queued" | "planning" | "awaiting_approval" | "solving" | "awaiting_patch_approval" | "verifying" | "delivering" | "done" | "failed" | "rejected";
         /** ValidationError */
         ValidationError: {
             /** Context */

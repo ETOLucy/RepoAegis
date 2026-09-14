@@ -8,6 +8,7 @@ const LABEL: Record<TaskStatus, string> = {
   planning: '规划中',
   awaiting_approval: '待审批',
   solving: '求解中',
+  awaiting_patch_approval: '待审补丁',
   verifying: '验证中',
   delivering: '交付中',
   done: '完成',
@@ -30,7 +31,8 @@ const LABEL: Record<TaskStatus, string> = {
   border: 1px solid var(--color-border);
   color: var(--color-text);
 }
-.badge[data-status='awaiting_approval'] {
+.badge[data-status='awaiting_approval'],
+.badge[data-status='awaiting_patch_approval'] {
   border-color: #d29922;
   color: #d29922;
 }

@@ -9,6 +9,10 @@ import { api, type Approval, type Task, type TaskEvent, type TaskStatus } from '
 // No accounts yet; the audit trail still wants to know who answered a gate.
 const ACTOR = 'user:console'
 
+// Any state whose name says a human is being waited on. Listing them by prefix
+// rather than one by one means the next gate is picked up without a change here.
+const WAITING_ON_A_HUMAN = (status: TaskStatus) => status.startsWith('awaiting')
+
 export function useTasks() {
   const tasks = ref<Task[]>([])
   // task id -> its still-open approval envelopes.
@@ -33,10 +37,20 @@ export function useTasks() {
         status: 'queued',
         created_at: ev.ts,
         updated_at: ev.ts,
+        steps: 0,
+        cost_usd: 0,
       })
     } else if (ev.type === 'task.status_changed' && i !== -1) {
       const current = tasks.value[i]!
       tasks.value[i] = { ...current, status: ev.payload.to as TaskStatus, updated_at: ev.ts }
+    } else if (ev.type === 'plan.finished' && i !== -1) {
+      // The run's cost lands before the status moves; show it as soon as it is known.
+      const current = tasks.value[i]!
+      tasks.value[i] = {
+        ...current,
+        steps: Number(ev.payload.steps ?? current.steps),
+        cost_usd: Number(ev.payload.cost_usd ?? current.cost_usd),
+      }
     }
   }
 
@@ -50,7 +64,7 @@ export function useTasks() {
       tasks.value = await api.listTasks()
       error.value = null
       await Promise.all(
-        tasks.value.filter((t) => t.status === 'awaiting_approval').map((t) => loadApprovals(t.id)),
+        tasks.value.filter((t) => WAITING_ON_A_HUMAN(t.status)).map((t) => loadApprovals(t.id)),
       )
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e)
@@ -75,6 +89,7 @@ export function useTasks() {
     const onEvent = (e: Event) => apply(JSON.parse((e as MessageEvent<string>).data) as TaskEvent)
     source.addEventListener('task.created', onEvent)
     source.addEventListener('task.status_changed', onEvent)
+    source.addEventListener('plan.finished', onEvent)
     source.addEventListener('approval.requested', onEvent)
     source.addEventListener('approval.decided', onEvent)
   }
