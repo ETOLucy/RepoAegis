@@ -2,8 +2,9 @@
 import { ref } from 'vue'
 import { useTasks } from '@/composables/useTasks'
 import StatusBadge from '@/components/StatusBadge.vue'
+import ApprovalPanel from '@/components/ApprovalPanel.vue'
 
-const { tasks, connected, error, create } = useTasks()
+const { tasks, pending, connected, error, create, answer } = useTasks()
 const issueUrl = ref('')
 const submitting = ref(false)
 const submitError = ref<string | null>(null)
@@ -57,13 +58,25 @@ function time(iso: string) {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="t in tasks" :key="t.id">
-          <td>
-            <a :href="t.issue_url" target="_blank" rel="noreferrer">{{ t.title }}</a>
-          </td>
-          <td><StatusBadge :status="t.status" /></td>
-          <td class="muted">{{ time(t.updated_at) }}</td>
-        </tr>
+        <template v-for="t in tasks" :key="t.id">
+          <tr>
+            <td>
+              <a :href="t.issue_url" target="_blank" rel="noreferrer">{{ t.title }}</a>
+            </td>
+            <td><StatusBadge :status="t.status" /></td>
+            <td class="muted">{{ time(t.updated_at) }}</td>
+          </tr>
+          <tr v-if="pending[t.id]?.length" class="gate">
+            <td colspan="3">
+              <ApprovalPanel
+                v-for="a in pending[t.id]"
+                :key="a.id"
+                :approval="a"
+                :answer="answer"
+              />
+            </td>
+          </tr>
+        </template>
       </tbody>
     </table>
   </section>
@@ -128,6 +141,10 @@ th {
 }
 .muted {
   opacity: 0.6;
+}
+.gate > td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 0.4rem;
 }
 .error {
   color: #f85149;

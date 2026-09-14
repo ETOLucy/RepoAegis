@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/repoaegis.db"
     worker_enabled: bool = True
     worker_poll_seconds: float = 0.5
+    approval_policy: str = "default"
+    approval_ttl_seconds: float = 3600.0
     sse_heartbeat_seconds: float = 15.0
     log_json: bool = False
 

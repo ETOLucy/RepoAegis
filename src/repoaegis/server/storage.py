@@ -4,16 +4,22 @@ One code path serves SQLite (development, tests) and PostgreSQL (production);
 the URL decides. The repository exposes the few operations the state machine
 needs and nothing else. The compare-and-set in ``transition`` is what keeps two
 workers from advancing the same task twice.
+
+SQLite is always file-backed, including in tests: ``:memory:`` only survives by
+pinning the whole application to a single connection, and a single connection
+means a single transaction, so the worker closing a read session rolls back
+writes the API has not committed yet. Losing rows silently is a worse trade
+than a few milliseconds of disk.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, select, update
+from sqlalchemy import JSON, DateTime, ForeignKey, String, event, select, update
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -21,9 +27,15 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy.pool import StaticPool
 
-from repoaegis.server.models import Event, Task, TaskStatus
+from repoaegis.server.models import (
+    Approval,
+    ApprovalKind,
+    ApprovalStatus,
+    Event,
+    Task,
+    TaskStatus,
+)
 
 
 class Base(DeclarativeBase):
@@ -51,6 +63,24 @@ class EventRow(Base):
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class ApprovalRow(Base):
+    __tablename__ = "approvals"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    subject: Mapped[str] = mapped_column(String(500))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    payload_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    policy: Mapped[str] = mapped_column(String(64))
+    reason: Mapped[str] = mapped_column(String(200))
+    decided_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 def _utc(dt: datetime) -> datetime:
     # SQLite drops tzinfo on the way out; everything in this codebase is UTC.
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
@@ -71,23 +101,61 @@ def _task(row: TaskRow) -> Task:
     )
 
 
+def _approval(row: ApprovalRow) -> Approval:
+    return Approval(
+        id=row.id,
+        task_id=row.task_id,
+        kind=ApprovalKind(row.kind),
+        subject=row.subject,
+        payload=row.payload,
+        payload_hash=row.payload_hash,
+        status=ApprovalStatus(row.status),
+        policy=row.policy,
+        reason=row.reason,
+        decided_by=row.decided_by,
+        created_at=_utc(row.created_at),
+        expires_at=_utc(row.expires_at),
+        decided_at=_utc(row.decided_at) if row.decided_at else None,
+    )
+
+
 def _event(row: EventRow) -> Event:
     return Event(
         id=row.id, task_id=row.task_id, type=row.type, payload=row.payload, ts=_utc(row.ts)
     )
 
 
+def _enable_sqlite_concurrency(engine: AsyncEngine) -> None:
+    """WAL lets the API read while the worker writes; busy_timeout waits instead of failing."""
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _pragmas(dbapi_connection: Any, _record: Any) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
+
+
+class InMemorySQLiteRejected(ValueError):
+    """Raised instead of handing back a database that silently drops writes."""
+
+    def __init__(self, url: str) -> None:
+        super().__init__(
+            f"in-memory SQLite is not supported ({url}): it forces one shared connection, "
+            "so a concurrent session's rollback discards another's uncommitted writes. "
+            "Point database_url at a file instead (tests: pytest's tmp_path)."
+        )
+
+
 class Database:
     def __init__(self, url: str) -> None:
-        kwargs: dict[str, Any] = {}
         if url.startswith("sqlite"):
-            if ":memory:" in url:
-                # Every pooled connection would otherwise get its own empty database.
-                kwargs["poolclass"] = StaticPool
-                kwargs["connect_args"] = {"check_same_thread": False}
-            else:
-                Path(url.rsplit("///", 1)[-1]).parent.mkdir(parents=True, exist_ok=True)
-        self.engine: AsyncEngine = create_async_engine(url, **kwargs)
+            if ":memory:" in url or "mode=memory" in url:
+                raise InMemorySQLiteRejected(url)
+            Path(url.rsplit("///", 1)[-1]).parent.mkdir(parents=True, exist_ok=True)
+        self.engine: AsyncEngine = create_async_engine(url)
+        if url.startswith("sqlite"):
+            _enable_sqlite_concurrency(self.engine)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def create_all(self) -> None:
@@ -170,3 +238,102 @@ class TaskRepo:
         async with self._sessions() as s:
             rows = (await s.execute(stmt)).scalars().all()
         return [_event(r) for r in rows]
+
+
+class ApprovalRepo:
+    """Approval envelopes. Every state change here is a single atomic UPDATE.
+
+    That is the whole concurrency story: two browser tabs answering the same
+    gate, or a decision racing the expiry sweep, resolve to one winner because
+    only one statement can move a row out of ``pending``.
+    """
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def create(
+        self,
+        *,
+        task_id: str,
+        kind: ApprovalKind,
+        subject: str,
+        payload: dict[str, Any],
+        payload_hash: str,
+        status: ApprovalStatus,
+        policy: str,
+        reason: str,
+        decided_by: str | None,
+        ttl_seconds: float,
+    ) -> Approval:
+        now = _now()
+        row = ApprovalRow(
+            id=uuid.uuid4().hex,
+            task_id=task_id,
+            kind=kind.value,
+            subject=subject[:500],
+            payload=payload,
+            payload_hash=payload_hash,
+            status=status.value,
+            policy=policy,
+            reason=reason,
+            decided_by=decided_by,
+            created_at=now,
+            expires_at=now + timedelta(seconds=ttl_seconds),
+            decided_at=None if status is ApprovalStatus.PENDING else now,
+        )
+        async with self._sessions() as s:
+            s.add(row)
+            await s.commit()
+        return _approval(row)
+
+    async def get(self, approval_id: str) -> Approval | None:
+        async with self._sessions() as s:
+            row = await s.get(ApprovalRow, approval_id)
+        return _approval(row) if row else None
+
+    async def list_for_task(self, task_id: str) -> list[Approval]:
+        stmt = (
+            select(ApprovalRow)
+            .where(ApprovalRow.task_id == task_id)
+            .order_by(ApprovalRow.created_at)
+        )
+        async with self._sessions() as s:
+            rows = (await s.execute(stmt)).scalars().all()
+        return [_approval(r) for r in rows]
+
+    async def decide(
+        self, approval_id: str, *, to: ApprovalStatus, decided_by: str
+    ) -> Approval | None:
+        """Claim a pending, unexpired envelope. ``None`` means someone else won."""
+        now = _now()
+        stmt = (
+            update(ApprovalRow)
+            .where(
+                ApprovalRow.id == approval_id,
+                ApprovalRow.status == ApprovalStatus.PENDING.value,
+                ApprovalRow.expires_at > now,
+            )
+            .values(status=to.value, decided_by=decided_by, decided_at=now)
+            .returning(ApprovalRow)
+        )
+        async with self._sessions() as s:
+            row = (await s.execute(stmt)).scalar_one_or_none()
+            await s.commit()
+        return _approval(row) if row else None
+
+    async def expire_due(self) -> list[Approval]:
+        """Fail closed: anything still pending past its deadline becomes expired."""
+        now = _now()
+        stmt = (
+            update(ApprovalRow)
+            .where(
+                ApprovalRow.status == ApprovalStatus.PENDING.value,
+                ApprovalRow.expires_at <= now,
+            )
+            .values(status=ApprovalStatus.EXPIRED.value, decided_by="system:expiry", decided_at=now)
+            .returning(ApprovalRow)
+        )
+        async with self._sessions() as s:
+            rows = (await s.execute(stmt)).scalars().all()
+            await s.commit()
+        return [_approval(r) for r in rows]

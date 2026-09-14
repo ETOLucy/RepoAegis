@@ -4,6 +4,47 @@
  */
 
 export interface paths {
+    "/api/approvals/{approval_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Approval */
+        get: operations["get_approval_api_approvals__approval_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{approval_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Approval
+         * @description Answer one gate.
+         *
+         *     Repeating the same answer is a no-op that returns the same envelope, so a
+         *     double-click or a client retry cannot advance the task twice. A different
+         *     answer to an already-decided gate is a conflict, not an overwrite.
+         */
+        post: operations["decide_approval_api_approvals__approval_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/events": {
         parameters: {
             query?: never;
@@ -73,6 +114,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tasks/{task_id}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Task Approvals */
+        get: operations["list_task_approvals_api_tasks__task_id__approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks/{task_id}/events": {
         parameters: {
             query?: never;
@@ -94,6 +152,71 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Approval
+         * @description One approval envelope: subject, content hash, verdict, expiry.
+         */
+        Approval: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decided By */
+            decided_by: string | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Id */
+            id: string;
+            kind: components["schemas"]["ApprovalKind"];
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Payload Hash */
+            payload_hash: string;
+            /** Policy */
+            policy: string;
+            /** Reason */
+            reason: string;
+            status: components["schemas"]["ApprovalStatus"];
+            /** Subject */
+            subject: string;
+            /** Task Id */
+            task_id: string;
+        };
+        /**
+         * ApprovalKind
+         * @description What is being approved. ``PLAN`` gates the task; the rest gate one tool call.
+         * @enum {string}
+         */
+        ApprovalKind: "plan" | "shell" | "push";
+        /**
+         * ApprovalStatus
+         * @enum {string}
+         */
+        ApprovalStatus: "pending" | "approved" | "rejected" | "expired";
+        /**
+         * Decision
+         * @enum {string}
+         */
+        Decision: "approve" | "reject";
+        /**
+         * DecisionRequest
+         * @description A human's answer. ``payload_hash`` is optional but verified when sent.
+         */
+        DecisionRequest: {
+            decision: components["schemas"]["Decision"];
+            /** Note */
+            note?: string | null;
+            /** Payload Hash */
+            payload_hash?: string | null;
+        };
         /**
          * Event
          * @description One append-only audit record. ``id`` is monotonic and doubles as the SSE id.
@@ -177,6 +300,74 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_approval_api_approvals__approval_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Approval"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_approval_api_approvals__approval_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Actor"?: string;
+            };
+            path: {
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Approval"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stream_events_api_events_get: {
         parameters: {
             query?: never;
@@ -301,6 +492,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_task_approvals_api_tasks__task_id__approvals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Approval"][];
                 };
             };
             /** @description Validation Error */

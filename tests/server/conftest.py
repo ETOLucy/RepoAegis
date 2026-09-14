@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import httpx
 import pytest
@@ -7,21 +8,38 @@ from fastapi import FastAPI
 from repoaegis.server.api import create_app
 from repoaegis.server.config import Settings
 from repoaegis.server.events import EventBus
+from repoaegis.server.gate import ApprovalGate
+from repoaegis.server.policy import get_policy
 from repoaegis.server.state import TaskMachine
-from repoaegis.server.storage import Database, TaskRepo
+from repoaegis.server.storage import ApprovalRepo, Database, TaskRepo
+
+
+def sqlite_url(tmp_path: Path) -> str:
+    """A fresh file per test. POSIX separators keep the URL valid on Windows too."""
+    return f"sqlite+aiosqlite:///{(tmp_path / 'repoaegis.db').as_posix()}"
 
 
 @pytest.fixture
-def settings() -> Settings:
-    return Settings(database_url="sqlite+aiosqlite:///:memory:", worker_enabled=False)
+def settings(tmp_path: Path) -> Settings:
+    return Settings(database_url=sqlite_url(tmp_path), worker_enabled=False)
 
 
 @pytest.fixture
-async def repo(settings: Settings) -> AsyncIterator[TaskRepo]:
-    db = Database(settings.database_url)
-    await db.create_all()
-    yield TaskRepo(db.sessions)
-    await db.dispose()
+async def db(settings: Settings) -> AsyncIterator[Database]:
+    database = Database(settings.database_url)
+    await database.create_all()
+    yield database
+    await database.dispose()
+
+
+@pytest.fixture
+def repo(db: Database) -> TaskRepo:
+    return TaskRepo(db.sessions)
+
+
+@pytest.fixture
+def approvals(db: Database) -> ApprovalRepo:
+    return ApprovalRepo(db.sessions)
 
 
 @pytest.fixture
@@ -32,6 +50,16 @@ def bus() -> EventBus:
 @pytest.fixture
 def machine(repo: TaskRepo, bus: EventBus) -> TaskMachine:
     return TaskMachine(repo, bus)
+
+
+@pytest.fixture
+def gate(approvals: ApprovalRepo, machine: TaskMachine, settings: Settings) -> ApprovalGate:
+    return ApprovalGate(
+        approvals,
+        machine,
+        policy=get_policy(settings.approval_policy),
+        ttl_seconds=settings.approval_ttl_seconds,
+    )
 
 
 @pytest.fixture
