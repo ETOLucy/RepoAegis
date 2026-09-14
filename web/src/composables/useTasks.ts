@@ -33,10 +33,20 @@ export function useTasks() {
         status: 'queued',
         created_at: ev.ts,
         updated_at: ev.ts,
+        steps: 0,
+        cost_usd: 0,
       })
     } else if (ev.type === 'task.status_changed' && i !== -1) {
       const current = tasks.value[i]!
       tasks.value[i] = { ...current, status: ev.payload.to as TaskStatus, updated_at: ev.ts }
+    } else if (ev.type === 'plan.finished' && i !== -1) {
+      // The run's cost lands before the status moves; show it as soon as it is known.
+      const current = tasks.value[i]!
+      tasks.value[i] = {
+        ...current,
+        steps: Number(ev.payload.steps ?? current.steps),
+        cost_usd: Number(ev.payload.cost_usd ?? current.cost_usd),
+      }
     }
   }
 
@@ -75,6 +85,7 @@ export function useTasks() {
     const onEvent = (e: Event) => apply(JSON.parse((e as MessageEvent<string>).data) as TaskEvent)
     source.addEventListener('task.created', onEvent)
     source.addEventListener('task.status_changed', onEvent)
+    source.addEventListener('plan.finished', onEvent)
     source.addEventListener('approval.requested', onEvent)
     source.addEventListener('approval.decided', onEvent)
   }

@@ -1,5 +1,8 @@
 <script setup lang="ts">
-// One approval envelope, rendered exactly as the server stored it.
+// One approval envelope. A plan is rendered field by field -- that is the whole
+// point of having made it structured: the reviewer reads a diagnosis and a list
+// of cited spans, not a wall of JSON. Anything else falls back to the raw
+// payload, which is still what the hash covers.
 //
 // The hash is shown, not hidden: it is the identity of what is being approved,
 // and it travels back with the answer so the server can refuse a swapped
@@ -7,6 +10,15 @@
 // disappears once the event stream reports the decision.
 import { computed, ref } from 'vue'
 import type { Approval } from '@/api/client'
+
+type Location = { file: string; line_start: number; line_end: number; why: string }
+type Plan = {
+  diagnosis: string
+  locations: Location[]
+  approach: string
+  verification?: string
+  confidence?: string
+}
 
 const props = defineProps<{
   approval: Approval
@@ -21,6 +33,27 @@ const KIND: Record<string, string> = {
   shell: 'Shell 命令',
   push: '推送分支',
 }
+
+const CONFIDENCE: Record<string, string> = { high: '高', medium: '中', low: '低' }
+
+const plan = computed<Plan | null>(() => {
+  const candidate = props.approval.payload?.plan as Partial<Plan> | undefined
+  // Older envelopes are still in the database, and a payload is only ever as
+  // structured as whatever produced it; render fields we recognise, not a crash.
+  if (props.approval.kind !== 'plan' || typeof candidate?.diagnosis !== 'string') return null
+  return {
+    diagnosis: candidate.diagnosis,
+    locations: Array.isArray(candidate.locations) ? candidate.locations : [],
+    approach: typeof candidate.approach === 'string' ? candidate.approach : '',
+    verification: candidate.verification,
+    confidence: candidate.confidence,
+  }
+})
+
+const run = computed(() => {
+  const { steps, cost_usd: cost, forced } = props.approval.payload as Record<string, unknown>
+  return typeof steps === 'number' ? { steps, cost: Number(cost ?? 0), forced: !!forced } : null
+})
 
 const body = computed(() => JSON.stringify(props.approval.payload, null, 2))
 const expires = computed(() => new Date(props.approval.expires_at).toLocaleString())
@@ -45,8 +78,50 @@ async function send(decision: 'approve' | 'reject') {
       <span class="muted">{{ approval.reason }}</span>
     </div>
 
-    <p class="subject">{{ approval.subject }}</p>
-    <pre>{{ body }}</pre>
+    <template v-if="plan">
+      <p class="diagnosis">{{ plan.diagnosis }}</p>
+
+      <ol v-if="plan.locations.length" class="locations">
+        <li v-for="(loc, i) in plan.locations" :key="i">
+          <code
+            >{{ loc.file }}:{{ loc.line_start
+            }}<span v-if="loc.line_end !== loc.line_start">-{{ loc.line_end }}</span></code
+          >
+          <span class="why">{{ loc.why }}</span>
+        </li>
+      </ol>
+      <p v-else class="muted">没有给出具体位置。</p>
+
+      <dl class="fields">
+        <template v-if="plan.approach">
+          <dt>改法</dt>
+          <dd>{{ plan.approach }}</dd>
+        </template>
+        <template v-if="plan.verification">
+          <dt>验证</dt>
+          <dd>{{ plan.verification }}</dd>
+        </template>
+      </dl>
+
+      <p v-if="run" class="run muted">
+        <span>{{ run.steps }} 步</span>
+        <span>${{ run.cost.toFixed(6) }}</span>
+        <span v-if="plan.confidence"
+          >信心 {{ CONFIDENCE[plan.confidence] ?? plan.confidence }}</span
+        >
+        <span v-if="run.forced" class="forced">步数/预算耗尽后被迫交卷</span>
+      </p>
+
+      <details>
+        <summary class="muted">原始信封</summary>
+        <pre>{{ body }}</pre>
+      </details>
+    </template>
+
+    <template v-else>
+      <p class="subject">{{ approval.subject }}</p>
+      <pre>{{ body }}</pre>
+    </template>
 
     <dl class="meta">
       <dt>内容哈希</dt>
@@ -89,8 +164,59 @@ async function send(decision: 'approve' | 'reject') {
 .subject {
   margin: 0 0 0.5rem;
 }
-pre {
+.diagnosis {
+  margin: 0 0 0.7rem;
+  line-height: 1.5;
+}
+.locations {
+  margin: 0 0 0.7rem;
+  padding-left: 1.2rem;
+}
+.locations li {
+  margin-bottom: 0.35rem;
+}
+.locations code {
+  display: inline-block;
+  margin-right: 0.5rem;
+  color: var(--color-heading);
+}
+.why {
+  opacity: 0.75;
+}
+.fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
   margin: 0 0 0.6rem;
+}
+.fields dt {
+  opacity: 0.6;
+  white-space: nowrap;
+}
+.fields dd {
+  margin: 0;
+  line-height: 1.5;
+}
+.run {
+  display: flex;
+  gap: 1rem;
+  margin: 0 0 0.6rem;
+}
+.forced {
+  color: #d29922;
+  opacity: 1;
+}
+details {
+  margin-bottom: 0.6rem;
+}
+summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+pre {
+  margin: 0.4rem 0 0.6rem;
+  white-space: pre-wrap;
+  word-break: break-word;
   padding: 0.6rem;
   overflow-x: auto;
   font-size: 0.8rem;

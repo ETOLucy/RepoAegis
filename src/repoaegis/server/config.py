@@ -7,6 +7,7 @@ Everything is overridable through ``REPOAEGIS_*`` environment variables or a
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import structlog
 from pydantic import AliasChoices, Field
@@ -20,6 +21,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/repoaegis.db"
     worker_enabled: bool = True
     worker_poll_seconds: float = 0.5
+    # A tick can be inside a clone or a model call; do not cut it short.
+    worker_shutdown_seconds: float = 30.0
     approval_policy: str = "default"
     approval_ttl_seconds: float = 3600.0
 
@@ -36,6 +39,17 @@ class Settings(BaseSettings):
     # Per task, in USD. Checked before each call, so a runaway loop stops rather
     # than overshooting. Roughly 400k input tokens at cache-miss peak rates.
     llm_budget_usd: float = 0.50
+
+    github_base_url: str = "https://api.github.com"
+    github_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("GITHUB_TOKEN", "REPOAEGIS_GITHUB_TOKEN"),
+    )
+    # One bare clone per repository, one worktree per task.
+    workspace_cache_dir: Path = Path("data/repos")
+    workspace_work_dir: Path = Path("data/work")
+    git_timeout_seconds: float = 300.0
+    agent_max_steps: int = 20
     sse_heartbeat_seconds: float = 15.0
     log_json: bool = False
 

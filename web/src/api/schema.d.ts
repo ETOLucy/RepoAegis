@@ -246,6 +246,11 @@ export interface components {
         /** Task */
         Task: {
             /**
+             * Cost Usd
+             * @default 0
+             */
+            cost_usd: number;
+            /**
              * Created At
              * Format: date-time
              */
@@ -254,7 +259,14 @@ export interface components {
             id: string;
             /** Issue Url */
             issue_url: string;
+            /** Repo Sha */
+            repo_sha?: string | null;
             status: components["schemas"]["TaskStatus"];
+            /**
+             * Steps
+             * @default 0
+             */
+            steps: number;
             /** Title */
             title: string;
             /**

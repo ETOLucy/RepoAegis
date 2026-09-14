@@ -47,6 +47,11 @@ class Task(BaseModel):
     status: TaskStatus
     created_at: datetime
     updated_at: datetime
+    # Set once planning pins a commit; the console and the evaluation both need
+    # to know which revision a run actually looked at.
+    repo_sha: str | None = None
+    steps: int = 0
+    cost_usd: float = 0.0
 
 
 class Event(BaseModel):

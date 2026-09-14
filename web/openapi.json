@@ -208,6 +208,11 @@
       },
       "Task": {
         "properties": {
+          "cost_usd": {
+            "default": 0.0,
+            "title": "Cost Usd",
+            "type": "number"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -221,8 +226,24 @@
             "title": "Issue Url",
             "type": "string"
           },
+          "repo_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Sha"
+          },
           "status": {
             "$ref": "#/components/schemas/TaskStatus"
+          },
+          "steps": {
+            "default": 0,
+            "title": "Steps",
+            "type": "integer"
           },
           "title": {
             "title": "Title",

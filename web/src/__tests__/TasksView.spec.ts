@@ -10,6 +10,8 @@ const TASK: Task = {
   status: 'queued',
   created_at: '2026-09-12T10:00:00Z',
   updated_at: '2026-09-12T10:00:00Z',
+  steps: 0,
+  cost_usd: 0,
 }
 
 class FakeEventSource {

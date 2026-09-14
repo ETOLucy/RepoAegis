@@ -63,7 +63,12 @@ function time(iso: string) {
             <td>
               <a :href="t.issue_url" target="_blank" rel="noreferrer">{{ t.title }}</a>
             </td>
-            <td><StatusBadge :status="t.status" /></td>
+            <td>
+              <StatusBadge :status="t.status" />
+              <span v-if="t.steps" class="muted meter">
+                {{ t.steps }} 步 · ${{ t.cost_usd.toFixed(4) }}
+              </span>
+            </td>
             <td class="muted">{{ time(t.updated_at) }}</td>
           </tr>
           <tr v-if="pending[t.id]?.length" class="gate">
@@ -141,6 +146,11 @@ th {
 }
 .muted {
   opacity: 0.6;
+}
+.meter {
+  margin-left: 0.5rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 .gate > td {
   border-bottom: 1px solid var(--color-border);

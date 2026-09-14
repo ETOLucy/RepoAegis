@@ -12,6 +12,8 @@ const TASK: Task = {
   status: 'awaiting_approval',
   created_at: '2026-09-13T10:00:00Z',
   updated_at: '2026-09-13T10:00:00Z',
+  steps: 0,
+  cost_usd: 0,
 }
 
 const APPROVAL: Approval = {
@@ -19,7 +21,20 @@ const APPROVAL: Approval = {
   task_id: 'abc',
   kind: 'plan',
   subject: '给重定向处理打补丁',
-  payload: { plan: { summary: '给重定向处理打补丁' } },
+  payload: {
+    plan: {
+      diagnosis: '给重定向处理打补丁',
+      locations: [
+        { file: 'src/sessions.py', line_start: 691, line_end: 700, why: '重定向在这里丢掉片段' },
+      ],
+      approach: '把片段带过去',
+      verification: 'pytest tests/test_redirects.py',
+      confidence: 'high',
+    },
+    steps: 5,
+    cost_usd: 0.000714,
+    forced: false,
+  },
   payload_hash: 'a'.repeat(64),
   status: 'pending',
   policy: 'default',
@@ -80,6 +95,10 @@ describe('approval flow', () => {
     expect(wrapper.text()).toContain('待审批')
     expect(wrapper.text()).toContain('修复计划')
     expect(wrapper.text()).toContain('给重定向处理打补丁')
+    // The structured plan is rendered as fields, not as a blob of JSON.
+    expect(wrapper.text()).toContain('src/sessions.py:691-700')
+    expect(wrapper.text()).toContain('重定向在这里丢掉片段')
+    expect(wrapper.text()).toContain('5 步')
     expect(wrapper.text()).toContain(APPROVAL.payload_hash.slice(0, 16))
   })
 
@@ -135,5 +154,14 @@ describe('approval flow', () => {
 
     expect(wrapper.text()).toContain('409')
     expect(wrapper.text()).toContain('待审批')
+  })
+
+  it('renders an envelope whose plan is missing fields instead of crashing', async () => {
+    openGates = [{ ...APPROVAL, payload: { plan: { summary: 'from an older run' } } }]
+    const wrapper = mount(TasksView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('待审批')
+    expect(wrapper.find('button.approve').exists()).toBe(true)
   })
 })

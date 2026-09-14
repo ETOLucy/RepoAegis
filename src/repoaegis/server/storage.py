@@ -19,7 +19,17 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, event, select, update
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    event,
+    select,
+    update,
+)
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -51,6 +61,9 @@ class TaskRow(Base):
     status: Mapped[str] = mapped_column(String(32), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    repo_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    steps: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 class EventRow(Base):
@@ -98,6 +111,9 @@ def _task(row: TaskRow) -> Task:
         status=TaskStatus(row.status),
         created_at=_utc(row.created_at),
         updated_at=_utc(row.updated_at),
+        repo_sha=row.repo_sha,
+        steps=row.steps or 0,
+        cost_usd=row.cost_usd or 0.0,
     )
 
 
@@ -179,6 +195,8 @@ class TaskRepo:
             status=TaskStatus.QUEUED.value,
             created_at=now,
             updated_at=now,
+            steps=0,
+            cost_usd=0.0,
         )
         async with self._sessions() as s:
             s.add(row)
@@ -221,6 +239,19 @@ class TaskRepo:
             row = (await s.execute(stmt)).scalar_one_or_none()
             await s.commit()
         return _task(row) if row else None
+
+    async def record_run(
+        self, task_id: str, *, sha: str | None, steps: int, cost_usd: float
+    ) -> None:
+        """Stamp what one planning run consumed. Not a transition, so no CAS."""
+        stmt = (
+            update(TaskRow)
+            .where(TaskRow.id == task_id)
+            .values(repo_sha=sha, steps=steps, cost_usd=cost_usd, updated_at=_now())
+        )
+        async with self._sessions() as s:
+            await s.execute(stmt)
+            await s.commit()
 
     async def append_event(self, task_id: str, type: str, payload: dict[str, Any]) -> Event:
         row = EventRow(task_id=task_id, type=type, payload=payload, ts=_now())

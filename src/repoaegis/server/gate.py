@@ -13,6 +13,8 @@ one moves the row, and only that winner applies the effect on the task.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 import structlog
 
 from repoaegis.server.models import (
@@ -66,11 +68,14 @@ class ApprovalGate:
         *,
         policy: Policy,
         ttl_seconds: float,
+        on_task_rejected: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         self._approvals = approvals
         self._machine = machine
         self._policy = policy
         self._ttl = ttl_seconds
+        # A task nobody will work on should not keep a checkout on disk.
+        self._on_task_rejected = on_task_rejected
 
     async def request(
         self, task_id: str, kind: ApprovalKind, payload: dict[str, object], *, subject: str
@@ -172,3 +177,5 @@ class ApprovalGate:
         await self._machine.advance(
             approval.task_id, to, payload={"approval_id": approval.id, "reason": approval.reason}
         )
+        if to is TaskStatus.REJECTED and self._on_task_rejected is not None:
+            await self._on_task_rejected(approval.task_id)
