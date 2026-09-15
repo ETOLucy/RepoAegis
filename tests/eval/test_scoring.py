@@ -103,3 +103,14 @@ def test_end_to_end_from_pytest_output() -> None:
 @pytest.mark.parametrize("output", ["", "no summary here", "collected 0 items"])
 def test_unparseable_output_yields_nothing_rather_than_guesses(output: str) -> None:
     assert parse_pytest(output) == {}
+
+
+def test_a_rename_only_patch_still_names_its_file() -> None:
+    """Such a patch has a diff --git header and no content lines at all."""
+    from repoaegis.eval.dataset import changed_files
+
+    patch = (
+        "diff --git a/old.py b/new.py\n"
+        "similarity index 100%\nrename from old.py\nrename to new.py\n"
+    )
+    assert changed_files(patch) == ("old.py",)

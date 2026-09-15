@@ -67,18 +67,27 @@ class Instance:
 
 
 def changed_files(patch: str) -> tuple[str, ...]:
-    """Paths named by a unified diff, normalised away from git's a/ and b/."""
+    """Paths named by a unified diff, normalised away from git's a/ and b/.
+
+    Both the ``diff --git`` header and the ``---``/``+++`` lines are read. A
+    patch that only renames a file or changes its mode carries the header and
+    no content lines at all, so reading one form alone misses real changes.
+    """
     files: list[str] = []
-    for line in patch.splitlines():
-        if not line.startswith("--- ") and not line.startswith("+++ "):
-            continue
-        path = line[4:].strip()
-        if path in {"/dev/null", ""}:
-            continue
+
+    def remember(path: str) -> None:
         if path.startswith(("a/", "b/")):
             path = path[2:]
-        if path not in files:
+        if path and path != "/dev/null" and path not in files:
             files.append(path)
+
+    for line in patch.splitlines():
+        if line.startswith("diff --git "):
+            rest = line[len("diff --git ") :]
+            head, _, _tail = rest.partition(" b/")
+            remember(head.strip())
+        elif line.startswith(("--- ", "+++ ")):
+            remember(line[4:].strip())
     return tuple(files)
 
 

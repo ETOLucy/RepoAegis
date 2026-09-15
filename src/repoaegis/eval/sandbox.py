@@ -12,8 +12,11 @@ The procedure follows SWE-bench's own, and each step exists for a reason:
 2. apply our patch, and report a refusal as its own outcome. "The diff did not
    apply" is a different failure from "the fix was wrong", and a harness that
    merges them is lying about where the agent is weak;
-3. apply the benchmark's ``test_patch`` *after* ours, so the tests are the
-   reference ones no matter what our patch touched;
+3. discard any edit our patch made to a test file, then apply the benchmark's
+   ``test_patch``. An agent that writes its own tests is not misbehaving, but
+   it must not influence the tests that judge it -- and without the reset, its
+   edits collide with the reference patch, which then fails to apply and leaves
+   the target test missing entirely;
 4. run the named tests and hand the raw output back for parsing.
 
 Files reach the container base64-encoded inside the script. A patch is arbitrary
@@ -35,7 +38,7 @@ from typing import Final
 
 import structlog
 
-from repoaegis.eval.dataset import Instance
+from repoaegis.eval.dataset import Instance, changed_files
 
 log = structlog.get_logger(__name__)
 
@@ -87,6 +90,7 @@ def _embed(path: str, content: str) -> str:
 def build_script(instance: Instance, patch: str) -> str:
     """The whole run as one shell script, fed to the container on stdin."""
     tests = " ".join(shlex.quote(t) for t in (*instance.fail_to_pass, *instance.pass_to_pass))
+    test_files = changed_files(instance.test_patch)
     command = command_for(instance.repo)
     return "\n".join(
         [
@@ -105,7 +109,20 @@ def build_script(instance: Instance, patch: str) -> str:
             f"  echo {APPLY_FAILED}",
             "  exit 3",
             "fi",
-            # The reference tests go on last so ours cannot have altered them.
+            # Throw away any edit we made to a test file before the reference
+            # tests land. Without this, an agent that added its own test to the
+            # same file makes the benchmark's test_patch conflict, and the
+            # target test never exists -- scored as "tests did not run" when the
+            # fix itself may have been perfectly good.
+            *(
+                [
+                    f"git checkout {shlex.quote(instance.base_commit)} -- "
+                    + " ".join(shlex.quote(f) for f in test_files)
+                    + " 2>/dev/null || true"
+                ]
+                if test_files
+                else []
+            ),
             "git apply -v /tmp/aegis/test.patch || true",
             f"{command} {tests}",
         ]

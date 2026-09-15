@@ -143,3 +143,25 @@ def test_the_docker_command_may_carry_a_prefix(command: str) -> None:
     """On this Windows machine the engine lives inside WSL."""
     box = DockerSandbox(command=command)
     assert box._command[-1] == "docker"
+
+
+def test_our_edits_to_test_files_are_discarded_before_the_reference_tests() -> None:
+    """A real run found this: the agent added its own tests to the same file the
+    benchmark patches, the reference patch then failed to apply, and a correct
+    fix scored zero because the target test no longer existed."""
+    lines = build_script(INSTANCE, PATCH).splitlines()
+    ours = next(i for i, ln in enumerate(lines) if "model.patch" in ln and "git apply" in ln)
+    reset = next(i for i, ln in enumerate(lines) if "git checkout" in ln and "test_x.py" in ln)
+    theirs = next(i for i, ln in enumerate(lines) if "test.patch" in ln and "git apply" in ln)
+
+    assert ours < reset < theirs
+    assert INSTANCE.base_commit in lines[reset]
+
+
+def test_an_instance_without_a_test_patch_needs_no_reset() -> None:
+    from dataclasses import replace
+
+    script = build_script(replace(INSTANCE, test_patch=""), PATCH)
+    # The only checkout left is the initial reset of the whole tree.
+    checkouts = [ln for ln in script.splitlines() if ln.startswith("git checkout")]
+    assert checkouts == [f"git checkout -f {INSTANCE.base_commit} -- . >/dev/null 2>&1 || true"]
