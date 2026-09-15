@@ -24,6 +24,9 @@ dev = [
     "mypy>=1.14",
     "httpx>=0.28.1",
 ]
+eval = [
+    "pyarrow>=25.0.1",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -39,11 +42,20 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# RUF001-003 flag "ambiguous" unicode punctuation, which exists to catch a
+# fullwidth comma typed by accident in an English string. This project's
+# user-facing text is Chinese, where fullwidth punctuation is simply correct.
+ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.mypy]
 strict = true
 packages = ["repoaegis"]
 mypy_path = "src"
+
+[[tool.mypy.overrides]]
+# pyarrow ships no type information; it is only used to read one parquet file.
+module = ["pyarrow.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
