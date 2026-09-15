@@ -24,6 +24,9 @@ dev = [
     "mypy>=1.14",
     "httpx>=0.28.1",
 ]
+eval = [
+    "pyarrow>=25.0.1",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -44,6 +47,11 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 strict = true
 packages = ["repoaegis"]
 mypy_path = "src"
+
+[[tool.mypy.overrides]]
+# pyarrow ships no type information; it is only used to read one parquet file.
+module = ["pyarrow.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

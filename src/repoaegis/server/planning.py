@@ -19,7 +19,7 @@ from typing import Any
 
 import structlog
 
-from repoaegis.agent.github import GitHub
+from repoaegis.agent.github import IssueReader
 from repoaegis.agent.llm import LLM, Budget
 from repoaegis.agent.loop import Planner, PlanRun
 from repoaegis.agent.plan import Plan
@@ -47,7 +47,7 @@ class PlanningService:
         repo: TaskRepo,
         gate: ApprovalGate,
         workspaces: Workspaces,
-        github: GitHub,
+        github: IssueReader,
         llm_factory: LLMFactory,
         *,
         max_steps: int = 20,
@@ -62,10 +62,16 @@ class PlanningService:
         self._max_steps = max_steps
         self._budget_usd = budget_usd
 
-    async def plan(self, task: Task) -> None:
-        """Take a claimed task from PLANNING to the approval gate, or to FAILED."""
+    async def plan(self, task: Task, *, sha: str | None = None) -> None:
+        """Take a claimed task from PLANNING to the approval gate, or to FAILED.
+
+        ``sha`` pins the checkout. Live runs leave it unset and take the default
+        branch's head; the benchmark passes the commit the issue was filed
+        against, because a fix evaluated on today's code is evaluated against a
+        different problem.
+        """
         try:
-            run, sha, issue = await self._investigate(task)
+            run, resolved, issue = await self._investigate(task, sha)
         except Exception as exc:
             # Anything at all: a provider 400, a disk error, a bug of ours. The
             # one outcome that must never happen is a task left in PLANNING
@@ -73,7 +79,9 @@ class PlanningService:
             await self._fail(task, type(exc).__name__, str(exc))
             return
 
-        await self._repo.record_run(task.id, sha=sha, steps=run.steps, cost_usd=run.usage.cost_usd)
+        await self._repo.record_run(
+            task.id, sha=resolved, steps=run.steps, cost_usd=run.usage.cost_usd
+        )
         if run.plan is None:
             await self._fail(
                 task,
@@ -84,7 +92,9 @@ class PlanningService:
 
         await self._open_gate(task, run, run.plan, issue)
 
-    async def _investigate(self, task: Task) -> tuple[PlanRun, str, dict[str, str]]:
+    async def _investigate(
+        self, task: Task, sha: str | None
+    ) -> tuple[PlanRun, str, dict[str, str]]:
         ref = parse_issue_url(task.issue_url)
         issue = await self._github.issue(ref)
         await self._machine.emit(
@@ -93,7 +103,7 @@ class PlanningService:
             {"repo": ref.slug, "number": issue.number, "title": issue.title, "state": issue.state},
         )
 
-        sha = await self._workspaces.resolve_head(ref)
+        sha = sha or await self._workspaces.resolve_head(ref)
         path = await self._workspaces.prepare(ref, sha, task_id=task.id)
         await self._machine.emit(
             task.id, "workspace.ready", {"repo": ref.slug, "sha": sha, "path": str(path)}

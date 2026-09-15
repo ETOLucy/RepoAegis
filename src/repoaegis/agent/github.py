@@ -11,6 +11,7 @@ eventually run.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 import httpx
 import structlog
@@ -37,6 +38,17 @@ class Issue:
     @property
     def is_open(self) -> bool:
         return self.state == "open"
+
+
+class IssueReader(Protocol):
+    """Where an issue's text comes from.
+
+    Live runs read GitHub. The benchmark supplies the text it already has:
+    hitting the API there would burn the rate limit and, worse, could return a
+    version of the issue edited after the fix landed.
+    """
+
+    async def issue(self, ref: RepoRef) -> Issue: ...
 
 
 class GitHub:
