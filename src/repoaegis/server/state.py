@@ -32,7 +32,8 @@ TRANSITIONS: Final = MappingProxyType(
         S.SOLVING: frozenset({S.AWAITING_PATCH_APPROVAL, S.VERIFYING, S.FAILED}),
         S.AWAITING_PATCH_APPROVAL: frozenset({S.DELIVERING, S.REJECTED}),
         S.VERIFYING: frozenset({S.AWAITING_PATCH_APPROVAL, S.SOLVING, S.FAILED}),
-        S.DELIVERING: frozenset({S.DONE, S.FAILED}),
+        # A human refusing the push is a rejection, not a failure.
+        S.DELIVERING: frozenset({S.DONE, S.FAILED, S.REJECTED}),
         S.DONE: frozenset[TaskStatus](),
         S.FAILED: frozenset[TaskStatus](),
         S.REJECTED: frozenset[TaskStatus](),

@@ -15,6 +15,7 @@ from repoaegis.agent.github import GitHub
 from repoaegis.agent.llm import LLM, Budget, DeepSeek
 from repoaegis.agent.workspace import Workspaces
 from repoaegis.server.config import Settings, configure_logging
+from repoaegis.server.delivery import DeliveryService
 from repoaegis.server.events import EventBus
 from repoaegis.server.gate import (
     ApprovalClosed,
@@ -217,6 +218,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             max_steps=settings.agent_max_edit_steps,
             budget_usd=settings.llm_budget_usd,
         )
+        delivery = DeliveryService(
+            machine,
+            repo,
+            approvals,
+            gate,
+            workspaces,
+            github,
+            token=settings.github_token,
+            model=settings.llm_model,
+        )
         app.state.settings = settings
         app.state.repo = repo
         app.state.approvals = approvals
@@ -230,7 +241,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         worker_task: asyncio.Task[None] | None = None
         if settings.worker_enabled:
             worker = Worker(
-                machine, repo, gate, planning, solving, poll_seconds=settings.worker_poll_seconds
+                machine,
+                repo,
+                gate,
+                planning,
+                solving,
+                delivery,
+                poll_seconds=settings.worker_poll_seconds,
             )
             worker_task = asyncio.create_task(worker.run(stop))
         try:

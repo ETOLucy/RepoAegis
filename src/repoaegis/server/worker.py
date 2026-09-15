@@ -20,6 +20,7 @@ import contextlib
 
 import structlog
 
+from repoaegis.server.delivery import DeliveryService
 from repoaegis.server.gate import ApprovalGate
 from repoaegis.server.models import TaskStatus
 from repoaegis.server.planning import PlanningService
@@ -38,6 +39,7 @@ class Worker:
         gate: ApprovalGate,
         planning: PlanningService,
         solving: SolvingService,
+        delivery: DeliveryService,
         *,
         poll_seconds: float,
     ) -> None:
@@ -46,6 +48,7 @@ class Worker:
         self._gate = gate
         self._planning = planning
         self._solving = solving
+        self._delivery = delivery
         self._poll = poll_seconds
 
     async def tick(self) -> bool:
@@ -55,6 +58,13 @@ class Worker:
         attention on should not queue behind a task nobody has looked at yet.
         """
         worked = bool(await self._gate.sweep_expired())
+
+        # Furthest along first: a task one step from a pull request should not
+        # wait behind a task nobody has looked at.
+        ready = await self._repo.next_in(TaskStatus.DELIVERING)
+        if ready is not None:
+            await self._delivery.deliver(ready)
+            return True
 
         approved = await self._repo.next_in(TaskStatus.SOLVING)
         if approved is not None:

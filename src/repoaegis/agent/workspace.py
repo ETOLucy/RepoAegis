@@ -63,6 +63,18 @@ def remove_tree(path: Path) -> None:
     shutil.rmtree(path, onexc=_force_remove)
 
 
+def authenticated_url(owner: str, repo: str, token: str) -> str:
+    """A push URL carrying the token. Build it late, keep it out of everything."""
+    if not token:
+        raise GitError("no GitHub token configured; cannot push")
+    return f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
+
+
+def _redact(text: str) -> str:
+    """Strip any user:token@ out of a URL before it goes anywhere."""
+    return re.sub(r"(https://)[^@\s/]+@", r"\1***@", text)
+
+
 @dataclass(frozen=True, slots=True)
 class RepoRef:
     owner: str
@@ -166,6 +178,50 @@ class Workspaces:
 
     def checkout_of(self, task_id: str) -> Path:
         return self.work_dir / task_id
+
+    async def commit(self, task_id: str, *, message: str, branch: str) -> str:
+        """Put the working-tree changes on a fresh branch. Returns the commit sha.
+
+        Identity is passed per command rather than written into the repository:
+        a throwaway checkout should leave no configuration behind, and the
+        author of a machine-made commit should say so.
+        """
+        target = self.work_dir / task_id
+        if not target.is_dir():
+            raise GitError(f"no checkout for task {task_id}")
+        await git("checkout", "-B", branch, cwd=target, timeout=self._timeout)
+        await git("add", "-A", cwd=target, timeout=self._timeout)
+        await git(
+            "-c",
+            "user.name=RepoAegis",
+            "-c",
+            "user.email=repoaegis@users.noreply.github.com",
+            "commit",
+            "--quiet",
+            "-m",
+            message,
+            cwd=target,
+            timeout=self._timeout,
+        )
+        return (await git("rev-parse", "HEAD", cwd=target, timeout=self._timeout)).strip()
+
+    async def push(self, task_id: str, *, url: str, branch: str, force: bool = False) -> None:
+        """Push one branch to a URL given for this call only.
+
+        The URL carries the credential, so it is never added as a remote and
+        never written to .git/config: a token in a repository's configuration
+        outlives the run and travels with any copy of the directory.
+        """
+        target = self.work_dir / task_id
+        args = ["push", "--quiet"]
+        if force:
+            args.append("--force")
+        args += [url, f"{branch}:refs/heads/{branch}"]
+        try:
+            await git(*args, cwd=target, timeout=self._timeout)
+        except GitError as exc:
+            # Never let a failure message carry the credential onwards.
+            raise GitError(f"push failed: {_redact(str(exc))}") from None
 
     async def release(self, task_id: str) -> None:
         """Remove one checkout. The cached objects stay for the next task.
