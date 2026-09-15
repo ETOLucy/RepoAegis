@@ -42,6 +42,10 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# RUF001-003 flag "ambiguous" unicode punctuation, which exists to catch a
+# fullwidth comma typed by accident in an English string. This project's
+# user-facing text is Chinese, where fullwidth punctuation is simply correct.
+ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.mypy]
 strict = true
