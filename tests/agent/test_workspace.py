@@ -119,7 +119,7 @@ async def test_a_missing_issue_says_so() -> None:
     def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(404, json={"message": "Not Found"})
 
-    with pytest.raises(GitHubError, match="no such issue"):
+    with pytest.raises(GitHubError, match="not found: o/r#9"):
         await _github(handler).issue(RepoRef("o", "r", 9))
 
 

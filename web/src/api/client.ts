@@ -23,6 +23,7 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     }).then(json<Task>),
+  getTask: (id: string): Promise<Task> => fetch(`/api/tasks/${id}`).then(json<Task>),
   taskEvents: (id: string): Promise<TaskEvent[]> =>
     fetch(`/api/tasks/${id}/events`).then(json<TaskEvent[]>),
   taskApprovals: (id: string): Promise<Approval[]> =>

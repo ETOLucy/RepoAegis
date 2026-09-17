@@ -21,11 +21,13 @@ def test_default_policy(kind: str, subject: str, expected: Outcome) -> None:
     assert get_policy("default").decide(kind, subject).outcome is expected
 
 
-def test_auto_approve_still_refuses_destruction() -> None:
+def test_auto_approve_still_refuses_destruction_and_publishing() -> None:
+    """Unattended must never mean outward: a scoring run opens no pull requests."""
     policy = get_policy("auto_approve")
     assert policy.decide("plan", "anything").outcome is Outcome.ALLOW
-    assert policy.decide("push", "origin main").outcome is Outcome.ALLOW
+    assert policy.decide("patch", "a diff").outcome is Outcome.ALLOW
     assert policy.decide("shell", "rm -rf /").outcome is Outcome.DENY
+    assert policy.decide("push", "origin main").outcome is Outcome.DENY
 
 
 def test_always_ask_is_the_other_end_of_the_ablation() -> None:

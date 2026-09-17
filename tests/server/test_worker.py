@@ -33,12 +33,27 @@ class RecordingSolving:
             await self._machine.advance(task.id, TaskStatus.AWAITING_PATCH_APPROVAL)
 
 
+class RecordingDelivery:
+    """Stands in for the delivery service."""
+
+    def __init__(self, machine: TaskMachine | None = None) -> None:
+        self._machine = machine
+        self.delivered: list[str] = []
+
+    async def deliver(self, task: Task) -> None:
+        self.delivered.append(task.id)
+        if self._machine is not None:
+            await self._machine.advance(task.id, TaskStatus.DONE)
+
+
 async def test_tick_claims_one_task_and_hands_it_to_planning(
     machine: TaskMachine, repo: TaskRepo, approvals: ApprovalRepo, gate: ApprovalGate
 ) -> None:
     task = await machine.create(TaskCreate(issue_url="https://github.com/o/r/issues/1"))
     planning = RecordingPlanning(machine, gate)
-    worker = Worker(machine, repo, gate, planning, RecordingSolving(), poll_seconds=0)  # type: ignore[arg-type]
+    worker = Worker(
+        machine, repo, gate, planning, RecordingSolving(), RecordingDelivery(), poll_seconds=0
+    )  # type: ignore[arg-type]
 
     assert await worker.tick() is True
     assert planning.planned == [task.id]
@@ -60,7 +75,9 @@ async def test_tick_does_nothing_when_the_queue_is_empty(
     machine: TaskMachine, repo: TaskRepo, gate: ApprovalGate
 ) -> None:
     planning = RecordingPlanning(machine, gate)
-    worker = Worker(machine, repo, gate, planning, RecordingSolving(), poll_seconds=0)  # type: ignore[arg-type]
+    worker = Worker(
+        machine, repo, gate, planning, RecordingSolving(), RecordingDelivery(), poll_seconds=0
+    )  # type: ignore[arg-type]
     assert await worker.tick() is False
     assert planning.planned == []
 
@@ -75,10 +92,36 @@ async def test_approved_work_is_taken_before_new_work(
         await machine.advance(approved.id, status)
 
     planning, solving = RecordingPlanning(machine, gate), RecordingSolving(machine)
-    worker = Worker(machine, repo, gate, planning, solving, poll_seconds=0)  # type: ignore[arg-type]
+    worker = Worker(machine, repo, gate, planning, solving, RecordingDelivery(), poll_seconds=0)  # type: ignore[arg-type]
 
     assert await worker.tick() is True
     assert solving.solved == [approved.id] and planning.planned == []
+
+    assert await worker.tick() is True
+    assert planning.planned == [waiting.id]
+
+
+async def test_work_closest_to_done_is_taken_first(
+    machine: TaskMachine, repo: TaskRepo, gate: ApprovalGate
+) -> None:
+    """A task one step from a pull request should not queue behind a new one."""
+    waiting = await machine.create(TaskCreate(issue_url="https://github.com/o/r/issues/1"))
+    ready = await machine.create(TaskCreate(issue_url="https://github.com/o/r/issues/2"))
+    for status in (
+        TaskStatus.PLANNING,
+        TaskStatus.AWAITING_APPROVAL,
+        TaskStatus.SOLVING,
+        TaskStatus.AWAITING_PATCH_APPROVAL,
+        TaskStatus.DELIVERING,
+    ):
+        await machine.advance(ready.id, status)
+
+    planning = RecordingPlanning(machine, gate)
+    delivery = RecordingDelivery(machine)
+    worker = Worker(machine, repo, gate, planning, RecordingSolving(), delivery, poll_seconds=0)  # type: ignore[arg-type]
+
+    assert await worker.tick() is True
+    assert delivery.delivered == [ready.id] and planning.planned == []
 
     assert await worker.tick() is True
     assert planning.planned == [waiting.id]

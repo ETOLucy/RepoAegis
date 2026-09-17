@@ -79,10 +79,15 @@ DEFAULT: Final = Policy(
 )
 
 # Benchmarks run unattended: everything a human would be asked about is granted,
-# but the destructive rules stay, so a run cannot wreck the harness.
+# but two rules stay. Destructive commands, so a run cannot wreck the harness --
+# and pushing, because a benchmark that opens pull requests would turn a scoring
+# run into hundreds of published branches. Unattended must never mean outward.
 AUTO_APPROVE: Final = Policy(
     name="auto_approve",
-    rules=(Rule(Outcome.DENY, kind="shell", pattern=_DESTRUCTIVE, reason="destructive command"),),
+    rules=(
+        Rule(Outcome.DENY, kind="shell", pattern=_DESTRUCTIVE, reason="destructive command"),
+        Rule(Outcome.DENY, kind="push", reason="a benchmark run must not publish anything"),
+    ),
     fallback=Outcome.ALLOW,
 )
 

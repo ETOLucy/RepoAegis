@@ -177,7 +177,7 @@ async def test_an_unreadable_issue_fails_the_task_and_frees_the_checkout(
         e for e in await repo.list_events(task_id=task.id) if e.type == "task.status_changed"
     ]
     assert failure[-1].payload["reason"] == "GitHubError"
-    assert "no such issue" in failure[-1].payload["detail"]
+    assert "not found" in failure[-1].payload["detail"]
     assert spaces.released == [task.id]
 
 

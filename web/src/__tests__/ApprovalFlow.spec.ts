@@ -225,3 +225,45 @@ describe('patch gate', () => {
     expect(wrapper.find('button.reject').exists()).toBe(true)
   })
 })
+
+describe('cost meter', () => {
+  const fetchMock = vi.fn()
+  let serverTask: Task
+
+  beforeEach(() => {
+    serverTask = { ...TASK, status: 'solving', steps: 7, cost_usd: 0.0013 }
+    vi.stubGlobal('EventSource', FakeEventSource)
+    vi.stubGlobal(
+      'fetch',
+      fetchMock.mockImplementation((url: string) => {
+        if (url === '/api/tasks') return Promise.resolve(ok([serverTask]))
+        if (url === '/api/tasks/abc') return Promise.resolve(ok(serverTask))
+        if (url === '/api/tasks/abc/approvals') return Promise.resolve(ok([]))
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('re-reads the task after a stage instead of adding up stage events', async () => {
+    // The bug this guards: the console listened only to plan.finished and
+    // summed nothing else, so everything the solving stage spent was invisible.
+    const wrapper = mount(TasksView)
+    await flushPromises()
+    expect(wrapper.text()).toContain('7 步')
+
+    serverTask = { ...serverTask, steps: 11, cost_usd: 0.002 }
+    FakeEventSource.last!.emit({
+      id: 9,
+      task_id: 'abc',
+      type: 'solve.finished',
+      payload: { steps: 4, cost_usd: 0.0007 },
+      ts: '2026-09-16T10:00:00Z',
+    })
+    await flushPromises()
+
+    // The server's running total, not the 4 steps this one stage reported.
+    expect(wrapper.text()).toContain('11 步')
+    expect(wrapper.text()).toContain('0.0020')
+  })
+})

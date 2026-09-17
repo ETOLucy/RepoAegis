@@ -167,15 +167,19 @@ class ApprovalGate:
                 "reason": approval.reason,
             },
         )
-        # Which gate this is decides where the task goes next. A call-level gate
-        # (shell, push) resumes the executor instead and moves nothing.
+        # Which gate this is decides where the task goes next. Approving a
+        # call-level gate (shell, push) moves nothing -- it unblocks the stage
+        # that asked. Refusing one always ends the task, whichever gate it was.
         granted = {
             ApprovalKind.PLAN: TaskStatus.SOLVING,
             ApprovalKind.PATCH: TaskStatus.DELIVERING,
-        }.get(approval.kind)
-        if granted is None:
+        }
+        if approval.status is ApprovalStatus.APPROVED:
+            to = granted.get(approval.kind)
+        else:
+            to = TaskStatus.REJECTED
+        if to is None:
             return
-        to = granted if approval.status is ApprovalStatus.APPROVED else TaskStatus.REJECTED
         await self._machine.advance(
             approval.task_id, to, payload={"approval_id": approval.id, "reason": approval.reason}
         )
