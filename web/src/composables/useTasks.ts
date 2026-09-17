@@ -9,6 +9,9 @@ import { api, type Approval, type Task, type TaskEvent, type TaskStatus } from '
 // No accounts yet; the audit trail still wants to know who answered a gate.
 const ACTOR = 'user:console'
 
+// Events after which the task's own counters have moved on the server.
+const STAGE_FINISHED = new Set(['plan.finished', 'solve.finished'])
+
 // Any state whose name says a human is being waited on. Listing them by prefix
 // rather than one by one means the next gate is picked up without a change here.
 const WAITING_ON_A_HUMAN = (status: TaskStatus) => status.startsWith('awaiting')
@@ -43,15 +46,19 @@ export function useTasks() {
     } else if (ev.type === 'task.status_changed' && i !== -1) {
       const current = tasks.value[i]!
       tasks.value[i] = { ...current, status: ev.payload.to as TaskStatus, updated_at: ev.ts }
-    } else if (ev.type === 'plan.finished' && i !== -1) {
-      // The run's cost lands before the status moves; show it as soon as it is known.
-      const current = tasks.value[i]!
-      tasks.value[i] = {
-        ...current,
-        steps: Number(ev.payload.steps ?? current.steps),
-        cost_usd: Number(ev.payload.cost_usd ?? current.cost_usd),
-      }
+    } else if (STAGE_FINISHED.has(ev.type) && i !== -1) {
+      // Re-read rather than add up. A stage event reports what *that* stage
+      // spent; the running total across stages is the server's to keep, and a
+      // console that sums events is the second source of truth we set out not
+      // to have. (It was also wrong: solving's cost was simply never added.)
+      void reloadTask(ev.task_id)
     }
+  }
+
+  async function reloadTask(taskId: string) {
+    const fresh = await api.getTask(taskId)
+    const i = tasks.value.findIndex((t) => t.id === taskId)
+    if (i !== -1) tasks.value[i] = fresh
   }
 
   async function loadApprovals(taskId: string) {
@@ -90,6 +97,7 @@ export function useTasks() {
     source.addEventListener('task.created', onEvent)
     source.addEventListener('task.status_changed', onEvent)
     source.addEventListener('plan.finished', onEvent)
+    source.addEventListener('solve.finished', onEvent)
     source.addEventListener('approval.requested', onEvent)
     source.addEventListener('approval.decided', onEvent)
   }
