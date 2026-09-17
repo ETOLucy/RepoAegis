@@ -6,12 +6,23 @@ from pathlib import Path
 import pytest
 
 from repoaegis.eval.dataset import Instance
+from repoaegis.eval.official import Outcome, not_run
 from repoaegis.eval.report import Result, render, result_for, summarise, write
 from repoaegis.eval.runner import Attempt
-from repoaegis.eval.scoring import Status, judge, not_run
 
-PASS = {"a::t1": Status.PASSED, "b::t2": Status.PASSED}
-BROKE = {"a::t1": Status.PASSED, "b::t2": Status.FAILED}
+
+def passed() -> Outcome:
+    """What the official harness reports for an instance it judged resolved."""
+    return Outcome(True, 1, 1, 1, 1)
+
+
+def broke() -> Outcome:
+    """Target test fixed, one of the untouchables now failing."""
+    return Outcome(False, 1, 1, 0, 1, regressions=("b::t2",))
+
+
+def unapplied() -> Outcome:
+    return Outcome(False, 0, 1, 0, 1, patch_applied=False)
 
 
 def instance(name: str, repo: str = "psf/requests", gold: str = "requests/models.py") -> Instance:
@@ -53,7 +64,7 @@ def attempt(
 
 
 def resolved_result(name: str = "i1") -> Result:
-    return result_for(instance(name), attempt(name), judge(["a::t1"], ["b::t2"], PASS))
+    return result_for(instance(name), attempt(name), passed())
 
 
 def test_an_empty_run_summarises_without_dividing_by_zero() -> None:
@@ -65,7 +76,7 @@ def test_an_empty_run_summarises_without_dividing_by_zero() -> None:
 def test_resolve_rate_is_the_headline() -> None:
     results = [
         resolved_result("i1"),
-        result_for(instance("i2"), attempt("i2"), judge(["a::t1"], ["b::t2"], BROKE)),
+        result_for(instance("i2"), attempt("i2"), broke()),
     ]
     summary = summarise(results)
 
@@ -76,8 +87,12 @@ def test_resolve_rate_is_the_headline() -> None:
 
 def test_costs_and_steps_are_averaged_and_totalled() -> None:
     results = [
-        result_for(instance("i1"), attempt("i1", cost=0.01, steps=4, seconds=10), not_run([], [])),
-        result_for(instance("i2"), attempt("i2", cost=0.03, steps=8, seconds=30), not_run([], [])),
+        result_for(
+            instance("i1"), attempt("i1", cost=0.01, steps=4, seconds=10), not_run(instance("x"))
+        ),
+        result_for(
+            instance("i2"), attempt("i2", cost=0.03, steps=8, seconds=30), not_run(instance("x"))
+        ),
     ]
     summary = summarise(results)
 
@@ -90,10 +105,16 @@ def test_costs_and_steps_are_averaged_and_totalled() -> None:
 def test_localisation_is_measured_against_the_reference_files() -> None:
     """One instance hits, one misses, one over-reaches: precision 2/4, recall 2/3."""
     results = [
-        result_for(instance("i1", gold="a.py"), attempt("i1", files=("a.py",)), not_run([], [])),
-        result_for(instance("i2", gold="b.py"), attempt("i2", files=("z.py",)), not_run([], [])),
         result_for(
-            instance("i3", gold="c.py"), attempt("i3", files=("c.py", "extra.py")), not_run([], [])
+            instance("i1", gold="a.py"), attempt("i1", files=("a.py",)), not_run(instance("x"))
+        ),
+        result_for(
+            instance("i2", gold="b.py"), attempt("i2", files=("z.py",)), not_run(instance("x"))
+        ),
+        result_for(
+            instance("i3", gold="c.py"),
+            attempt("i3", files=("c.py", "extra.py")),
+            not_run(instance("x")),
         ),
     ]
     summary = summarise(results)
@@ -108,10 +129,10 @@ def test_every_unresolved_instance_lands_in_exactly_one_bucket() -> None:
         result_for(
             instance("crashed"),
             attempt("crashed", status="failed", files=(), failure="GitHubError: no such issue"),
-            not_run(["a::t1"], ["b::t2"]),
+            not_run(instance("x")),
         ),
-        result_for(instance("regressed"), attempt("regressed"), judge(["a::t1"], ["b::t2"], BROKE)),
-        result_for(instance("silent"), attempt("silent"), judge(["a::t1"], ["b::t2"], {})),
+        result_for(instance("regressed"), attempt("regressed"), broke()),
+        result_for(instance("silent"), attempt("silent"), unapplied()),
     ]
     buckets = [r.failure_bucket for r in results]
 
@@ -119,7 +140,7 @@ def test_every_unresolved_instance_lands_in_exactly_one_bucket() -> None:
         "resolved",
         "no_patch:GitHubError",
         "broke_other_tests",
-        "tests_did_not_run",
+        "patch_did_not_apply",
     ]
     assert sum(summarise(results).failures.values()) == len(results)
 
@@ -130,7 +151,7 @@ def test_a_run_is_split_by_repository_when_there_is_more_than_one() -> None:
         result_for(
             instance("i2", repo="pallets/flask"),
             attempt("i2"),
-            judge(["a::t1"], ["b::t2"], BROKE),
+            broke(),
         ),
     ]
     summary = summarise(results)
@@ -163,7 +184,7 @@ def test_a_run_with_no_patch_writes_no_diff_file(tmp_path: Path) -> None:
         result_for(
             instance("i1"),
             attempt("i1", status="failed", files=(), failure="RuntimeError: boom"),
-            not_run(["a::t1"], ["b::t2"]),
+            not_run(instance("x")),
         )
     ]
     directory = write(tmp_path / "run-2", results, summarise(results))

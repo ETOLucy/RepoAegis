@@ -25,8 +25,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from repoaegis.eval.dataset import Instance
+from repoaegis.eval.official import Outcome
 from repoaegis.eval.runner import Attempt
-from repoaegis.eval.scoring import Outcome
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +46,11 @@ class Result:
 
     @property
     def failure_bucket(self) -> str:
-        """One word for why this instance did not resolve."""
+        """One word for why this instance did not resolve.
+
+        The order matters: each bucket names a different thing to go and fix,
+        and the earlier ones would otherwise be hidden inside the later ones.
+        """
         if self.outcome.resolved:
             return "resolved"
         if self.attempt.status == "failed":
@@ -54,10 +58,14 @@ class Result:
             return f"no_patch:{reason}"
         if not self.attempt.produced_patch:
             return "no_patch:empty"
+        if self.outcome.infra_failure:
+            return "infra_failure"
+        if self.outcome.error:
+            return "not_scored"
+        if not self.outcome.patch_applied:
+            return "patch_did_not_apply"
         if self.outcome.regressions:
             return "broke_other_tests"
-        if self.outcome.missing:
-            return "tests_did_not_run"
         return "did_not_fix"
 
 
