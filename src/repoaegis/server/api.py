@@ -13,6 +13,9 @@ from fastapi.responses import StreamingResponse
 from repoaegis import __version__
 from repoaegis.agent.github import GitHub
 from repoaegis.agent.llm import LLM, Budget, DeepSeek
+from repoaegis.agent.rounds import Verifier
+from repoaegis.agent.sandbox import Docker, DockerSandbox, EnvironmentImages, Limits
+from repoaegis.agent.testing import DockerVerifier
 from repoaegis.agent.workspace import Workspaces
 from repoaegis.server.config import Settings, configure_logging
 from repoaegis.server.delivery import DeliveryService
@@ -158,6 +161,21 @@ async def stream_events(
     )
 
 
+def _verifier(settings: Settings) -> Verifier | None:
+    if not settings.sandbox_enabled:
+        return None
+    sandbox = DockerSandbox(
+        Docker(settings.sandbox_docker_prefix.split()),
+        limits=Limits(memory=settings.sandbox_memory),
+    )
+    images = EnvironmentImages(
+        sandbox,
+        base_image=settings.sandbox_base_image,
+        build_timeout=settings.sandbox_build_timeout_seconds,
+    )
+    return DockerVerifier(sandbox, images, timeout_seconds=settings.sandbox_timeout_seconds)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     configure_logging(json=settings.log_json)
@@ -215,9 +233,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             gate,
             workspaces,
             llm_for,
-            # No verifier yet: until a sandbox exists, solving hands straight
-            # to the patch gate, exactly as before.
-            verifier=None,
+            # Without a sandbox, solving hands straight to the patch gate and
+            # the envelope says no tests were run.
+            verifier=_verifier(settings),
             max_steps=settings.agent_max_edit_steps,
             max_rounds=settings.agent_max_rounds,
             budget_usd=settings.llm_budget_usd,

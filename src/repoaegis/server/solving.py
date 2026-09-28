@@ -181,7 +181,8 @@ class SolvingService:
         round_no = len(attempts) + 1
         await self._machine.advance(task.id, TaskStatus.VERIFYING, payload={"round": round_no})
         try:
-            report = await self._verifier.run(Workspace(root=path), plan)
+            touched = sorted({f for a in attempts for f in a.changed_files} | set(run.changed))
+            report = await self._verifier.run(Workspace(root=path), plan, touched)
         except Exception as exc:
             await self._fail(task, "verifier_error", f"{type(exc).__name__}: {exc}")
             return

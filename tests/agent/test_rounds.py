@@ -40,7 +40,7 @@ def test_counts_and_failures_come_from_the_junit_xml() -> None:
     assert report.log_path == ".repoaegis/runs/1/pytest.log"
 
     first, second = report.failures
-    assert first.test == "test_body.py::test_empty_body_is_bytes"
+    assert first.test == "test_body::test_empty_body_is_bytes"  # classname::name, stable
     assert (first.file, first.line, first.kind) == ("test_body.py", 8, "AssertionError")
     assert first.message.startswith("AssertionError: assert None == b''")
     assert first.excerpt.splitlines()[0].startswith(">")  # the failing statement
@@ -84,7 +84,7 @@ def test_the_rendered_report_leads_with_counts_and_names_each_failure() -> None:
     text = parse_junitxml(JUNIT, log_path="log.txt").render()
     lines = text.splitlines()
     assert lines[0] == "1 passed, 2 failed, 0 errors, 0 skipped (0.1s)"
-    assert "FAIL test_body.py::test_empty_body_is_bytes  (test_body.py:8, AssertionError)" in text
+    assert "FAIL test_body::test_empty_body_is_bytes  (test_body.py:8, AssertionError)" in text
     assert "full log: log.txt" in text
 
 
