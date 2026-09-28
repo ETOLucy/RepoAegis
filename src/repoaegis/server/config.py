@@ -60,6 +60,17 @@ class Settings(BaseSettings):
     sse_heartbeat_seconds: float = 15.0
     log_json: bool = False
 
+    # The sandbox the repository's tests run in. Off by default so a checkout
+    # without Docker still plans, edits and asks for review; on, every round
+    # ends with a real test run. The prefix reaches an engine on another host
+    # (on the development machine: "wsl -d Ubuntu --").
+    sandbox_enabled: bool = False
+    sandbox_docker_prefix: str = ""
+    sandbox_base_image: str = "python:3.12-slim"
+    sandbox_timeout_seconds: float = 600.0
+    sandbox_build_timeout_seconds: float = 1800.0
+    sandbox_memory: str = "4g"
+
     # Scoring is SWE-bench's own harness, which needs Docker and its own
     # interpreter. On this machine the engine lives inside WSL, so the harness
     # is invoked through a prefix and paths crossing the boundary are rewritten.

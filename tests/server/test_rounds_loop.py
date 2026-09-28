@@ -4,6 +4,7 @@ Builds on the fixtures in ``test_solving``: a real git checkout, a scripted
 model, and the plan envelope a reviewer already approved.
 """
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +43,7 @@ class ScriptedVerifier:
         self.script = list(reports)
         self.seen: list[Path] = []
 
-    async def run(self, ws: Workspace, plan: Plan) -> TestReport:
+    async def run(self, ws: Workspace, plan: Plan, changed: Sequence[str]) -> TestReport:
         self.seen.append(ws.root)
         return self.script.pop(0)
 
@@ -218,7 +219,7 @@ async def test_a_crashing_verifier_fails_the_task_instead_of_wedging_it(
     spaces: RecordingWorkspaces,
 ) -> None:
     class Broken:
-        async def run(self, ws: Workspace, plan: Plan) -> TestReport:
+        async def run(self, ws: Workspace, plan: Plan, changed: Sequence[str]) -> TestReport:
             raise RuntimeError("docker is not running")
 
     task = await approved_task(machine, approvals, spaces)

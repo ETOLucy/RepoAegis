@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -61,6 +62,9 @@ class TestReport(BaseModel):
     duration_seconds: float = 0.0
     failures: list[Failure] = Field(default_factory=list)
     omitted: int = Field(default=0, description="Failures beyond MAX_FAILURES, counted not listed")
+    preexisting: int = Field(
+        default=0, description="Tests that fail without the change too; not counted against it"
+    )
     log_path: str = Field(default="", description="Where the full output was written")
 
     @property
@@ -81,6 +85,10 @@ class TestReport(BaseModel):
                 lines.append(f"       {f.message.splitlines()[0]}")
         if self.omitted:
             lines.append(f"  … and {self.omitted} more failures; see the full log")
+        if self.preexisting:
+            lines.append(
+                f"  {self.preexisting} tests fail on the unchanged code as well and are not counted"
+            )
         if self.log_path:
             lines.append(f"  full log: {self.log_path}")
         return "\n".join(lines)
@@ -110,21 +118,30 @@ def render_attempts(attempts: list[Attempt] | tuple[Attempt, ...]) -> str:
 class Verifier(Protocol):
     """Runs the repository's tests against the workspace and reports back.
 
-    The implementation is wherever the sandbox is; this module only fixes the
-    shape of what comes out.
+    ``changed`` is every file the rounds so far have touched; it is what test
+    selection keys on. The implementation is wherever the sandbox is; this
+    module only fixes the shape of what comes out.
     """
 
-    async def run(self, ws: Workspace, plan: Plan) -> TestReport: ...
+    async def run(self, ws: Workspace, plan: Plan, changed: Sequence[str]) -> TestReport: ...
 
 
-def parse_junitxml(text: str, *, log_path: str | Path = "") -> TestReport:
+def parse_junitxml(
+    text: str, *, log_path: str | Path = "", known_failing: Iterable[str] = ()
+) -> TestReport:
     """Turn pytest's ``--junitxml`` output into a report.
+
+    ``known_failing`` are test ids that fail on the unchanged tree; a case in
+    that set is counted as ``preexisting`` rather than as a failure, which is
+    the harness-level baseline check the survey (3.5) describes: what was
+    broken before the patch is not the patch's regression.
 
     Handles both a bare ``<testsuite>`` and the ``<testsuites>`` wrapper newer
     pytest writes; suites are summed. A test case counts as failed if it holds
     a ``<failure>``, as an error if it holds an ``<error>``, and as skipped if
     it holds a ``<skipped>``.
     """
+    known = set(known_failing)
     root = ET.fromstring(text)
     suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
 
@@ -143,6 +160,9 @@ def parse_junitxml(text: str, *, log_path: str | Path = "") -> TestReport:
             if node is None:
                 report.passed += 1
                 continue
+            if _test_id(case, node) in known:
+                report.preexisting += 1
+                continue
             if failure is not None:
                 report.failed += 1
             else:
@@ -157,9 +177,34 @@ def parse_junitxml(text: str, *, log_path: str | Path = "") -> TestReport:
     return report
 
 
-def _failure(case: ET.Element, node: ET.Element) -> Failure:
+def failing_ids(text: str) -> set[str]:
+    """Every failing or erroring test id in a JUnit file, uncapped."""
+    root = ET.fromstring(text)
+    suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+    ids: set[str] = set()
+    for suite in suites:
+        for case in suite.iter("testcase"):
+            node = case.find("failure")
+            if node is None:
+                node = case.find("error")
+            if node is not None:
+                ids.add(_test_id(case, node))
+    return ids
+
+
+def _test_id(case: ET.Element, node: ET.Element) -> str:
+    """``classname::name`` -- stable across runs.
+
+    The traceback's file is *not* part of the id: the same test can surface
+    its failure in a different frame on the patched tree than on the base
+    tree, and an id that moved would never match a baseline entry.
+    """
     name = case.get("name") or "?"
     classname = case.get("classname") or ""
+    return f"{classname}::{name}" if classname else name
+
+
+def _failure(case: ET.Element, node: ET.Element) -> Failure:
     body = node.text or ""
     message = (node.get("message") or "").strip()
 
@@ -168,8 +213,9 @@ def _failure(case: ET.Element, node: ET.Element) -> Failure:
     if frames:
         last = frames[-1]
         file, line, kind = last["file"], int(last["line"]), last["kind"]
-    if not kind and message:
-        kind = message.split(":", 1)[0].strip() if ":" in message else ""
+    first = message.splitlines()[0] if message else ""
+    if not kind and ":" in first:
+        kind = first.split(":", 1)[0].strip()[:60]
     if not message:
         message = next((ln[1:].strip() for ln in body.splitlines() if ln.startswith("E ")), "")
 
@@ -177,9 +223,8 @@ def _failure(case: ET.Element, node: ET.Element) -> Failure:
     marked = [ln for ln in body.splitlines() if ln.startswith((">", "E "))]
     excerpt = "\n".join(marked[:MAX_EXCERPT_LINES])
 
-    test = f"{file}::{name}" if file else f"{classname}::{name}" if classname else name
     return Failure(
-        test=test,
+        test=_test_id(case, node),
         file=file,
         line=line,
         kind=kind,
