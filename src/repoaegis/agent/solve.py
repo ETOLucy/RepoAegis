@@ -17,7 +17,7 @@ breach this round's rule that no repository code is run.
 from __future__ import annotations
 
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,7 +26,8 @@ import structlog
 from repoaegis.agent.edits import EDIT_SCHEMAS, EditLog, run_edit
 from repoaegis.agent.llm import LLM, Budget, Completion, Message, ToolCall, Usage
 from repoaegis.agent.plan import Plan
-from repoaegis.agent.tools import SCHEMAS, Workspace, run_tool
+from repoaegis.agent.rounds import Attempt, render_attempts
+from repoaegis.agent.tools import MAX_CHARS, SCHEMAS, Workspace, run_tool
 from repoaegis.agent.verify import SyntaxProblem, check_syntax
 
 log = structlog.get_logger(__name__)
@@ -45,7 +46,13 @@ output behind.
 
 Call finish when the edits are complete. It checks that every file you touched \
 still parses, so a syntax error comes back to you rather than reaching the \
-reviewer."""
+reviewer. State your hypothesis when you finish: the tests may fail and the \
+next round will read it before trying again, so it should say what you \
+believed the cause was, not just what you typed.
+
+If the briefing lists earlier rounds, their edits are already in the working \
+tree. Read the failing tests before changing anything, and do not re-try a \
+hypothesis that has already failed."""
 
 FINISH = {
     "type": "function",
@@ -61,12 +68,24 @@ FINISH = {
                 "summary": {
                     "type": "string",
                     "description": "One or two sentences on what you changed and why.",
-                }
+                },
+                "hypothesis": {
+                    "type": "string",
+                    "description": (
+                        "One sentence: what you believe the root cause is and how the "
+                        "change addresses it. Kept across rounds so a failed idea is not "
+                        "tried twice."
+                    ),
+                },
             },
-            "required": ["summary"],
+            "required": ["summary", "hypothesis"],
         },
     },
 }
+
+# The briefing quotes the working tree's diff so a later round sees what the
+# earlier ones did without spending steps on git. Same ceiling as a tool result.
+MAX_DIFF_CHARS = MAX_CHARS
 
 STEP_LIMIT_NOTICE = """\
 You have used the whole step budget. Call finish now with what you have done so \
@@ -83,6 +102,7 @@ class SolveRun:
     problems: tuple[str, ...] = ()
     forced: bool = False
     transcript: tuple[Message, ...] = field(default=())
+    hypothesis: str = ""
 
     @property
     def ok(self) -> bool:
@@ -111,11 +131,24 @@ class Solver:
         self._deadline = deadline_seconds
         self._on_step = on_step
 
-    async def run(self, *, title: str, body: str, plan: Plan) -> SolveRun:
+    async def run(
+        self,
+        *,
+        title: str,
+        body: str,
+        plan: Plan,
+        attempts: Sequence[Attempt] = (),
+        diff: str = "",
+    ) -> SolveRun:
+        """One round. ``attempts`` are the earlier rounds' records, ``diff`` the tree's state.
+
+        Nothing from an earlier round's conversation is here by design: the
+        record is the handoff, the transcript is not.
+        """
         edits = EditLog()
         messages: list[Message] = [
             {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": _briefing(title, body, plan)},
+            {"role": "user", "content": _briefing(title, body, plan, attempts, diff)},
         ]
         usage = Usage()
         repairs = 0
@@ -165,6 +198,7 @@ class Solver:
                     continue
 
                 summary = str(call.arguments.get("summary", ""))
+                hypothesis = str(call.arguments.get("hypothesis", ""))
                 changed = tuple(sorted(edits.changed))
                 if problems:
                     return SolveRun(
@@ -176,9 +210,15 @@ class Solver:
                         tuple(str(p) for p in problems),
                         forced,
                         tuple(messages),
+                        hypothesis,
                     )
-                await self._report("agent.edits_ready", {"step": step, "changed": list(changed)})
-                return SolveRun(summary, changed, step, usage, "model", (), forced, tuple(messages))
+                await self._report(
+                    "agent.edits_ready",
+                    {"step": step, "changed": list(changed), "hypothesis": hypothesis[:500]},
+                )
+                return SolveRun(
+                    summary, changed, step, usage, "model", (), forced, tuple(messages), hypothesis
+                )
 
         return SolveRun(
             "",
@@ -211,18 +251,30 @@ class Solver:
             await self._on_step(kind, payload)
 
 
-def _briefing(title: str, body: str, plan: Plan) -> str:
+def _briefing(
+    title: str, body: str, plan: Plan, attempts: Sequence[Attempt] = (), diff: str = ""
+) -> str:
     cited = "\n".join(
         f"- {loc.file}:{loc.line_start}-{loc.line_end} — {loc.why}" for loc in plan.locations
     )
-    return (
+    text = (
         f"Issue: {title}\n\n{body}\n\n"
         f"--- approved plan ---\n"
         f"Diagnosis: {plan.diagnosis}\n"
         f"Locations:\n{cited or '- (none given)'}\n"
         f"Approach: {plan.approach}\n"
         f"Verification: {plan.verification}"
-    ).strip()
+    )
+    if attempts:
+        text += (
+            f"\n\n--- earlier rounds ({len(attempts)}) ---\n"
+            f"{render_attempts(list(attempts))}\n"
+            f"This is round {len(attempts) + 1}. The edits above are already in the working tree."
+        )
+    if diff.strip():
+        shown = diff if len(diff) <= MAX_DIFF_CHARS else diff[:MAX_DIFF_CHARS] + "\n… [truncated]"
+        text += f"\n\n--- current diff against the base commit ---\n{shown}"
+    return text.strip()
 
 
 def _assistant(completion: Completion) -> Message:

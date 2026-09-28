@@ -91,7 +91,11 @@ def call(name: str, arguments: dict[str, Any], id: str = "c") -> Completion:
 
 
 EDIT = call("replace", {"path": "sessions.py", "old": "return resp", "new": "return resp.fixed"})
-FINISH = call("finish", {"summary": "carried the fragment through"}, id="fin")
+FINISH = call(
+    "finish",
+    {"summary": "carried the fragment through", "hypothesis": "the fragment was dropped"},
+    id="fin",
+)
 
 
 @pytest.fixture

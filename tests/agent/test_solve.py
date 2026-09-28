@@ -7,6 +7,7 @@ import pytest
 
 from repoaegis.agent.llm import Budget, Completion, Message, ToolCall, Usage
 from repoaegis.agent.plan import Location, Plan
+from repoaegis.agent.rounds import Attempt, Failure, TestReport
 from repoaegis.agent.solve import Solver
 from repoaegis.agent.tools import Workspace
 from repoaegis.agent.verify import check_syntax
@@ -37,8 +38,8 @@ def call(name: str, arguments: dict[str, Any], id: str = "c1") -> Completion:
     return Completion(tool_calls=(ToolCall(id=id, name=name, arguments=arguments),))
 
 
-def finish(summary: str = "done") -> Completion:
-    return call("finish", {"summary": summary}, id="fin")
+def finish(summary: str = "done", hypothesis: str = "the fragment was dropped") -> Completion:
+    return call("finish", {"summary": summary, "hypothesis": hypothesis}, id="fin")
 
 
 @pytest.fixture
@@ -168,3 +169,61 @@ async def test_edit_arguments_are_shortened_in_the_event_log(ws: Workspace) -> N
 
 def test_check_syntax_only_looks_at_files_that_exist(ws: Workspace) -> None:
     assert check_syntax(ws, {"src/sessions.py", "deleted.py", "notes.txt"}) == []
+
+
+async def test_the_hypothesis_given_at_finish_lands_on_the_run(ws: Workspace) -> None:
+    llm = ScriptedLLM(
+        call("replace", {"path": "src/sessions.py", "old": "return resp", "new": "return resp2"}),
+        finish("done", hypothesis="the fragment is lost before the redirect"),
+    )
+    run = await Solver(llm, ws).run(title="t", body="b", plan=PLAN)
+    assert run.hypothesis == "the fragment is lost before the redirect"
+
+
+async def test_a_finish_without_a_hypothesis_is_tolerated(ws: Workspace) -> None:
+    """The schema requires it; a model that omits it anyway must not crash the round."""
+    llm = ScriptedLLM(
+        call("replace", {"path": "src/sessions.py", "old": "return resp", "new": "return resp2"}),
+        call("finish", {"summary": "done"}, id="fin"),
+    )
+    run = await Solver(llm, ws).run(title="t", body="b", plan=PLAN)
+    assert run.ok and run.hypothesis == ""
+
+
+async def test_earlier_rounds_and_the_diff_are_briefed_but_their_transcripts_are_not(
+    ws: Workspace,
+) -> None:
+    """The handoff between rounds is the record, not the conversation."""
+    earlier = Attempt(
+        round=1,
+        hypothesis="the fragment was never read",
+        changed_files=["src/sessions.py"],
+        report=TestReport(
+            passed=3,
+            failed=1,
+            failures=[
+                Failure(test="tests/test_redirects.py::test_fragment", kind="AssertionError")
+            ],
+            log_path=".repoaegis/runs/1/pytest.log",
+        ),
+    )
+    llm = ScriptedLLM(finish())
+    await Solver(llm, ws).run(
+        title="t", body="b", plan=PLAN, attempts=[earlier], diff="--- a/src/sessions.py\n+x"
+    )
+
+    briefing = str(llm.seen[0][1]["content"])
+    assert "earlier rounds (1)" in briefing and "This is round 2" in briefing
+    assert "hypothesis: the fragment was never read" in briefing
+    assert "FAIL tests/test_redirects.py::test_fragment" in briefing
+    assert ".repoaegis/runs/1/pytest.log" in briefing
+    assert "--- a/src/sessions.py" in briefing
+    # Only the system prompt and the briefing: no earlier round's messages.
+    assert len(llm.seen[0]) == 2
+
+
+async def test_a_first_round_briefing_has_no_rounds_section(ws: Workspace) -> None:
+    llm = ScriptedLLM(finish())
+    await Solver(llm, ws).run(title="t", body="b", plan=PLAN)
+    briefing = str(llm.seen[0][1]["content"])
+    assert "earlier rounds" not in briefing and "current diff" not in briefing

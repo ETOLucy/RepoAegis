@@ -215,7 +215,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             gate,
             workspaces,
             llm_for,
+            # No verifier yet: until a sandbox exists, solving hands straight
+            # to the patch gate, exactly as before.
+            verifier=None,
             max_steps=settings.agent_max_edit_steps,
+            max_rounds=settings.agent_max_rounds,
             budget_usd=settings.llm_budget_usd,
         )
         delivery = DeliveryService(
