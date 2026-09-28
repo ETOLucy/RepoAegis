@@ -60,6 +60,16 @@ class Settings(BaseSettings):
     sse_heartbeat_seconds: float = 15.0
     log_json: bool = False
 
+    # Scoring is SWE-bench's own harness, which needs Docker and its own
+    # interpreter. On this machine the engine lives inside WSL, so the harness
+    # is invoked through a prefix and paths crossing the boundary are rewritten.
+    # Absolute, because there is no shell on the other side to expand "~".
+    eval_harness_python: str = ""
+    eval_harness_prefix: str = ""
+    eval_dataset_name: str = "SWE-bench/SWE-bench_Verified"
+    eval_max_workers: int = 4
+    eval_timeout_seconds: float = 3600.0
+
 
 def configure_logging(*, json: bool) -> None:
     renderer: Processor = (
