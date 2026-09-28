@@ -132,9 +132,14 @@ def harness_path(path: Path, *, translate: bool) -> str:
     """
     if not translate:
         return str(path)
-    windows = PureWindowsPath(path.resolve())
+    # Read the drive off the path as given before resolving: on a POSIX host
+    # (CI) ``resolve`` would glue "D:/x" under the working directory and the
+    # drive letter would be lost.
+    windows = PureWindowsPath(str(path))
     if not windows.drive:
-        return path.as_posix()
+        windows = PureWindowsPath(str(path.resolve()))
+    if not windows.drive:
+        return path.resolve().as_posix()
     tail = "/".join(windows.parts[1:])
     return f"/mnt/{windows.drive[0].lower()}/{tail}"
 
