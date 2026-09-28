@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     git_timeout_seconds: float = 300.0
     agent_max_steps: int = 20
     agent_max_edit_steps: int = 30
+    # Solve/verify rounds per task. Running out is not a failure: the patch
+    # goes to the reviewer with the red report and the hypotheses attached.
+    agent_max_rounds: int = 3
     sse_heartbeat_seconds: float = 15.0
     log_json: bool = False
 

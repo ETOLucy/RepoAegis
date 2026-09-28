@@ -67,6 +67,33 @@ const run = computed(() => {
   return typeof steps === 'number' ? { steps, cost: Number(cost ?? 0), forced: !!forced } : null
 })
 
+// A patch envelope carries what the solver believed and what the tests said.
+// The report is absent when no sandbox is configured, and that absence is
+// shown rather than papered over: the reviewer should know nothing was run.
+type Failure = { test: string; file?: string; line?: number; kind?: string; message?: string }
+type Report = { passed: number; failed: number; errors: number; failures: Failure[] }
+
+const hypothesis = computed(() => {
+  const h = props.approval.payload?.hypothesis
+  return typeof h === 'string' && h.trim() ? h : null
+})
+
+const rounds = computed(() => {
+  const r = props.approval.payload?.rounds
+  return typeof r === 'number' ? r : null
+})
+
+const report = computed<Report | null>(() => {
+  const r = props.approval.payload?.report as Partial<Report> | null | undefined
+  if (props.approval.kind !== 'patch' || !r || typeof r.failed !== 'number') return null
+  return {
+    passed: r.passed ?? 0,
+    failed: r.failed,
+    errors: r.errors ?? 0,
+    failures: Array.isArray(r.failures) ? r.failures : [],
+  }
+})
+
 const body = computed(() => JSON.stringify(props.approval.payload, null, 2))
 const expires = computed(() => new Date(props.approval.expires_at).toLocaleString())
 
@@ -132,6 +159,19 @@ async function send(decision: 'approve' | 'reject') {
 
     <template v-else-if="patch !== null">
       <p class="diagnosis">{{ approval.subject }}</p>
+      <p v-if="hypothesis" class="hypothesis"><span class="muted">假设</span> {{ hypothesis }}</p>
+
+      <p v-if="report" class="tests" :class="report.failed + report.errors ? 'red' : 'green'">
+        测试 {{ report.passed }} 通过 · {{ report.failed }} 失败 · {{ report.errors }} 错误
+        <span v-if="rounds" class="muted">（第 {{ rounds }} 轮）</span>
+      </p>
+      <p v-else class="tests muted">未运行测试（没有配置沙箱），只做了语法检查。</p>
+      <ul v-if="report && report.failures.length" class="failures">
+        <li v-for="f in report.failures" :key="f.test">
+          <code>{{ f.test }}</code>
+          <span class="muted">{{ f.kind }}<template v-if="f.message">: {{ f.message }}</template></span>
+        </li>
+      </ul>
 
       <ul v-if="changed.length" class="files">
         <li v-for="file in changed" :key="file">
@@ -244,6 +284,34 @@ async function send(decision: 'approve' | 'reject') {
 .forced {
   color: #d29922;
   opacity: 1;
+}
+.hypothesis {
+  margin: 0 0 0.6rem;
+  line-height: 1.5;
+}
+.hypothesis .muted {
+  margin-right: 0.4rem;
+}
+.tests {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+}
+.tests.green {
+  color: #3fb950;
+}
+.tests.red {
+  color: #f85149;
+}
+.failures {
+  margin: 0 0 0.6rem;
+  padding-left: 1.2rem;
+  font-size: 0.9rem;
+}
+.failures li {
+  margin: 0.15rem 0;
+}
+.failures .muted {
+  margin-left: 0.4rem;
 }
 details {
   margin-bottom: 0.6rem;
