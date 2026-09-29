@@ -57,6 +57,18 @@ async def test_git_reports_failures_with_the_reason(tmp_path: Path) -> None:
     assert "git rev-parse failed" in str(caught.value)
 
 
+async def test_git_errors_keep_the_lines_before_the_summary(tmp_path: Path) -> None:
+    """Git states the cause first and summarises last. A push refused by
+    GitHub ends in "failed to push some refs"; the reason is the line above,
+    and dropping it once turned a scope problem into a mystery."""
+    await git("init", "--quiet", str(tmp_path), timeout=30)  # no commits, so no HEAD
+    with pytest.raises(GitError) as caught:
+        await git("push", str(tmp_path / "r.git"), "HEAD:refs/heads/x", cwd=tmp_path, timeout=30)
+    message = str(caught.value)
+    assert "src refspec HEAD does not match any" in message  # the cause
+    assert "failed to push some refs" in message  # the summary
+
+
 async def test_git_runs_without_a_shell(tmp_path: Path) -> None:
     await git("init", "--quiet", str(tmp_path / "repo"), timeout=30)
     assert (tmp_path / "repo" / ".git").exists()

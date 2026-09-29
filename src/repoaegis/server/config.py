@@ -7,6 +7,7 @@ Everything is overridable through ``REPOAEGIS_*`` environment variables or a
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
 import structlog
@@ -83,6 +84,13 @@ class Settings(BaseSettings):
 
 
 def configure_logging(*, json: bool) -> None:
+    # A log line quotes event payloads, and payloads quote issue text, which
+    # can hold any character at all. On a Windows console the default codec
+    # is GBK, and one emoji in an issue body once took down a state transition
+    # from inside the log call. Logging must never be able to do that.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     renderer: Processor = (
         structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer()
     )
