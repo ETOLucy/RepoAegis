@@ -46,9 +46,10 @@ output behind.
 
 Call finish when the edits are complete. It checks that every file you touched \
 still parses, so a syntax error comes back to you rather than reaching the \
-reviewer. State your hypothesis when you finish: the tests may fail and the \
-next round will read it before trying again, so it should say what you \
-believed the cause was, not just what you typed.
+reviewer. Its summary becomes the pull request description, so write it about \
+the finished change, not about this round. State your hypothesis separately: \
+the tests may fail and the next round will read it before trying again, so it \
+should say what you believed the cause was, not just what you typed.
 
 If the briefing lists earlier rounds, their edits are already in the working \
 tree. Read the failing tests before changing anything, and do not re-try a \
@@ -67,7 +68,13 @@ FINISH = {
             "properties": {
                 "summary": {
                     "type": "string",
-                    "description": "One or two sentences on what you changed and why.",
+                    "description": (
+                        "The change as it now stands in the working tree, written for the "
+                        "reviewer who will read the pull request: what was wrong and what the "
+                        "diff does about it, in two to four sentences. Describe the whole "
+                        "change, not this round's delta, and leave out the rounds, the test "
+                        "environment and anything else about how you got here."
+                    ),
                 },
                 "hypothesis": {
                     "type": "string",
