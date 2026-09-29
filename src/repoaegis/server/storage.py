@@ -15,6 +15,7 @@ than a few milliseconds of disk.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -39,9 +40,12 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from repoaegis.server.models import (
+    LEASED_STATES,
+    RECLAIM_TARGET,
     Approval,
     ApprovalKind,
     ApprovalStatus,
+    Claim,
     Event,
     Task,
     TaskStatus,
@@ -168,6 +172,34 @@ def _enable_sqlite_concurrency(engine: AsyncEngine) -> None:
         cursor.close()
 
 
+class StaleLease(RuntimeError):
+    """The writer's claim is not the task's current lease.
+
+    Raised from the write itself, never from a check before it: the lease is
+    compared inside the same statement or transaction that writes, so a worker
+    that lost its lease between looking and writing is still refused.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class Reclaimed:
+    """One task taken back from an expired lease."""
+
+    task: Task
+    previous_status: TaskStatus
+    previous_owner: str | None
+    exhausted: bool
+
+
+# Entering any of these ends the worker's involvement, so the lease goes too.
+_RELEASING = frozenset(TaskStatus) - LEASED_STATES
+
+
+def _lease_condition(claim: Claim | None) -> Any:
+    """What a write must find on the row: my token, or no lease at all."""
+    return TaskRow.lease_token == claim.token if claim else TaskRow.lease_owner.is_(None)
+
+
 class InMemorySQLiteRejected(ValueError):
     """Raised instead of handing back a database that silently drops writes."""
 
@@ -235,7 +267,7 @@ class TaskRepo:
     async def next_queued(self) -> Task | None:
         stmt = (
             select(TaskRow)
-            .where(TaskRow.status == TaskStatus.QUEUED.value)
+            .where(TaskRow.status == TaskStatus.QUEUED.value, TaskRow.lease_owner.is_(None))
             .order_by(TaskRow.created_at)
             .limit(1)
         )
@@ -244,9 +276,10 @@ class TaskRepo:
         return _task(row) if row else None
 
     async def next_in(self, status: TaskStatus) -> Task | None:
+        """The oldest task in ``status`` that no worker currently holds."""
         stmt = (
             select(TaskRow)
-            .where(TaskRow.status == status.value)
+            .where(TaskRow.status == status.value, TaskRow.lease_owner.is_(None))
             .order_by(TaskRow.created_at)
             .limit(1)
         )
@@ -255,39 +288,199 @@ class TaskRepo:
         return _task(row) if row else None
 
     async def transition(
-        self, task_id: str, *, expected: TaskStatus, to: TaskStatus
+        self, task_id: str, *, expected: TaskStatus, to: TaskStatus, claim: Claim | None = None
     ) -> Task | None:
-        """Compare-and-set. Returns ``None`` if the task was not in ``expected``."""
+        """Compare-and-set on status *and* lease.
+
+        Returns ``None`` if the task was not in ``expected``. Raises
+        ``StaleLease`` if it was, but the lease is not the writer's: a worker
+        writing with an old token, or a lease-less writer (a human answering a
+        gate) on a task some worker currently holds. Entering a state that no
+        worker works in releases the lease in the same statement.
+        """
+        values: dict[str, Any] = {"status": to.value, "updated_at": _now()}
+        if to in _RELEASING:
+            values.update(lease_owner=None, lease_until=None)
         stmt = (
             update(TaskRow)
-            .where(TaskRow.id == task_id, TaskRow.status == expected.value)
-            .values(status=to.value, updated_at=_now())
+            .where(TaskRow.id == task_id, TaskRow.status == expected.value, _lease_condition(claim))
+            .values(**values)
             .returning(TaskRow)
         )
         async with self._sessions() as s:
             row = (await s.execute(stmt)).scalar_one_or_none()
             await s.commit()
+            if row is None:
+                current = await s.get(TaskRow, task_id)
+                if current is not None and current.status == expected.value:
+                    raise StaleLease(task_id)
         return _task(row) if row else None
 
     async def record_run(
-        self, task_id: str, *, sha: str | None, steps: int, cost_usd: float
+        self,
+        task_id: str,
+        *,
+        sha: str | None,
+        steps: int,
+        cost_usd: float,
+        claim: Claim | None = None,
     ) -> None:
-        """Stamp what one planning run consumed. Not a transition, so no CAS."""
+        """Stamp what one run consumed. Not a transition, but still lease-checked."""
         stmt = (
             update(TaskRow)
-            .where(TaskRow.id == task_id)
+            .where(TaskRow.id == task_id, _lease_condition(claim))
             .values(repo_sha=sha, steps=steps, cost_usd=cost_usd, updated_at=_now())
+            .returning(TaskRow.id)
         )
         async with self._sessions() as s:
-            await s.execute(stmt)
+            hit = (await s.execute(stmt)).scalar_one_or_none()
             await s.commit()
+            if hit is None and await s.get(TaskRow, task_id) is not None:
+                raise StaleLease(task_id)
 
-    async def append_event(self, task_id: str, type: str, payload: dict[str, Any]) -> Event:
+    async def append_event(
+        self, task_id: str, type: str, payload: dict[str, Any], *, claim: Claim | None = None
+    ) -> Event:
+        """Append one event, in the same transaction as the lease check."""
         row = EventRow(task_id=task_id, type=type, payload=payload, ts=_now())
         async with self._sessions() as s:
+            task = await s.get(TaskRow, task_id)
+            if task is not None:
+                held = task.lease_owner is not None
+                if (claim and task.lease_token != claim.token) or (not claim and held):
+                    raise StaleLease(task_id)
             s.add(row)
             await s.commit()
         return _event(row)
+
+    # -- leases -----------------------------------------------------------
+
+    async def claim(
+        self,
+        task_id: str,
+        *,
+        expected: TaskStatus,
+        to: TaskStatus,
+        owner: str,
+        ttl_seconds: float,
+    ) -> Claim | None:
+        """Take the task: move it to ``to`` and write the lease, in one statement.
+
+        Only a task nobody holds can be claimed. ``lease_token`` goes up by one,
+        and that number is the claim: every write this worker makes for the
+        task carries it, and stops working the moment someone else claims.
+        """
+        now = _now()
+        stmt = (
+            update(TaskRow)
+            .where(
+                TaskRow.id == task_id,
+                TaskRow.status == expected.value,
+                TaskRow.lease_owner.is_(None),
+            )
+            .values(
+                status=to.value,
+                lease_owner=owner,
+                lease_until=now + timedelta(seconds=ttl_seconds),
+                lease_token=TaskRow.lease_token + 1,
+                updated_at=now,
+            )
+            .returning(TaskRow.lease_token)
+        )
+        async with self._sessions() as s:
+            token = (await s.execute(stmt)).scalar_one_or_none()
+            await s.commit()
+        return Claim(task_id=task_id, token=int(token)) if token is not None else None
+
+    async def renew(self, claim: Claim, *, ttl_seconds: float) -> bool:
+        """Push the lease out. ``False`` means the lease is no longer this claim's."""
+        stmt = (
+            update(TaskRow)
+            .where(
+                TaskRow.id == claim.task_id,
+                TaskRow.lease_token == claim.token,
+                TaskRow.lease_owner.is_not(None),
+            )
+            .values(lease_until=_now() + timedelta(seconds=ttl_seconds))
+            .returning(TaskRow.id)
+        )
+        async with self._sessions() as s:
+            hit = (await s.execute(stmt)).scalar_one_or_none()
+            await s.commit()
+        return hit is not None
+
+    async def release(self, claim: Claim) -> bool:
+        """Give the task back at the end of a stage. A stale claim releases nothing."""
+        stmt = (
+            update(TaskRow)
+            .where(TaskRow.id == claim.task_id, TaskRow.lease_token == claim.token)
+            .values(lease_owner=None, lease_until=None, updated_at=_now())
+            .returning(TaskRow.id)
+        )
+        async with self._sessions() as s:
+            hit = (await s.execute(stmt)).scalar_one_or_none()
+            await s.commit()
+        return hit is not None
+
+    async def reclaim_expired(
+        self, *, max_recoveries: int, now: datetime | None = None
+    ) -> list[Reclaimed]:
+        """Take back every task whose lease ran out.
+
+        Each row is reset with a statement guarded by its own token, so two
+        workers sweeping at once cannot both reclaim the same task. The task
+        goes back to its stage's entry state, or to FAILED once it has been
+        reclaimed ``max_recoveries`` times: a task that keeps killing its
+        worker must not loop forever.
+        """
+        now = now or _now()
+        candidates = (
+            select(TaskRow)
+            .where(
+                TaskRow.lease_owner.is_not(None),
+                TaskRow.lease_until < now,
+                TaskRow.status.in_([st.value for st in LEASED_STATES]),
+            )
+            .order_by(TaskRow.lease_until)
+        )
+        taken: list[Reclaimed] = []
+        async with self._sessions() as s:
+            rows = (await s.execute(candidates)).scalars().all()
+            for row in rows:
+                # Read before writing: the RETURNING below refreshes ``row`` in place.
+                previous = TaskStatus(row.status)
+                previous_owner = row.lease_owner
+                previous_token = row.lease_token
+                exhausted = (row.recoveries or 0) + 1 > max_recoveries
+                to = TaskStatus.FAILED if exhausted else RECLAIM_TARGET[previous]
+                stmt = (
+                    update(TaskRow)
+                    .where(
+                        TaskRow.id == row.id,
+                        TaskRow.lease_token == previous_token,
+                        TaskRow.lease_owner.is_not(None),
+                    )
+                    .values(
+                        status=to.value,
+                        lease_owner=None,
+                        lease_until=None,
+                        recoveries=TaskRow.recoveries + 1,
+                        updated_at=now,
+                    )
+                    .returning(TaskRow)
+                )
+                updated = (await s.execute(stmt)).scalar_one_or_none()
+                if updated is not None:
+                    taken.append(
+                        Reclaimed(
+                            task=_task(updated),
+                            previous_status=previous,
+                            previous_owner=previous_owner,
+                            exhausted=exhausted,
+                        )
+                    )
+            await s.commit()
+        return taken
 
     async def list_events(
         self, *, task_id: str | None = None, after_id: int = 0, limit: int = 500

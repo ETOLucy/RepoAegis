@@ -36,6 +36,18 @@ def default_title(issue_url: str) -> str:
     return issue_url
 
 
+# States in which a worker holds the task, so a lease exists and can expire.
+# The value is where a task goes when its lease is reclaimed: planning starts
+# over from the queue; a solve round or a delivery attempt is re-entered as is.
+RECLAIM_TARGET: dict[TaskStatus, TaskStatus] = {
+    TaskStatus.PLANNING: TaskStatus.QUEUED,
+    TaskStatus.SOLVING: TaskStatus.SOLVING,
+    TaskStatus.VERIFYING: TaskStatus.SOLVING,
+    TaskStatus.DELIVERING: TaskStatus.DELIVERING,
+}
+LEASED_STATES = frozenset(RECLAIM_TARGET)
+
+
 class TaskCreate(BaseModel):
     issue_url: HttpUrl
     title: str | None = Field(default=None, max_length=200)
