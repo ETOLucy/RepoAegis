@@ -10,8 +10,9 @@ import pytest
 from repoaegis.agent.github import GitHub
 from repoaegis.agent.llm import Budget, Completion, ToolCall
 from repoaegis.agent.workspace import RepoRef, Workspaces
+from repoaegis.server.events import EventBus
 from repoaegis.server.gate import ApprovalGate
-from repoaegis.server.models import ApprovalStatus, Decision, TaskCreate, TaskStatus
+from repoaegis.server.models import ApprovalStatus, Decision, Event, TaskCreate, TaskStatus
 from repoaegis.server.planning import PlanningService
 from repoaegis.server.policy import get_policy
 from repoaegis.server.state import TaskMachine
@@ -295,3 +296,38 @@ async def test_an_unexpected_error_fails_the_task_instead_of_wedging_it(
     assert failure.payload["reason"] == "RuntimeError"
     assert "400" in failure.payload["detail"]
     assert spaces.released == [task.id]
+
+
+class SnapshottingMachine(TaskMachine):
+    """Remembers what the task row said at the moment each event went out."""
+
+    def __init__(self, repo: TaskRepo, bus: EventBus) -> None:
+        super().__init__(repo, bus)
+        self.steps_at: dict[str, int] = {}
+
+    async def emit(self, task_id: str, type: str, payload: dict[str, Any]) -> Event:
+        current = await self._repo.get(task_id)
+        self.steps_at[type] = current.steps if current is not None else -1
+        return await super().emit(task_id, type, payload)
+
+
+async def test_plan_finished_goes_out_after_the_totals_are_written(
+    repo: TaskRepo, bus: EventBus, approvals: ApprovalRepo, tmp_path: Path, checkout: Path
+) -> None:
+    """Same invariant as solving: the event that says a stage is over must
+    find the stage's steps and cost already on the task row."""
+    machine = SnapshottingMachine(repo, bus)
+    gate = ApprovalGate(approvals, machine, policy=get_policy("default"), ttl_seconds=3600)
+    planning = service(
+        machine,
+        repo,
+        gate,
+        FakeWorkspaces(tmp_path, checkout),
+        github_for(issue_response),
+        ScriptedLLM(submit(PLAN)),
+    )
+    task = await make_task(machine)
+
+    await planning.plan(task)
+
+    assert machine.steps_at["plan.finished"] == 1

@@ -93,6 +93,23 @@ class SolvingService:
             return
 
         await self._account(task, run)
+        # Only now, with the task's running totals written: the console
+        # re-reads the task when it sees this event, so the event must not
+        # arrive before the numbers it announces.
+        await self._machine.emit(
+            task.id,
+            "solve.finished",
+            {
+                "round": len(attempts) + 1,
+                "stopped_by": run.stopped_by,
+                "forced": run.forced,
+                "steps": run.steps,
+                "changed": list(run.changed),
+                "hypothesis": run.hypothesis[:500],
+                "cost_usd": round(run.usage.cost_usd, 6),
+                "tokens": run.usage.total_tokens,
+            },
+        )
         if not run.ok:
             await self._fail(
                 task,
@@ -150,20 +167,6 @@ class SolvingService:
             plan=plan,
             attempts=attempts,
             diff=diff,
-        )
-        await self._machine.emit(
-            task.id,
-            "solve.finished",
-            {
-                "round": len(attempts) + 1,
-                "stopped_by": run.stopped_by,
-                "forced": run.forced,
-                "steps": run.steps,
-                "changed": list(run.changed),
-                "hypothesis": run.hypothesis[:500],
-                "cost_usd": round(run.usage.cost_usd, 6),
-                "tokens": run.usage.total_tokens,
-            },
         )
         return run
 
