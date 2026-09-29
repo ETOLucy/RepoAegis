@@ -82,6 +82,19 @@ class PlanningService:
         await self._repo.record_run(
             task.id, sha=resolved, steps=run.steps, cost_usd=run.usage.cost_usd
         )
+        # After the totals are written, never before: the console re-reads
+        # the task on this event and must find the numbers already there.
+        await self._machine.emit(
+            task.id,
+            "plan.finished",
+            {
+                "stopped_by": run.stopped_by,
+                "forced": run.forced,
+                "steps": run.steps,
+                "cost_usd": round(run.usage.cost_usd, 6),
+                "tokens": run.usage.total_tokens,
+            },
+        )
         if run.plan is None:
             await self._fail(
                 task,
@@ -118,17 +131,6 @@ class PlanningService:
             on_step=self._reporter(task.id),
         )
         run = await planner.run(title=issue.title, body=issue.body)
-        await self._machine.emit(
-            task.id,
-            "plan.finished",
-            {
-                "stopped_by": run.stopped_by,
-                "forced": run.forced,
-                "steps": run.steps,
-                "cost_usd": round(run.usage.cost_usd, 6),
-                "tokens": run.usage.total_tokens,
-            },
-        )
         return run, sha, {"title": issue.title, "body": issue.body}
 
     async def _open_gate(self, task: Task, run: PlanRun, plan: Plan, issue: dict[str, str]) -> None:

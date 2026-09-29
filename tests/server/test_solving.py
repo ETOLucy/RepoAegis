@@ -7,15 +7,18 @@ import pytest
 
 from repoaegis.agent.llm import Completion, ToolCall, Usage
 from repoaegis.agent.workspace import RepoRef, Workspaces, git, remove_tree
+from repoaegis.server.events import EventBus
 from repoaegis.server.gate import ApprovalGate
 from repoaegis.server.models import (
     ApprovalKind,
     ApprovalStatus,
     Decision,
+    Event,
     Task,
     TaskCreate,
     TaskStatus,
 )
+from repoaegis.server.policy import get_policy
 from repoaegis.server.solving import SolvingService
 from repoaegis.server.state import TaskMachine
 from repoaegis.server.storage import ApprovalRepo, TaskRepo
@@ -321,3 +324,34 @@ async def test_rejecting_the_patch_ends_the_task_and_frees_the_checkout(
     current = await repo.get(task.id)
     assert current is not None and current.status is TaskStatus.REJECTED
     assert spaces.released == [task.id]
+
+
+class SnapshottingMachine(TaskMachine):
+    """Remembers what the task row said at the moment each event went out."""
+
+    def __init__(self, repo: TaskRepo, bus: EventBus) -> None:
+        super().__init__(repo, bus)
+        self.steps_at: dict[str, int] = {}
+
+    async def emit(self, task_id: str, type: str, payload: dict[str, Any]) -> Event:
+        current = await self._repo.get(task_id)
+        self.steps_at[type] = current.steps if current is not None else -1
+        return await super().emit(task_id, type, payload)
+
+
+async def test_solve_finished_goes_out_after_the_totals_are_written(
+    repo: TaskRepo, bus: EventBus, approvals: ApprovalRepo, spaces: RecordingWorkspaces
+) -> None:
+    """The console re-reads the task when it sees solve.finished. On the first
+    real run the event went out before the totals were written, so the list
+    showed the previous round's numbers until someone reloaded the page."""
+    machine = SnapshottingMachine(repo, bus)
+    gate = ApprovalGate(approvals, machine, policy=get_policy("default"), ttl_seconds=3600)
+    task = await approved_task(machine, approvals, spaces)
+    await repo.record_run(task.id, sha=SHA, steps=5, cost_usd=0.0007)  # what planning spent
+    reloaded = await repo.get(task.id)
+    assert reloaded is not None
+
+    await service(machine, repo, approvals, gate, spaces, ScriptedLLM(EDIT, FINISH)).solve(reloaded)
+
+    assert machine.steps_at["solve.finished"] == 7  # 5 planning + 2 solving, already on the row
