@@ -28,6 +28,7 @@ src/repoaegis/server/   能力线 2：状态机、审批、持久化、事件、
 src/repoaegis/eval/     评测 harness，项目的每个断言都从这里复现
 web/                    能力线 3：Vue 3 控制台
 docs/industry-survey.md 设计依据：业界系统与论文调研
+docs/durable-execution-survey.md  worker 崩溃后的恢复与交接：持久执行平台、任务队列、编码 agent 的做法
 ```
 
 ## 开发
