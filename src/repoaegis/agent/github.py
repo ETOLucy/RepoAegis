@@ -200,6 +200,30 @@ class GitHubWriter:
         response = await self._client._call("GET", f"/repos/{ref.owner}/{ref.repo}")
         return response.status_code == 200
 
+    async def sync_fork(self, fork: RepoRef, *, branch: str) -> str:
+        """Fast-forward the fork's ``branch`` to upstream, on GitHub's side.
+
+        Returns GitHub's verdict: ``none`` (already current), ``fast-forward``,
+        ``merge``, or ``diverged`` when the fork's branch has commits of its
+        own and cannot be moved without a real merge.
+
+        A fork left alone since it was made falls behind upstream, and a task
+        branch built on today's upstream then carries every commit the fork is
+        missing. Pushing those commits is what breaks: a classic token without
+        the ``workflow`` scope is refused the moment one of them touches
+        ``.github/workflows``, and that is exactly what happened on the first
+        real run (psf/requests#6917). Letting GitHub move the branch itself
+        needs no scope at all, and it leaves the pull request based on a
+        current default branch, which reviewers would want anyway.
+        """
+        response = await self._client._call(
+            "POST", f"/repos/{fork.owner}/{fork.repo}/merge-upstream", json={"branch": branch}
+        )
+        if response.status_code == 409:
+            return "diverged"
+        self._client._check(response, f"syncing {fork.slug}:{branch} with upstream")
+        return str(self._client._json(response).get("merge_type") or "unknown")
+
     async def open_pull_request(
         self, ref: RepoRef, *, head: str, base: str, title: str, body: str
     ) -> PullRequest:

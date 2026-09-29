@@ -131,6 +131,14 @@ class DeliveryService:
 
         fork = await self._writer.ensure_fork(upstream)
         base = await self._writer.default_branch(fork)
+        # Bring the fork's base up to upstream before the branch lands on it,
+        # so the push carries only this task's commit and the pull request
+        # compares against a current base. A diverged fork is not fatal: the
+        # push may still succeed, and if it does not, the error names why.
+        synced = await self._writer.sync_fork(fork, branch=base)
+        await self._machine.emit(
+            task.id, "fork.synced", {"repo": fork.slug, "branch": base, "result": synced}
+        )
 
         await self._workspaces.commit(task.id, message=title, branch=branch)
         await self._workspaces.push(

@@ -46,13 +46,19 @@ class FakeGitHub(GitHub):
         super().__init__(transport=httpx.MockTransport(handler))
 
 
-def api(*, fork_exists: bool = True, record: list[str] | None = None) -> GitHub:
+def api(
+    *, fork_exists: bool = True, fork_diverged: bool = False, record: list[str] | None = None
+) -> GitHub:
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if record is not None:
             record.append(f"{request.method} {path}")
         if path == "/user":
             return httpx.Response(200, json={"login": "tester"})
+        if path == "/repos/tester/r/merge-upstream":
+            if fork_diverged:
+                return httpx.Response(409, json={"message": "conflict"})
+            return httpx.Response(200, json={"merge_type": "fast-forward"})
         if path == "/repos/tester/r":
             if not fork_exists:
                 return httpx.Response(404, json={})
@@ -214,8 +220,54 @@ async def test_approving_the_push_opens_the_pull_request(
     assert spaces.released == [task.id]
 
     events = {e.type: e.payload for e in await repo.list_events(task_id=task.id)}
+    assert events["fork.synced"] == {"repo": "tester/r", "branch": "main", "result": "fast-forward"}
     assert events["branch.pushed"]["repo"] == "tester/r"
     assert events["pull_request.opened"]["url"] == "https://github.com/tester/r/pull/7"
+
+
+async def test_the_fork_is_synced_with_upstream_before_the_push(
+    machine: TaskMachine, repo: TaskRepo, approvals: ApprovalRepo, spaces: LocalWorkspaces
+) -> None:
+    """A stale fork made the first real push carry upstream's workflow commits,
+    which a token without the workflow scope is refused. GitHub moves the base
+    itself; our token never has to."""
+    calls: list[str] = []
+    gate = gate_with(approvals, machine, "always_ask")
+    task = await ready_task(machine, approvals, spaces)
+    delivery = service(machine, repo, approvals, gate, spaces, api(record=calls))
+
+    await delivery.deliver(task)
+    envelope = next(
+        a for a in await approvals.list_for_task(task.id) if a.kind is ApprovalKind.PUSH
+    )
+    await gate.decide(envelope.id, Decision.APPROVE, actor="u")
+    await delivery.deliver(task)
+
+    sync = calls.index("POST /repos/tester/r/merge-upstream")
+    assert sync < calls.index("POST /repos/tester/r/pulls")
+    assert spaces.pushed, "the branch was pushed after the sync"
+
+
+async def test_a_diverged_fork_does_not_stop_delivery(
+    machine: TaskMachine, repo: TaskRepo, approvals: ApprovalRepo, spaces: LocalWorkspaces
+) -> None:
+    """GitHub answers 409 when the fork's base has commits of its own. The push
+    may still work, so the task goes on and the event says what happened."""
+    gate = gate_with(approvals, machine, "always_ask")
+    task = await ready_task(machine, approvals, spaces)
+    delivery = service(machine, repo, approvals, gate, spaces, api(fork_diverged=True))
+
+    await delivery.deliver(task)
+    envelope = next(
+        a for a in await approvals.list_for_task(task.id) if a.kind is ApprovalKind.PUSH
+    )
+    await gate.decide(envelope.id, Decision.APPROVE, actor="u")
+    await delivery.deliver(task)
+
+    current = await repo.get(task.id)
+    assert current is not None and current.status is TaskStatus.DONE
+    events = {e.type: e.payload for e in await repo.list_events(task_id=task.id)}
+    assert events["fork.synced"]["result"] == "diverged"
 
 
 async def test_refusing_the_push_rejects_the_task(

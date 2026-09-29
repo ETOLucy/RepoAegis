@@ -121,8 +121,13 @@ async def git(*args: str, cwd: Path | None = None, timeout: float = 300.0) -> st
         process.kill()
         raise GitError(f"git {args[0]} timed out after {timeout:.0f}s") from None
     if process.returncode != 0:
-        detail = err.decode("utf-8", "replace").strip().splitlines()
-        raise GitError(f"git {args[0]} failed: {detail[-1] if detail else process.returncode}")
+        # Git puts the reason on the line *before* its summary ("! [remote
+        # rejected] ... (refusing to allow a Personal Access Token ...)" then
+        # "error: failed to push some refs"). Keeping only the last line once
+        # cost a whole debugging session, so keep the tail of what it said.
+        lines = [line for line in err.decode("utf-8", "replace").splitlines() if line.strip()]
+        detail = " | ".join(lines[-6:]) if lines else f"exit {process.returncode}"
+        raise GitError(f"git {args[0]} failed: {detail}")
     return out.decode("utf-8", "replace")
 
 
