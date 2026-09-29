@@ -70,6 +70,17 @@ class PlanningService:
         against, because a fix evaluated on today's code is evaluated against a
         different problem.
         """
+        # A planner that died after writing its envelope left the plan behind;
+        # continuing from it costs nothing, re-planning costs a model run.
+        left_behind = await self._gate.latest(task.id, ApprovalKind.PLAN)
+        if left_behind is not None:
+            log.info("planning.resumed", task_id=task.id, approval_id=left_behind.id)
+            await self._machine.advance(
+                task.id, TaskStatus.AWAITING_APPROVAL, payload={"resumed_from": left_behind.id}
+            )
+            await self._gate.apply(left_behind)
+            return
+
         try:
             run, resolved, issue = await self._investigate(task, sha)
         except Exception as exc:
@@ -143,8 +154,12 @@ class PlanningService:
             "forced": run.forced,
             "cost_usd": round(run.usage.cost_usd, 6),
         }
+        # Envelope first, then the task: a task found waiting always has its envelope.
+        approval = await self._gate.request(
+            task.id, ApprovalKind.PLAN, payload, subject=plan.diagnosis[:200]
+        )
         await self._machine.advance(task.id, TaskStatus.AWAITING_APPROVAL, payload=payload)
-        await self._gate.request(task.id, ApprovalKind.PLAN, payload, subject=plan.diagnosis[:200])
+        await self._gate.apply(approval)
 
     async def _fail(self, task: Task, reason: str, detail: str) -> None:
         log.warning("planning_failed", task_id=task.id, reason=reason, detail=detail)

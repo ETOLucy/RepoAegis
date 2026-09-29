@@ -160,6 +160,11 @@ class DeliveryService:
             cost_usd=task.cost_usd,
             model=self._model,
         )
+        # A redone delivery finds the pull request its first attempt opened.
+        existing = await self._writer.find_pull_request(fork, head=f"{fork.owner}:{branch}")
+        if existing is not None:
+            log.info("delivery.reusing_pull_request", task_id=task.id, number=existing.number)
+            return existing
         return await self._writer.open_pull_request(
             fork, head=branch, base=base, title=title, body=body
         )

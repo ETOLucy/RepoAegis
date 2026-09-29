@@ -12,6 +12,7 @@ from repoaegis.server.gate import ApprovalGate
 from repoaegis.server.models import (
     ApprovalKind,
     ApprovalStatus,
+    Claim,
     Decision,
     Event,
     Task,
@@ -333,10 +334,12 @@ class SnapshottingMachine(TaskMachine):
         super().__init__(repo, bus)
         self.steps_at: dict[str, int] = {}
 
-    async def emit(self, task_id: str, type: str, payload: dict[str, Any]) -> Event:
+    async def emit(
+        self, task_id: str, type: str, payload: dict[str, Any], *, claim: Claim | None = None
+    ) -> Event:
         current = await self._repo.get(task_id)
         self.steps_at[type] = current.steps if current is not None else -1
-        return await super().emit(task_id, type, payload)
+        return await super().emit(task_id, type, payload, claim=claim)
 
 
 async def test_solve_finished_goes_out_after_the_totals_are_written(

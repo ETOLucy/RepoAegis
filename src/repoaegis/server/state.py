@@ -106,6 +106,9 @@ class TaskMachine:
         await self.emit(task.id, "task.created", {"title": task.title, "issue_url": issue_url})
         return task
 
+    async def get(self, task_id: str) -> Task | None:
+        return await self._repo.get(task_id)
+
     async def advance(
         self,
         task_id: str,

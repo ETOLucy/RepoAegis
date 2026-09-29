@@ -182,3 +182,74 @@ async def test_release_prunes_a_real_worktree(tmp_path: Path) -> None:
     assert not (work / "task-1").exists()
     listed = await git("worktree", "list", cwd=origin, timeout=30)
     assert "task-1" not in listed
+
+
+async def _repo_with_base(root: Path) -> Path:
+    await git("init", "--quiet", str(root), timeout=30)
+    (root / "a.py").write_text("base\n", encoding="utf-8")
+    (root / "gone.py").write_text("to be deleted\n", encoding="utf-8")
+    await git("add", "-A", cwd=root, timeout=30)
+    await git(
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-q",
+        "-m",
+        "base",
+        cwd=root,
+        timeout=30,
+    )
+    return root
+
+
+async def test_a_checkpoint_is_restored_exactly_without_moving_head(tmp_path: Path) -> None:
+    """The snapshot of a finished round: edits, new files and deletions, HEAD untouched."""
+    spaces = Workspaces(tmp_path / "cache", tmp_path / "work")
+    root = await _repo_with_base(spaces.work_dir / "t1")
+    head = (await git("rev-parse", "HEAD", cwd=root, timeout=30)).strip()
+    (root / "a.py").write_text("round one\n", encoding="utf-8")
+    (root / "new.py").write_text("added in round one\n", encoding="utf-8")
+    (root / "gone.py").unlink()
+
+    await spaces.checkpoint("t1", "round-1")
+    # A later round that died half-way: mangled, stray, and the deletion undone.
+    (root / "a.py").write_text("half-made\n", encoding="utf-8")
+    (root / "stray.py").write_text("x\n", encoding="utf-8")
+    (root / "gone.py").write_text("back?\n", encoding="utf-8")
+
+    assert await spaces.restore("t1", "round-1")
+
+    assert (root / "a.py").read_text(encoding="utf-8") == "round one\n"
+    assert (root / "new.py").read_text(encoding="utf-8") == "added in round one\n"
+    assert not (root / "stray.py").exists() and not (root / "gone.py").exists()
+    assert (await git("rev-parse", "HEAD", cwd=root, timeout=30)).strip() == head
+    assert "round one" in await spaces.diff("t1")  # still uncommitted work against the base
+
+
+async def test_restoring_without_a_checkpoint_gives_a_clean_base(tmp_path: Path) -> None:
+    spaces = Workspaces(tmp_path / "cache", tmp_path / "work")
+    root = await _repo_with_base(spaces.work_dir / "t1")
+    (root / "a.py").write_text("half-made\n", encoding="utf-8")
+    (root / "stray.py").write_text("x\n", encoding="utf-8")
+
+    assert await spaces.restore("t1", None)
+    assert not await spaces.restore("t1", "round-9")  # unknown name: clean, but reported
+
+    assert (root / "a.py").read_text(encoding="utf-8") == "base\n"
+    assert not (root / "stray.py").exists()
+
+
+async def test_committing_twice_yields_the_same_commit(tmp_path: Path) -> None:
+    """A redone delivery finds its own commit and does not stack an empty one."""
+    spaces = Workspaces(tmp_path / "cache", tmp_path / "work")
+    root = await _repo_with_base(spaces.work_dir / "t1")
+    (root / "a.py").write_text("fixed\n", encoding="utf-8")
+
+    first = await spaces.commit("t1", message="fix", branch="repoaegis/t1")
+    second = await spaces.commit("t1", message="fix", branch="repoaegis/t1")
+
+    assert first == second
+    log = await git("log", "--oneline", cwd=root, timeout=30)
+    assert len(log.strip().splitlines()) == 2  # base + fix, nothing empty on top

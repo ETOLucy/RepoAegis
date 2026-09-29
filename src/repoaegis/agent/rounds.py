@@ -99,6 +99,10 @@ class Attempt(BaseModel):
 
     round: int = Field(ge=1)
     hypothesis: str = Field(default="", max_length=1000)
+    # The solver's description of the whole change, for the review envelope
+    # and the pull request. Kept here so a redone stage can open the gate
+    # from the record alone, without another model run.
+    summary: str = Field(default="", max_length=2000)
     changed_files: list[str] = Field(default_factory=list)
     report: TestReport | None = None
 

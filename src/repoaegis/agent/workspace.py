@@ -41,6 +41,10 @@ _ISSUE_URL = re.compile(
 )
 
 
+def _checkpoint_ref(task_id: str, name: str) -> str:
+    return f"refs/repoaegis/{task_id}/{name}"
+
+
 class GitError(RuntimeError):
     pass
 
@@ -107,11 +111,17 @@ def parse_issue_url(url: str) -> RepoRef:
     )
 
 
-async def git(*args: str, cwd: Path | None = None, timeout: float = 300.0) -> str:
+async def git(
+    *args: str,
+    cwd: Path | None = None,
+    timeout: float = 300.0,
+    env: dict[str, str] | None = None,
+) -> str:
     process = await asyncio.create_subprocess_exec(
         "git",
         *args,
         cwd=str(cwd) if cwd else None,
+        env={**os.environ, **env} if env else None,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -184,6 +194,76 @@ class Workspaces:
     def checkout_of(self, task_id: str) -> Path:
         return self.work_dir / task_id
 
+    async def checkpoint(self, task_id: str, name: str) -> str:
+        """Snapshot the working tree as a commit behind a ref, without moving HEAD.
+
+        The tree is built through a scratch index, so neither the real index
+        nor HEAD changes: ``diff`` and ``commit`` keep seeing the edits as
+        uncommitted work against the base, and the pull request still gets one
+        commit. The ref is namespaced by task because refs live in the shared
+        repository, not the worktree.
+        """
+        target = self._checkout(task_id)
+        # The scratch index lives in the worktree's own git directory, never in
+        # the working tree: a file inside the tree would end up in the snapshot.
+        git_dir = Path((await git("rev-parse", "--git-dir", cwd=target, timeout=30.0)).strip())
+        if not git_dir.is_absolute():
+            git_dir = target / git_dir
+        scratch = git_dir / "repoaegis-checkpoint-index"
+        if scratch.exists():
+            scratch.unlink()
+        env = {"GIT_INDEX_FILE": str(scratch)}
+        await git("add", "-A", cwd=target, timeout=self._timeout, env=env)
+        tree = (await git("write-tree", cwd=target, timeout=self._timeout, env=env)).strip()
+        head = (await git("rev-parse", "HEAD", cwd=target, timeout=self._timeout)).strip()
+        commit = (
+            await git(
+                "-c",
+                "user.name=RepoAegis",
+                "-c",
+                "user.email=repoaegis@users.noreply.github.com",
+                "commit-tree",
+                tree,
+                "-p",
+                head,
+                "-m",
+                name,
+                cwd=target,
+                timeout=self._timeout,
+            )
+        ).strip()
+        await git("update-ref", _checkpoint_ref(task_id, name), commit, cwd=target, timeout=30.0)
+        log.info("workspace.checkpoint", task_id=task_id, name=name, commit=commit[:12])
+        return commit
+
+    async def restore(self, task_id: str, name: str | None) -> bool:
+        """Put the working tree back to a checkpoint, or to the base commit.
+
+        Returns whether the named checkpoint existed. Either way the tree is
+        clean afterwards: half-made edits from a round that died are gone.
+        """
+        target = self._checkout(task_id)
+        await git("reset", "-q", "--hard", "HEAD", cwd=target, timeout=self._timeout)
+        # Untracked files go too; ignored ones (the .repoaegis scratch) stay.
+        await git("clean", "-fdq", cwd=target, timeout=self._timeout)
+        if name is None:
+            return True
+        ref = _checkpoint_ref(task_id, name)
+        try:
+            await git("rev-parse", "--verify", "-q", ref, cwd=target, timeout=30.0)
+        except GitError:
+            return False
+        # Index and tree to the snapshot exactly, deletions included.
+        await git("read-tree", "-u", "--reset", ref, cwd=target, timeout=self._timeout)
+        log.info("workspace.restored", task_id=task_id, name=name)
+        return True
+
+    def _checkout(self, task_id: str) -> Path:
+        target = self.work_dir / task_id
+        if not target.is_dir():
+            raise GitError(f"no checkout for task {task_id}")
+        return target
+
     async def commit(self, task_id: str, *, message: str, branch: str) -> str:
         """Put the working-tree changes on a fresh branch. Returns the commit sha.
 
@@ -191,11 +271,16 @@ class Workspaces:
         a throwaway checkout should leave no configuration behind, and the
         author of a machine-made commit should say so.
         """
-        target = self.work_dir / task_id
-        if not target.is_dir():
-            raise GitError(f"no checkout for task {task_id}")
+        target = self._checkout(task_id)
         await git("checkout", "-B", branch, cwd=target, timeout=self._timeout)
         await git("add", "-A", cwd=target, timeout=self._timeout)
+        try:
+            await git("diff", "--cached", "--quiet", cwd=target, timeout=self._timeout)
+        except GitError:
+            pass  # there is something to commit
+        else:
+            # Nothing staged: a redone delivery finds its own commit at HEAD.
+            return (await git("rev-parse", "HEAD", cwd=target, timeout=self._timeout)).strip()
         await git(
             "-c",
             "user.name=RepoAegis",
