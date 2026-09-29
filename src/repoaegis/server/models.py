@@ -53,6 +53,26 @@ class Task(BaseModel):
     repo_sha: str | None = None
     steps: int = 0
     cost_usd: float = 0.0
+    # Who holds the task right now and until when (see ``Claim``). Both are
+    # None whenever no worker is on it.
+    lease_owner: str | None = None
+    lease_until: datetime | None = None
+    lease_token: int = 0
+    recoveries: int = 0
+
+
+class Claim(BaseModel):
+    """Proof that one worker holds one task, for one particular claiming.
+
+    ``task_id`` says which task; ``token`` says which claiming of it -- the
+    value ``lease_token`` had after this worker took the lease. A task can be
+    claimed again after its lease expires, and then the old token is refused
+    on every write, so a worker that was only paused, not dead, cannot come
+    back and write over the new holder's work (a fencing token).
+    """
+
+    task_id: str
+    token: int
 
 
 class Event(BaseModel):

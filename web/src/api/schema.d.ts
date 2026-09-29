@@ -259,6 +259,20 @@ export interface components {
             id: string;
             /** Issue Url */
             issue_url: string;
+            /** Lease Owner */
+            lease_owner?: string | null;
+            /**
+             * Lease Token
+             * @default 0
+             */
+            lease_token: number;
+            /** Lease Until */
+            lease_until?: string | null;
+            /**
+             * Recoveries
+             * @default 0
+             */
+            recoveries: number;
             /** Repo Sha */
             repo_sha?: string | null;
             status: components["schemas"]["TaskStatus"];

@@ -12,6 +12,8 @@ const TASK: Task = {
   updated_at: '2026-09-12T10:00:00Z',
   steps: 0,
   cost_usd: 0,
+  lease_token: 0,
+  recoveries: 0,
 }
 
 class FakeEventSource {

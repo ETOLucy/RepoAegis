@@ -64,6 +64,18 @@ class TaskRow(Base):
     repo_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
     steps: Mapped[int] = mapped_column(Integer, default=0)
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    # The lease: who is working on the task and until when. Empty while the
+    # task is queued, waiting on a human, or finished. ``lease_token`` counts
+    # how many times the task has been claimed and never decreases; every write
+    # made under a claim carries it, so a worker that lost its lease is refused.
+    lease_owner: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    lease_token: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # How many times an expired lease has been reclaimed. Capped, so a task
+    # that keeps killing its worker ends up failed instead of looping.
+    recoveries: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class EventRow(Base):
@@ -114,6 +126,10 @@ def _task(row: TaskRow) -> Task:
         repo_sha=row.repo_sha,
         steps=row.steps or 0,
         cost_usd=row.cost_usd or 0.0,
+        lease_owner=row.lease_owner,
+        lease_until=_utc(row.lease_until) if row.lease_until else None,
+        lease_token=row.lease_token or 0,
+        recoveries=row.recoveries or 0,
     )
 
 
@@ -197,6 +213,8 @@ class TaskRepo:
             updated_at=now,
             steps=0,
             cost_usd=0.0,
+            lease_token=0,
+            recoveries=0,
         )
         async with self._sessions() as s:
             s.add(row)
