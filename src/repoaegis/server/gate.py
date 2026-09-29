@@ -5,6 +5,13 @@ starting status -- ``allow`` and ``deny`` are recorded as decided-by-policy so
 the audit trail is identical whether a human or a rule answered, and only
 ``ask`` leaves a pending envelope for someone to resolve.
 
+Requesting and moving the task are two writes, and a worker can die between
+them. The order is therefore envelope first, task second: a task found waiting
+always has its envelope, and a stage that is redone finds the envelope it wrote
+last time (``latest``) instead of writing a second one. ``apply`` turns a
+decided envelope into its effect and does nothing until the task has actually
+reached the waiting state, so it is safe to call from both sides of that gap.
+
 Concurrency lives in one place: ``ApprovalRepo.decide`` and
 ``ApprovalRepo.expire_due`` are single atomic UPDATEs, so of the many parties
 that may answer one gate -- two browser tabs, a retry, the expiry sweep -- only
@@ -40,6 +47,19 @@ _START: dict[Outcome, ApprovalStatus] = {
 _TARGET: dict[Decision, ApprovalStatus] = {
     Decision.APPROVE: ApprovalStatus.APPROVED,
     Decision.REJECT: ApprovalStatus.REJECTED,
+}
+
+# Where a task sits while each kind of envelope is open, and where approving
+# it sends the task. Approving a call-level gate (push) moves nothing: it
+# unblocks the stage that asked. Refusing any gate ends the task.
+_WAITING_IN: dict[ApprovalKind, TaskStatus] = {
+    ApprovalKind.PLAN: TaskStatus.AWAITING_APPROVAL,
+    ApprovalKind.PATCH: TaskStatus.AWAITING_PATCH_APPROVAL,
+    ApprovalKind.PUSH: TaskStatus.DELIVERING,
+}
+_GRANTED: dict[ApprovalKind, TaskStatus] = {
+    ApprovalKind.PLAN: TaskStatus.SOLVING,
+    ApprovalKind.PATCH: TaskStatus.DELIVERING,
 }
 
 
@@ -112,6 +132,40 @@ class ApprovalGate:
             await self._settle(approval)
         return approval
 
+    async def latest(self, task_id: str, kind: ApprovalKind) -> Approval | None:
+        """The newest envelope of this kind, whatever its status.
+
+        A stage being redone asks this first: if it already wrote its envelope
+        before dying, that envelope -- open, or already answered -- is the one
+        to continue from, not a fresh one.
+        """
+        mine = [a for a in await self._approvals.list_for_task(task_id) if a.kind is kind]
+        return max(mine, key=lambda a: a.created_at) if mine else None
+
+    async def apply(self, approval: Approval) -> None:
+        """Move the task where a decided envelope says, once the task is waiting on it.
+
+        Idempotent: an open envelope, a task not yet in the waiting state, or a
+        task already moved on all leave it alone. Requesters call this after
+        putting the task into the waiting state; ``decide`` and the sweep call
+        it through ``_settle``.
+        """
+        if approval.is_open:
+            return
+        to = _GRANTED.get(approval.kind) if approval.status is ApprovalStatus.APPROVED else None
+        if approval.status is not ApprovalStatus.APPROVED:
+            to = TaskStatus.REJECTED
+        if to is None:
+            return
+        task = await self._machine.get(approval.task_id)
+        if task is None or task.status is not _WAITING_IN.get(approval.kind):
+            return
+        await self._machine.advance(
+            approval.task_id, to, payload={"approval_id": approval.id, "reason": approval.reason}
+        )
+        if to is TaskStatus.REJECTED and self._on_task_rejected is not None:
+            await self._on_task_rejected(approval.task_id)
+
     async def decide(
         self,
         approval_id: str,
@@ -167,21 +221,4 @@ class ApprovalGate:
                 "reason": approval.reason,
             },
         )
-        # Which gate this is decides where the task goes next. Approving a
-        # call-level gate (shell, push) moves nothing -- it unblocks the stage
-        # that asked. Refusing one always ends the task, whichever gate it was.
-        granted = {
-            ApprovalKind.PLAN: TaskStatus.SOLVING,
-            ApprovalKind.PATCH: TaskStatus.DELIVERING,
-        }
-        if approval.status is ApprovalStatus.APPROVED:
-            to = granted.get(approval.kind)
-        else:
-            to = TaskStatus.REJECTED
-        if to is None:
-            return
-        await self._machine.advance(
-            approval.task_id, to, payload={"approval_id": approval.id, "reason": approval.reason}
-        )
-        if to is TaskStatus.REJECTED and self._on_task_rejected is not None:
-            await self._on_task_rejected(approval.task_id)
+        await self.apply(approval)

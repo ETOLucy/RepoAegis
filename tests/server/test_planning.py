@@ -12,7 +12,7 @@ from repoaegis.agent.llm import Budget, Completion, ToolCall
 from repoaegis.agent.workspace import RepoRef, Workspaces
 from repoaegis.server.events import EventBus
 from repoaegis.server.gate import ApprovalGate
-from repoaegis.server.models import ApprovalStatus, Decision, Event, TaskCreate, TaskStatus
+from repoaegis.server.models import ApprovalStatus, Claim, Decision, Event, TaskCreate, TaskStatus
 from repoaegis.server.planning import PlanningService
 from repoaegis.server.policy import get_policy
 from repoaegis.server.state import TaskMachine
@@ -305,10 +305,12 @@ class SnapshottingMachine(TaskMachine):
         super().__init__(repo, bus)
         self.steps_at: dict[str, int] = {}
 
-    async def emit(self, task_id: str, type: str, payload: dict[str, Any]) -> Event:
+    async def emit(
+        self, task_id: str, type: str, payload: dict[str, Any], *, claim: Claim | None = None
+    ) -> Event:
         current = await self._repo.get(task_id)
         self.steps_at[type] = current.steps if current is not None else -1
-        return await super().emit(task_id, type, payload)
+        return await super().emit(task_id, type, payload, claim=claim)
 
 
 async def test_plan_finished_goes_out_after_the_totals_are_written(

@@ -224,6 +224,29 @@ class GitHubWriter:
         self._client._check(response, f"syncing {fork.slug}:{branch} with upstream")
         return str(self._client._json(response).get("merge_type") or "unknown")
 
+    async def find_pull_request(self, ref: RepoRef, *, head: str) -> PullRequest | None:
+        """The open pull request from ``head`` (``owner:branch``), if one exists.
+
+        Delivery asks before opening: a redone delivery must reuse the pull
+        request its first attempt opened, not add a second one.
+        """
+        response = self._client._check(
+            await self._client._call(
+                "GET", f"/repos/{ref.owner}/{ref.repo}/pulls?head={head}&state=open"
+            ),
+            f"pull requests on {ref.slug}",
+        )
+        found = response.json()
+        if not isinstance(found, list) or not found:
+            return None
+        first = found[0] if isinstance(found[0], dict) else {}
+        return PullRequest(
+            number=int(first.get("number", 0)),
+            url=str(first.get("html_url") or ""),
+            branch=head.split(":", 1)[-1],
+            repo=ref.slug,
+        )
+
     async def open_pull_request(
         self, ref: RepoRef, *, head: str, base: str, title: str, body: str
     ) -> PullRequest:

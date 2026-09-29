@@ -78,11 +78,20 @@ class SolvingService:
         self._budget_usd = budget_usd
 
     async def solve(self, task: Task) -> None:
-        """Run one round: SOLVING -> (VERIFYING ->) patch gate, SOLVING again, or FAILED."""
+        """Run one round: SOLVING -> (VERIFYING ->) patch gate, SOLVING again, or FAILED.
+
+        A round is the unit of redo. Before it starts, the checkout is put back
+        to the last finished round (or the base commit), so a round that died
+        half-way leaves no half-made edits behind; and if the record shows the
+        work is already done -- a gate envelope written, or a green report --
+        the task goes to the gate without another model run.
+        """
         try:
             plan, issue = await self._approved_plan(task)
             path = await self._ensure_checkout(task)
             attempts = await self.attempts(task.id)
+            if await self._resume(task, attempts):
+                return
             run = await self._implement(task, plan, issue, path, attempts)
             # Earlier rounds' edits are in the tree too, so the diff is the
             # whole patch, not this round's share of it.
@@ -130,11 +139,60 @@ class SolvingService:
             # No sandbox configured: a syntax check is all the verification
             # there is, and the reviewer is told so by the missing report.
             attempt = Attempt(
-                round=len(attempts) + 1, hypothesis=run.hypothesis, changed_files=list(run.changed)
+                round=len(attempts) + 1,
+                hypothesis=run.hypothesis,
+                summary=run.summary,
+                changed_files=list(run.changed),
             )
-            await self._open_gate(task, run, patch, [*attempts, attempt])
+            await self._open_gate(
+                task,
+                patch,
+                [*attempts, attempt],
+                summary=run.summary,
+                hypothesis=run.hypothesis,
+                steps=run.steps,
+                forced=run.forced,
+                cost_usd=run.usage.cost_usd,
+            )
             return
         await self._verify(task, run, patch, plan, path, attempts)
+
+    async def _resume(self, task: Task, attempts: list[Attempt]) -> bool:
+        """Finish what a dead worker left; ``True`` if nothing remains to solve."""
+        left_behind = await self._gate.latest(task.id, ApprovalKind.PATCH)
+        if left_behind is not None:
+            log.info("solving.resumed", task_id=task.id, approval_id=left_behind.id)
+            await self._machine.advance(
+                task.id,
+                TaskStatus.AWAITING_PATCH_APPROVAL,
+                payload={"resumed_from": left_behind.id},
+            )
+            await self._gate.apply(left_behind)
+            return True
+
+        name = f"round-{len(attempts)}" if attempts else None
+        restored = await self._workspaces.restore(task.id, name)
+        if attempts and not restored:
+            log.warning("solving.checkpoint_missing", task_id=task.id, round=len(attempts))
+
+        last = attempts[-1] if attempts else None
+        done = last is not None and last.report is not None
+        if done and (last.report.ok or len(attempts) >= self._max_rounds):  # type: ignore[union-attr]
+            # The tests already ran; only the gate was never opened.
+            assert last is not None
+            patch = await self._workspaces.diff(task.id)
+            await self._open_gate(
+                task,
+                patch,
+                attempts,
+                summary=last.summary,
+                hypothesis=last.hypothesis,
+                steps=0,
+                forced=False,
+                cost_usd=0.0,
+            )
+            return True
+        return False
 
     async def attempts(self, task_id: str) -> list[Attempt]:
         """Earlier rounds of this task, oldest first, read back from the event log."""
@@ -193,18 +251,30 @@ class SolvingService:
         attempt = Attempt(
             round=round_no,
             hypothesis=run.hypothesis,
+            summary=run.summary,
             changed_files=list(run.changed),
             report=report,
         )
-        # The record is the handoff. Emitting it is what makes the next round
-        # -- and the console -- able to see this one.
+        # The checkpoint is what a redo of the next round starts from; the
+        # record is the handoff. Emitting it is what makes the next round --
+        # and the console -- able to see this one.
+        await self._workspaces.checkpoint(task.id, f"round-{round_no}")
         await self._machine.emit(task.id, ROUND_EVENT, attempt.model_dump())
         history = [*attempts, attempt]
 
         if report.ok or round_no >= self._max_rounds:
             # Out of rounds is not a failure: a human seeing a red report and
             # the three hypotheses that did not fix it is the useful outcome.
-            await self._open_gate(task, run, patch, history)
+            await self._open_gate(
+                task,
+                patch,
+                history,
+                summary=run.summary,
+                hypothesis=run.hypothesis,
+                steps=run.steps,
+                forced=run.forced,
+                cost_usd=run.usage.cost_usd,
+            )
             return
         await self._machine.advance(
             task.id,
@@ -223,22 +293,35 @@ class SolvingService:
         return await self._workspaces.prepare(ref, task.repo_sha, task_id=task.id)
 
     async def _open_gate(
-        self, task: Task, run: SolveRun, patch: str, history: list[Attempt]
+        self,
+        task: Task,
+        patch: str,
+        history: list[Attempt],
+        *,
+        summary: str,
+        hypothesis: str,
+        steps: int,
+        forced: bool,
+        cost_usd: float,
     ) -> None:
-        changed = sorted({f for a in history for f in a.changed_files} | set(run.changed))
+        changed = sorted({f for a in history for f in a.changed_files})
         last: TestReport | None = history[-1].report if history else None
         payload: dict[str, Any] = {
             "patch": patch,
-            "summary": run.summary,
-            "hypothesis": run.hypothesis,
+            "summary": summary,
+            "hypothesis": hypothesis,
             "changed": changed,
             "rounds": len(history),
             "attempts": [a.model_dump() for a in history],
             "report": last.model_dump() if last is not None else None,
-            "steps": run.steps,
-            "forced": run.forced,
-            "cost_usd": round(run.usage.cost_usd, 6),
+            "steps": steps,
+            "forced": forced,
+            "cost_usd": round(cost_usd, 6),
         }
+        # Envelope first, then the task: a task found waiting always has its envelope.
+        approval = await self._gate.request(
+            task.id, ApprovalKind.PATCH, payload, subject=summary[:200] or "patch"
+        )
         await self._machine.advance(
             task.id,
             TaskStatus.AWAITING_PATCH_APPROVAL,
@@ -248,9 +331,7 @@ class SolvingService:
                 "tests_ok": None if last is None else last.ok,
             },
         )
-        await self._gate.request(
-            task.id, ApprovalKind.PATCH, payload, subject=run.summary[:200] or "patch"
-        )
+        await self._gate.apply(approval)
 
     async def _account(self, task: Task, run: SolveRun) -> None:
         """Costs accumulate across stages and rounds; one task, one bill."""
