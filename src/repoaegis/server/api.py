@@ -270,6 +270,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 solving,
                 delivery,
                 poll_seconds=settings.worker_poll_seconds,
+                lease_seconds=settings.worker_lease_seconds,
+                heartbeat_seconds=settings.worker_heartbeat_seconds,
+                max_recoveries=settings.worker_max_recoveries,
             )
             worker_task = asyncio.create_task(worker.run(stop))
         try:

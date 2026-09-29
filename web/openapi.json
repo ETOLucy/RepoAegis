@@ -227,6 +227,39 @@
             "title": "Issue Url",
             "type": "string"
           },
+          "lease_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Owner"
+          },
+          "lease_token": {
+            "default": 0,
+            "title": "Lease Token",
+            "type": "integer"
+          },
+          "lease_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Until"
+          },
+          "recoveries": {
+            "default": 0,
+            "title": "Recoveries",
+            "type": "integer"
+          },
           "repo_sha": {
             "anyOf": [
               {

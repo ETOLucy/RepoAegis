@@ -42,6 +42,8 @@ export function useTasks() {
         updated_at: ev.ts,
         steps: 0,
         cost_usd: 0,
+        lease_token: 0,
+        recoveries: 0,
       })
     } else if (ev.type === 'task.status_changed' && i !== -1) {
       const current = tasks.value[i]!

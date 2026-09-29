@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     # goes to the reviewer with the red report and the hypotheses attached.
     agent_max_rounds: int = 3
     sse_heartbeat_seconds: float = 15.0
+    # The worker's lease on a task it is working on, and how often it renews.
+    # A worker that stops renewing for a whole lease is presumed dead and its
+    # task is taken back; after max_recoveries such rescues the task fails.
+    worker_lease_seconds: float = 300.0
+    worker_heartbeat_seconds: float = 30.0
+    worker_max_recoveries: int = 3
     log_json: bool = False
 
     # The sandbox the repository's tests run in. Off by default so a checkout
