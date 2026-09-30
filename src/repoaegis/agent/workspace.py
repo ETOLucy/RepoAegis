@@ -247,6 +247,7 @@ class Workspaces:
         # Untracked files go too; ignored ones (the .repoaegis scratch) stay.
         await git("clean", "-fdq", cwd=target, timeout=self._timeout)
         if name is None:
+            log.info("workspace.restored", task_id=task_id, name="base")
             return True
         ref = _checkpoint_ref(task_id, name)
         try:

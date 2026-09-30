@@ -25,7 +25,7 @@ import structlog
 
 from repoaegis.server.delivery import DeliveryService
 from repoaegis.server.gate import ApprovalGate
-from repoaegis.server.models import Claim, Task, TaskStatus
+from repoaegis.server.models import ApprovalKind, Claim, Task, TaskStatus
 from repoaegis.server.planning import PlanningService
 from repoaegis.server.solving import SolvingService
 from repoaegis.server.state import StaleLease, TaskMachine, current_claim
@@ -80,8 +80,13 @@ class Worker:
             bool(await self._machine.reclaim_expired(max_recoveries=self._max_recoveries)) or worked
         )
 
-        ready = await self._repo.next_in(TaskStatus.DELIVERING)
-        if ready is not None:
+        for ready in await self._repo.list_in(TaskStatus.DELIVERING):
+            # Waiting on a human to allow the push is not work. Claiming it
+            # anyway would take the lease every tick -- the first drill did so
+            # 120 times in a minute -- and collide with the human's answer.
+            push = await self._gate.latest(ready.id, ApprovalKind.PUSH)
+            if push is not None and push.is_open:
+                continue
             await self._take(ready, TaskStatus.DELIVERING, self._delivery.deliver)
             return True
 

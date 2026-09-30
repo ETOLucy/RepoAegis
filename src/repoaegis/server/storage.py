@@ -295,6 +295,17 @@ class TaskRepo:
             row = (await s.execute(stmt)).scalar_one_or_none()
         return _task(row) if row else None
 
+    async def list_in(self, status: TaskStatus) -> list[Task]:
+        """Every task in ``status`` that no worker holds, oldest first."""
+        stmt = (
+            select(TaskRow)
+            .where(TaskRow.status == status.value, TaskRow.lease_owner.is_(None))
+            .order_by(TaskRow.created_at)
+        )
+        async with self._sessions() as s:
+            rows = (await s.execute(stmt)).scalars().all()
+        return [_task(r) for r in rows]
+
     async def transition(
         self, task_id: str, *, expected: TaskStatus, to: TaskStatus, claim: Claim | None = None
     ) -> Task | None:

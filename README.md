@@ -29,6 +29,7 @@ src/repoaegis/eval/     评测 harness，项目的每个断言都从这里复现
 web/                    能力线 3：Vue 3 控制台
 docs/industry-survey.md 设计依据：业界系统与论文调研
 docs/durable-execution-survey.md  worker 崩溃后的恢复与交接：持久执行平台、任务队列、编码 agent 的做法
+docs/drill-2026-09-30-worker-death.md  演练记录：worker 死在改代码中间，5 分钟后被回收、重做、开出 PR
 ```
 
 ## 开发
