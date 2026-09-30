@@ -93,3 +93,25 @@ async def test_unknown_approval_is_404(client: httpx.AsyncClient) -> None:
     assert (await client.get("/api/approvals/missing")).status_code == 404
     answered = await client.post("/api/approvals/missing/decision", json={"decision": "approve"})
     assert answered.status_code == 404
+
+
+async def test_answering_while_a_worker_holds_the_task_is_a_conflict(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """The drill hit this as a 500: the human's answer raced a worker's lease."""
+    task_id, approval_id = await open_plan_gate(app, client)
+    repo = app.state.repo
+    assert await repo.claim(
+        task_id,
+        expected=TaskStatus.AWAITING_APPROVAL,
+        to=TaskStatus.AWAITING_APPROVAL,
+        owner="busy-worker",
+        ttl_seconds=60,
+    )
+
+    answered = await client.post(
+        f"/api/approvals/{approval_id}/decision", json={"decision": "approve"}
+    )
+
+    assert answered.status_code == 409
+    assert "worker holds" in answered.json()["detail"]

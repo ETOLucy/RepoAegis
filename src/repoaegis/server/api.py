@@ -32,7 +32,7 @@ from repoaegis.server.planning import PlanningService
 from repoaegis.server.policy import get_policy
 from repoaegis.server.solving import SolvingService
 from repoaegis.server.sse import event_stream
-from repoaegis.server.state import TaskMachine
+from repoaegis.server.state import StaleLease, TaskMachine
 from repoaegis.server.storage import ApprovalRepo, Database, TaskRepo
 from repoaegis.server.worker import Worker
 
@@ -142,6 +142,10 @@ async def decide_approval(
             return exc.approval
         raise HTTPException(
             status_code=409, detail=f"approval already {exc.approval.status.value}"
+        ) from None
+    except StaleLease:
+        raise HTTPException(
+            status_code=409, detail="a worker holds this task right now; try again in a moment"
         ) from None
 
 

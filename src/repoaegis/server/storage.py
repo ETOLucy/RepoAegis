@@ -15,6 +15,7 @@ than a few milliseconds of disk.
 from __future__ import annotations
 
 import uuid
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -194,9 +195,16 @@ class Reclaimed:
 # Entering any of these ends the worker's involvement, so the lease goes too.
 _RELEASING = frozenset(TaskStatus) - LEASED_STATES
 
+# The claim of the stage running in this asyncio task, if any. The worker sets
+# it around each stage; every lease-checked write below falls back to it, so a
+# service deep inside a stage never has to pass the claim by hand. (Lives here,
+# not in the state machine, because the writes that check it live here.)
+current_claim: ContextVar[Claim | None] = ContextVar("current_claim", default=None)
+
 
 def _lease_condition(claim: Claim | None) -> Any:
     """What a write must find on the row: my token, or no lease at all."""
+    claim = claim or current_claim.get()
     return TaskRow.lease_token == claim.token if claim else TaskRow.lease_owner.is_(None)
 
 
@@ -287,6 +295,17 @@ class TaskRepo:
             row = (await s.execute(stmt)).scalar_one_or_none()
         return _task(row) if row else None
 
+    async def list_in(self, status: TaskStatus) -> list[Task]:
+        """Every task in ``status`` that no worker holds, oldest first."""
+        stmt = (
+            select(TaskRow)
+            .where(TaskRow.status == status.value, TaskRow.lease_owner.is_(None))
+            .order_by(TaskRow.created_at)
+        )
+        async with self._sessions() as s:
+            rows = (await s.execute(stmt)).scalars().all()
+        return [_task(r) for r in rows]
+
     async def transition(
         self, task_id: str, *, expected: TaskStatus, to: TaskStatus, claim: Claim | None = None
     ) -> Task | None:
@@ -342,6 +361,7 @@ class TaskRepo:
         self, task_id: str, type: str, payload: dict[str, Any], *, claim: Claim | None = None
     ) -> Event:
         """Append one event, in the same transaction as the lease check."""
+        claim = claim or current_claim.get()
         row = EventRow(task_id=task_id, type=type, payload=payload, ts=_now())
         async with self._sessions() as s:
             task = await s.get(TaskRow, task_id)

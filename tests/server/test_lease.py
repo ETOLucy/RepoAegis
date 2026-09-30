@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 import pytest
 
 from repoaegis.server.gate import ApprovalGate
-from repoaegis.server.models import Claim, Task, TaskCreate, TaskStatus
+from repoaegis.server.models import ApprovalKind, Claim, Decision, Task, TaskCreate, TaskStatus
 from repoaegis.server.state import StaleLease, TaskMachine, current_claim
 from repoaegis.server.storage import TaskRepo
 from repoaegis.server.worker import Worker
@@ -302,3 +302,85 @@ async def test_a_lost_lease_cancels_the_stage(
     assert not stage.finished
     current = await repo.get(task.id)
     assert current is not None and current.lease_owner == "thief"  # the thief's lease is intact
+
+
+class WritesDirectly:
+    """A stage that writes through the repository, not the machine, with no claim in hand."""
+
+    def __init__(self, repo: TaskRepo, machine: TaskMachine) -> None:
+        self._repo = repo
+        self._machine = machine
+
+    async def plan(self, task: Task) -> None:
+        # What PlanningService does to record what a run cost: no claim passed.
+        await self._repo.record_run(task.id, sha="a" * 40, steps=3, cost_usd=0.01)
+        await self._machine.advance(task.id, S.AWAITING_APPROVAL)
+
+
+async def test_repository_writes_inside_a_stage_carry_the_context_claim(
+    machine: TaskMachine, repo: TaskRepo, gate: ApprovalGate
+):
+    """The first real run died here: record_run had no claim and was refused as a stranger."""
+    task = await queued(machine)
+
+    assert await worker(machine, repo, gate, WritesDirectly(repo, machine)).tick() is True
+
+    current = await repo.get(task.id)
+    assert current is not None
+    assert current.status is S.AWAITING_APPROVAL and current.steps == 3
+
+
+async def test_a_planning_task_nobody_holds_is_planned_again(
+    machine: TaskMachine, repo: TaskRepo, gate: ApprovalGate
+):
+    """Left behind by a stage that ended without settling the task."""
+    task = await in_state(machine, S.PLANNING)  # no lease: an orphan
+    stage = RecordingStage(repo, machine)
+
+    assert await worker(machine, repo, gate, stage).tick() is True
+
+    assert stage.claims == [Claim(task_id=task.id, token=1)]
+    current = await repo.get(task.id)
+    assert current is not None and current.status is S.AWAITING_APPROVAL
+
+
+class CountingDelivery:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def deliver(self, task: Task) -> None:
+        self.calls += 1
+
+
+async def test_a_delivery_waiting_on_the_push_gate_is_not_claimed_every_tick(
+    machine: TaskMachine, repo: TaskRepo, gate: ApprovalGate
+):
+    """The drill saw 120 claims in a minute while a human was being asked."""
+    task = await in_state(
+        machine, S.PLANNING, S.AWAITING_APPROVAL, S.SOLVING, S.AWAITING_PATCH_APPROVAL, S.DELIVERING
+    )
+    envelope = await gate.request(task.id, ApprovalKind.PUSH, {"branch": "b"}, subject="push it")
+    assert envelope.is_open  # the default policy asks a human about pushes
+    delivery = CountingDelivery()
+    w = Worker(
+        machine,
+        repo,
+        gate,
+        Idle(),  # type: ignore[arg-type]
+        Idle(),  # type: ignore[arg-type]
+        delivery,  # type: ignore[arg-type]
+        poll_seconds=0,
+        lease_seconds=TTL,
+        heartbeat_seconds=0.01,
+        owner="w1",
+    )
+
+    for _ in range(5):
+        await w.tick()
+
+    current = await repo.get(task.id)
+    assert current is not None and current.lease_token == 0 and delivery.calls == 0
+
+    await gate.decide(envelope.id, Decision.APPROVE, actor="user:lucy")
+    assert await w.tick() is True
+    assert delivery.calls == 1

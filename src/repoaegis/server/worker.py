@@ -25,7 +25,7 @@ import structlog
 
 from repoaegis.server.delivery import DeliveryService
 from repoaegis.server.gate import ApprovalGate
-from repoaegis.server.models import Claim, Task, TaskStatus
+from repoaegis.server.models import ApprovalKind, Claim, Task, TaskStatus
 from repoaegis.server.planning import PlanningService
 from repoaegis.server.solving import SolvingService
 from repoaegis.server.state import StaleLease, TaskMachine, current_claim
@@ -80,8 +80,13 @@ class Worker:
             bool(await self._machine.reclaim_expired(max_recoveries=self._max_recoveries)) or worked
         )
 
-        ready = await self._repo.next_in(TaskStatus.DELIVERING)
-        if ready is not None:
+        for ready in await self._repo.list_in(TaskStatus.DELIVERING):
+            # Waiting on a human to allow the push is not work. Claiming it
+            # anyway would take the lease every tick -- the first drill did so
+            # 120 times in a minute -- and collide with the human's answer.
+            push = await self._gate.latest(ready.id, ApprovalKind.PUSH)
+            if push is not None and push.is_open:
+                continue
             await self._take(ready, TaskStatus.DELIVERING, self._delivery.deliver)
             return True
 
@@ -91,10 +96,20 @@ class Worker:
             return True
 
         task = await self._repo.next_queued()
-        if task is None:
-            return worked
-        await self._take(task, TaskStatus.PLANNING, self._planning.plan)
-        return True
+        if task is not None:
+            await self._take(task, TaskStatus.PLANNING, self._planning.plan)
+            return True
+
+        # A task left in PLANNING with no lease is an orphan: its stage ended
+        # without settling it (an unexpected exception, a refused write). The
+        # first real run produced exactly one. Plan it again rather than let it
+        # sit; planning is the only stage whose entry state is not re-entrant.
+        orphan = await self._repo.next_in(TaskStatus.PLANNING)
+        if orphan is not None:
+            log.warning("task.orphaned", task_id=orphan.id, status=orphan.status.value)
+            await self._take(orphan, TaskStatus.PLANNING, self._planning.plan)
+            return True
+        return worked
 
     async def _take(self, task: Task, to: TaskStatus, stage: Stage) -> None:
         claim = await self._machine.claim(task, to, owner=self.owner, ttl_seconds=self._lease)
