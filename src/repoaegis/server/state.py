@@ -12,16 +12,15 @@ statement) and ``reclaim_expired`` (taking a task back from a dead worker).
 The machine wraps both so the events still come from here.
 
 Leases: while a worker holds a task, every write for that task must carry the
-worker's ``Claim``. The worker puts its claim in ``current_claim`` for the
-duration of a stage, so the services underneath need not thread it through
-every call; a write can still pass ``claim=`` explicitly. A write with no claim
-at all is the human path (answering a gate) and is accepted only while no
-worker holds the task.
+worker's ``Claim``. The worker puts its claim in ``current_claim`` (defined next
+to the writes that check it, in ``storage``) for the duration of a stage, so
+the services underneath need not thread it through every call; a write can
+still pass ``claim=`` explicitly. A write with no claim at all is the human
+path (answering a gate) and is accepted only while no worker holds the task.
 """
 
 from __future__ import annotations
 
-from contextvars import ContextVar
 from types import MappingProxyType
 from typing import Any, Final
 
@@ -29,7 +28,7 @@ import structlog
 
 from repoaegis.server.events import EventBus
 from repoaegis.server.models import Claim, Event, Task, TaskCreate, TaskStatus, default_title
-from repoaegis.server.storage import Reclaimed, StaleLease, TaskRepo
+from repoaegis.server.storage import Reclaimed, StaleLease, TaskRepo, current_claim
 
 __all__ = [
     "TERMINAL",
@@ -67,10 +66,6 @@ TRANSITIONS: Final = MappingProxyType(
 )
 
 TERMINAL: Final = frozenset({S.DONE, S.FAILED, S.REJECTED})
-
-# The claim of the stage currently running in this asyncio task, if any. Set by
-# the worker around each stage; copied into the heartbeat and any sub-task.
-current_claim: ContextVar[Claim | None] = ContextVar("current_claim", default=None)
 
 
 class TaskNotFound(LookupError):

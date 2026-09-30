@@ -302,3 +302,43 @@ async def test_a_lost_lease_cancels_the_stage(
     assert not stage.finished
     current = await repo.get(task.id)
     assert current is not None and current.lease_owner == "thief"  # the thief's lease is intact
+
+
+class WritesDirectly:
+    """A stage that writes through the repository, not the machine, with no claim in hand."""
+
+    def __init__(self, repo: TaskRepo, machine: TaskMachine) -> None:
+        self._repo = repo
+        self._machine = machine
+
+    async def plan(self, task: Task) -> None:
+        # What PlanningService does to record what a run cost: no claim passed.
+        await self._repo.record_run(task.id, sha="a" * 40, steps=3, cost_usd=0.01)
+        await self._machine.advance(task.id, S.AWAITING_APPROVAL)
+
+
+async def test_repository_writes_inside_a_stage_carry_the_context_claim(
+    machine: TaskMachine, repo: TaskRepo, gate: ApprovalGate
+):
+    """The first real run died here: record_run had no claim and was refused as a stranger."""
+    task = await queued(machine)
+
+    assert await worker(machine, repo, gate, WritesDirectly(repo, machine)).tick() is True
+
+    current = await repo.get(task.id)
+    assert current is not None
+    assert current.status is S.AWAITING_APPROVAL and current.steps == 3
+
+
+async def test_a_planning_task_nobody_holds_is_planned_again(
+    machine: TaskMachine, repo: TaskRepo, gate: ApprovalGate
+):
+    """Left behind by a stage that ended without settling the task."""
+    task = await in_state(machine, S.PLANNING)  # no lease: an orphan
+    stage = RecordingStage(repo, machine)
+
+    assert await worker(machine, repo, gate, stage).tick() is True
+
+    assert stage.claims == [Claim(task_id=task.id, token=1)]
+    current = await repo.get(task.id)
+    assert current is not None and current.status is S.AWAITING_APPROVAL
