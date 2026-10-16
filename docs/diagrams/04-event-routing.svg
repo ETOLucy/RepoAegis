@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="1090" viewBox="0 0 1480 1090" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif"><defs><marker id="ae" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#4B5563"/></marker><marker id="as" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#4B5563"/></marker></defs>
+<rect x="0" y="0" width="1480" height="1090" fill="#ffffff"/>
+<text x="40" y="58" font-size="28" font-weight="bold" fill="#1F2937">事件路由</text>
+<rect x="280" y="90" width="200" height="56" rx="10" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="380" y="124.65" font-size="19" fill="#374151" text-anchor="middle">收到事件</text>
+<polygon points="380,186 530,246 380,306 230,246" fill="#F3F4F6" stroke="#6B7280" stroke-width="2" stroke-linejoin="round"/>
+<text x="380" y="252.3" font-size="18" fill="#374151" text-anchor="middle">验签与去重</text>
+<polygon points="380,346 530,406 380,466 230,406" fill="#F3F4F6" stroke="#6B7280" stroke-width="2" stroke-linejoin="round"/>
+<text x="380" y="399.95" font-size="17" fill="#374151" text-anchor="middle">发送者是 agent</text>
+<text x="380" y="423.95" font-size="17" fill="#374151" text-anchor="middle">自己或可忽略的机器人</text>
+<rect x="260" y="506" width="240" height="56" rx="10" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="380" y="540.65" font-size="19" fill="#374151" text-anchor="middle">归入或创建工作项</text>
+<polygon points="380,602 530,662 380,722 230,662" fill="#F3F4F6" stroke="#6B7280" stroke-width="2" stroke-linejoin="round"/>
+<text x="380" y="668.3" font-size="18" fill="#374151" text-anchor="middle">工作项有活动任务</text>
+<polygon points="380,772 530,832 380,892 230,832" fill="#F3F4F6" stroke="#6B7280" stroke-width="2" stroke-linejoin="round"/>
+<text x="380" y="825.8" font-size="18" fill="#374151" text-anchor="middle">按事件处置清单</text>
+<text x="380" y="850.8" font-size="18" fill="#374151" text-anchor="middle">分流</text>
+<rect x="640" y="296" width="200" height="60" rx="10" fill="#FCEAEA" stroke="#C0392B" stroke-width="2"/>
+<text x="740" y="332.65" font-size="19" fill="#7B241C" text-anchor="middle">丢弃并记录</text>
+<path d="M380,146 L380,186" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M530,246 L732,246 Q740,246 740,254 L740,296" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M380,306 L380,346" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M530,406 L732,406 Q740,406 740,398 L740,356" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M380,466 L380,506" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M380,562 L380,602" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M380,722 L380,772" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<rect x="40" y="962" width="200" height="70" rx="10" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="140" y="1003.65" font-size="19" fill="#374151" text-anchor="middle">仅记录</text>
+<rect x="280" y="962" width="200" height="70" rx="10" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="380" y="990.65" font-size="19" fill="#374151" text-anchor="middle">规则处理</text>
+<text x="380" y="1016.65" font-size="19" fill="#374151" text-anchor="middle">不创建任务</text>
+<rect x="520" y="962" width="200" height="70" rx="10" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2"/>
+<text x="620" y="1003.65" font-size="19" fill="#1A3F6B" text-anchor="middle">创建任务并排队</text>
+<path d="M230,832 L148,832 Q140,832 140,840 L140,962" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M380,892 L380,962" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M530,832 L612,832 Q620,832 620,840 L620,962" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<polygon points="770,602 920,662 770,722 620,662" fill="#F3F4F6" stroke="#6B7280" stroke-width="2" stroke-linejoin="round"/>
+<text x="770" y="668.3" font-size="18" fill="#374151" text-anchor="middle">事件性质</text>
+<path d="M530,662 L620,662" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<rect x="1240" y="442" width="200" height="80" rx="10" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="1340" y="488.3" font-size="18" fill="#374151" text-anchor="middle">恢复等待中的任务</text>
+<rect x="1240" y="562" width="200" height="80" rx="10" fill="#FCEAEA" stroke="#C0392B" stroke-width="2"/>
+<text x="1340" y="595.8" font-size="18" fill="#7B241C" text-anchor="middle">取消或暂停任务</text>
+<text x="1340" y="620.8" font-size="18" fill="#7B241C" text-anchor="middle">人的改动记为纠正</text>
+<rect x="1240" y="682" width="200" height="80" rx="10" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="1340" y="715.8" font-size="18" fill="#374151" text-anchor="middle">校验角色后</text>
+<text x="1340" y="740.8" font-size="18" fill="#374151" text-anchor="middle">触发对应动作</text>
+<rect x="1240" y="802" width="200" height="80" rx="10" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="1340" y="835.8" font-size="18" fill="#374151" text-anchor="middle">并入活动任务</text>
+<text x="1340" y="860.8" font-size="18" fill="#374151" text-anchor="middle">的上下文</text>
+<path d="M920,662 L960,662 M960,482 L960,842" stroke="#4B5563" stroke-width="2" fill="none"/>
+<path d="M960,482 L1240,482" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M960,602 L1240,602" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M960,722 L1240,722" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M960,842 L1240,842" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<rect x="594" y="234" width="92" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="640" y="251.6" font-size="16" fill="#1F2937" text-anchor="middle">失败或重复</text>
+<rect x="384" y="314" width="44" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="406" y="331.6" font-size="16" fill="#1F2937" text-anchor="middle">通过</text>
+<rect x="626" y="394" width="28" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="640" y="411.6" font-size="16" fill="#1F2937" text-anchor="middle">是</text>
+<rect x="384" y="474" width="28" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="398" y="491.6" font-size="16" fill="#1F2937" text-anchor="middle">否</text>
+<rect x="388" y="735" width="44" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="410" y="752.6" font-size="16" fill="#1F2937" text-anchor="middle">没有</text>
+<rect x="110" y="893" width="60" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="140" y="910.6" font-size="16" fill="#1F2937" text-anchor="middle">仅记录</text>
+<rect x="342" y="913" width="76" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="380" y="930.6" font-size="16" fill="#1F2937" text-anchor="middle">规则处理</text>
+<rect x="525.52" y="893" width="188.96" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="620" y="910.6" font-size="16" fill="#1F2937" text-anchor="middle">交给 agent 且策略允许</text>
+<rect x="561" y="650" width="28" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="575" y="667.6" font-size="16" fill="#1F2937" text-anchor="middle">有</text>
+<rect x="1038" y="470" width="124" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="1100" y="487.6" font-size="16" fill="#1F2937" text-anchor="middle">人的回应或补充</text>
+<rect x="971.44" y="566" width="257.12" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="1100" y="583.6" font-size="16" fill="#1F2937" text-anchor="middle">人为关闭 重开 改标签 指派 锁定</text>
+<rect x="1078" y="710" width="44" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="1100" y="727.6" font-size="16" fill="#1F2937" text-anchor="middle">命令</text>
+<rect x="1062" y="830" width="76" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="1100" y="847.6" font-size="16" fill="#1F2937" text-anchor="middle">其他更新</text>
+<rect x="1180" y="90" width="22" height="18" rx="4" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2"/>
+<text x="1212" y="104" font-size="15" fill="#1F2937">RepoAegis 自己的模块</text>
+<rect x="1180" y="120" width="22" height="18" rx="4" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="1212" y="134" font-size="15" fill="#1F2937">中性 / 流程步骤</text>
+<rect x="1180" y="150" width="22" height="18" rx="4" fill="#FCEAEA" stroke="#C0392B" stroke-width="2"/>
+<text x="1212" y="164" font-size="15" fill="#1F2937">丢弃 / 取消 / 超时</text>
+</svg>

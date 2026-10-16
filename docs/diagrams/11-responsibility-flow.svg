@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="780" viewBox="0 0 1280 780" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif"><defs><marker id="ae" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#4B5563"/></marker><marker id="as" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#4B5563"/></marker></defs>
+<rect x="0" y="0" width="1280" height="780" fill="#ffffff"/>
+<text x="40" y="58" font-size="28" font-weight="bold" fill="#1F2937">责任模型</text>
+<rect x="290" y="100" width="260" height="80" rx="10" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2"/>
+<text x="420" y="133.65" font-size="19" fill="#1A3F6B" text-anchor="middle">创建收件箱条目</text>
+<text x="420" y="159.65" font-size="19" fill="#1A3F6B" text-anchor="middle">指派唯一负责人</text>
+<rect x="290" y="240" width="260" height="80" rx="10" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="420" y="286.65" font-size="19" fill="#374151" text-anchor="middle">等待认领</text>
+<rect x="290" y="420" width="260" height="80" rx="10" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="420" y="466.65" font-size="19" fill="#374151" text-anchor="middle">等待回应</text>
+<rect x="810" y="240" width="280" height="80" rx="10" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2"/>
+<text x="950" y="273.8" font-size="18" fill="#1A3F6B" text-anchor="middle">升级</text>
+<text x="950" y="298.8" font-size="18" fill="#1A3F6B" text-anchor="middle">备选负责人，再到管理员</text>
+<rect x="110" y="600" width="240" height="80" rx="10" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="230" y="646.65" font-size="19" fill="#374151" text-anchor="middle">任务回到 <tspan font-family="Consolas, monospace">queued</tspan></text>
+<rect x="470" y="600" width="280" height="80" rx="10" fill="#FCEAEA" stroke="#C0392B" stroke-width="2"/>
+<text x="610" y="633.65" font-size="19" fill="#7B241C" text-anchor="middle">评论说明并搁置</text>
+<text x="610" y="659.65" font-size="19" fill="#7B241C" text-anchor="middle">停止花费</text>
+<path d="M420,180 L420,240" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M420,320 L420,420" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M550,258 L810,258" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M810,302 L550,302" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M360,500 L360,542 Q360,550 352,550 L238,550 Q230,550 230,558 L230,600" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<path d="M480,500 L480,542 Q480,550 488,550 L602,550 Q610,550 610,558 L610,600" fill="none" stroke="#4B5563" stroke-width="2" marker-end="url(#ae)"/>
+<text x="40" y="735" font-size="16" fill="#6B7280">全程写审计：谁、何时认领、做了什么决定、批准时看到的内容。对外有风险的动作，责任在人，agent 只准备材料。</text>
+<rect x="430" y="358" width="60" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="460" y="375.6" font-size="16" fill="#1F2937" text-anchor="middle">已认领</text>
+<rect x="642" y="224" width="76" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="680" y="241.6" font-size="16" fill="#1F2937" text-anchor="middle">认领超时</text>
+<rect x="270" y="538" width="60" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="300" y="555.6" font-size="16" fill="#1F2937" text-anchor="middle">已回应</text>
+<rect x="502" y="538" width="76" height="24" rx="4" fill="#fff" opacity="0.9"/>
+<text x="540" y="555.6" font-size="16" fill="#1F2937" text-anchor="middle">回应超时</text>
+<rect x="980" y="100" width="22" height="18" rx="4" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2"/>
+<text x="1012" y="114" font-size="15" fill="#1F2937">RepoAegis 自己的模块</text>
+<rect x="980" y="130" width="22" height="18" rx="4" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/>
+<text x="1012" y="144" font-size="15" fill="#1F2937">中性 / 流程步骤</text>
+<rect x="980" y="160" width="22" height="18" rx="4" fill="#FCEAEA" stroke="#C0392B" stroke-width="2"/>
+<text x="1012" y="174" font-size="15" fill="#1F2937">丢弃 / 取消 / 超时</text>
+</svg>

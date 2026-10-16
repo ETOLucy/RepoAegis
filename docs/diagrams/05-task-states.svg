@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1540" height="1000" viewBox="0 0 1540 1000">
+<rect x="0" y="0" width="1540" height="1000" fill="#FFFFFF"/>
+<text x="40" y="64" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" fill="#1F2937">任务状态机</text>
+<defs>
+<marker id="mk-slate" viewBox="0 0 12 12" refX="12" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#6B7280"/></marker>
+<marker id="mk-red" viewBox="0 0 12 12" refX="12" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#C0392B"/></marker>
+<marker id="mk-green" viewBox="0 0 12 12" refX="12" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#2E8B57"/></marker>
+<marker id="mk-gray" viewBox="0 0 12 12" refX="12" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#4B5563"/></marker>
+<marker id="mk-orange" viewBox="0 0 12 12" refX="12" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#D9822B"/></marker>
+</defs>
+<path d="M 420 385 L 720 385" fill="none" stroke="#4B5563" stroke-width="2" stroke-linejoin="round" marker-end="url(#mk-gray)"/>
+<rect x="515" y="373" width="110" height="24" rx="4" fill="#FFFFFF"/>
+<text x="570" y="391" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#4B5563">领取并加租约</text>
+<path d="M 720 415 L 420 415" fill="none" stroke="#4B5563" stroke-width="2" stroke-linejoin="round" marker-end="url(#mk-gray)"/>
+<rect x="515" y="403" width="110" height="24" rx="4" fill="#FFFFFF"/>
+<text x="570" y="421" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#4B5563">租约过期回收</text>
+<path d="M 760 440 L 760 606 Q 760 620 746 620 L 705 620" fill="none" stroke="#D9822B" stroke-width="2" stroke-linejoin="round" marker-end="url(#mk-orange)"/>
+<rect x="697" y="508" width="126" height="24" rx="4" fill="#FFFFFF"/>
+<text x="760" y="526" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#D9822B">缺信息或需授权</text>
+<path d="M 435 640 L 384 640 Q 370 640 370 626 L 370 440" fill="none" stroke="#4B5563" stroke-width="2" stroke-linejoin="round" marker-end="url(#mk-gray)"/>
+<rect x="331" y="528" width="78" height="24" rx="4" fill="#FFFFFF"/>
+<text x="370" y="546" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#4B5563">人已回应</text>
+<path d="M 570 680 L 570 780" fill="none" stroke="#6B7280" stroke-width="2" stroke-linejoin="round" marker-end="url(#mk-slate)"/>
+<rect x="531" y="718" width="78" height="24" rx="4" fill="#FFFFFF"/>
+<text x="570" y="736" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#6B7280">回应超时</text>
+<path d="M 760 360 L 760 204 Q 760 190 746 190 L 705 190" fill="none" stroke="#D9822B" stroke-width="2" stroke-linejoin="round" marker-end="url(#mk-orange)"/>
+<rect x="703.08" y="263" width="113.84" height="24" rx="4" fill="#FFFFFF"/>
+<text x="760" y="281" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#D9822B">草稿 PR 已开</text>
+<path d="M 435 190 L 384 190 Q 370 190 370 204 L 370 360" fill="none" stroke="#4B5563" stroke-width="2" stroke-linejoin="round" marker-end="url(#mk-gray)"/>
+<rect x="315" y="263" width="110" height="24" rx="4" fill="#FFFFFF"/>
+<text x="370" y="281" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#4B5563">评审要求修改</text>
+<path d="M 570 150 L 570 119 Q 570 105 584 105 L 1251 105 Q 1265 105 1265 119 L 1265 360" fill="none" stroke="#2E8B57" stroke-width="2" stroke-linejoin="round" marker-end="url(#mk-green)"/>
+<rect x="843.56" y="93" width="152.88" height="24" rx="4" fill="#FFFFFF"/>
+<text x="920" y="111" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#2E8B57">PR 合并或评审通过</text>
+<path d="M 990 400 L 1130 400" fill="none" stroke="#2E8B57" stroke-width="2" stroke-linejoin="round" marker-end="url(#mk-green)"/>
+<rect x="1037" y="388" width="46" height="24" rx="4" fill="#FFFFFF"/>
+<text x="1060" y="406" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#2E8B57">完成</text>
+<path d="M 990 425 L 1046 425 Q 1060 425 1060 439 L 1060 586 Q 1060 600 1074 600 L 1130 600" fill="none" stroke="#C0392B" stroke-width="2" stroke-linejoin="round" marker-end="url(#mk-red)"/>
+<rect x="1005" y="498" width="110" height="24" rx="4" fill="#FFFFFF"/>
+<text x="1060" y="516" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#C0392B">出错或超预算</text>
+<path d="M 220 440 L 220 916 Q 220 930 234 930 L 996 930 Q 1010 930 1010 916 L 1010 860" fill="none" stroke="#C0392B" stroke-width="2" stroke-dasharray="9 5" stroke-linejoin="round" marker-end="url(#mk-red)"/>
+<rect x="581" y="918" width="78" height="24" rx="4" fill="#FFFFFF"/>
+<text x="620" y="936" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#C0392B">人为打断</text>
+<path d="M 705 660 L 736 660 Q 750 660 750 674 L 750 806 Q 750 820 764 820 L 800 820" fill="none" stroke="#C0392B" stroke-width="2" stroke-dasharray="9 5" stroke-linejoin="round" marker-end="url(#mk-red)"/>
+<rect x="711" y="723" width="78" height="24" rx="4" fill="#FFFFFF"/>
+<text x="750" y="741" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#C0392B">人为打断</text>
+<path d="M 950 440 L 950 780" fill="none" stroke="#C0392B" stroke-width="2" stroke-dasharray="9 5" stroke-linejoin="round" marker-end="url(#mk-red)"/>
+<rect x="911" y="608" width="78" height="24" rx="4" fill="#FFFFFF"/>
+<text x="950" y="626" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#C0392B">人为打断</text>
+<circle cx="80" cy="400" r="11" fill="#1F2937"/>
+<path d="M 91 400 L 150 400" stroke="#4B5563" stroke-width="2" fill="none" marker-end="url(#mk-gray)"/>
+<path d="M 1400 400 L 1456 400" stroke="#4B5563" stroke-width="2" fill="none" marker-end="url(#mk-gray)"/>
+<circle cx="1470" cy="400" r="14" fill="#FFFFFF" stroke="#1F2937" stroke-width="2"/>
+<circle cx="1470" cy="400" r="8" fill="#1F2937"/>
+<path d="M 1400 600 L 1456 600" stroke="#4B5563" stroke-width="2" fill="none" marker-end="url(#mk-gray)"/>
+<circle cx="1470" cy="600" r="14" fill="#FFFFFF" stroke="#1F2937" stroke-width="2"/>
+<circle cx="1470" cy="600" r="8" fill="#1F2937"/>
+<path d="M 435 820 L 374 820" stroke="#4B5563" stroke-width="2" fill="none" marker-end="url(#mk-gray)"/>
+<circle cx="360" cy="820" r="14" fill="#FFFFFF" stroke="#1F2937" stroke-width="2"/>
+<circle cx="360" cy="820" r="8" fill="#1F2937"/>
+<path d="M 1070 820 L 1136 820" stroke="#4B5563" stroke-width="2" fill="none" marker-end="url(#mk-gray)"/>
+<circle cx="1150" cy="820" r="14" fill="#FFFFFF" stroke="#1F2937" stroke-width="2"/>
+<circle cx="1150" cy="820" r="8" fill="#1F2937"/>
+<rect x="1130" y="360" width="270" height="80" rx="16" fill="#E6F4EA" stroke="#2E8B57" stroke-width="2.5"/>
+<text x="1265" y="394" text-anchor="middle" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#1F2937">succeeded</text>
+<text x="1265" y="420" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="15" fill="#374151">完成</text>
+<rect x="435" y="600" width="270" height="80" rx="16" fill="#FDF0E1" stroke="#D9822B" stroke-width="2.5"/>
+<text x="570" y="634" text-anchor="middle" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#1F2937">waiting_human</text>
+<text x="570" y="660" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="15" fill="#374151">已创建收件箱条目，等待人回应</text>
+<rect x="720" y="360" width="270" height="80" rx="16" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2.5"/>
+<text x="855" y="394" text-anchor="middle" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#1F2937">running</text>
+<text x="855" y="420" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="15" fill="#374151">Worker 持有租约，正在执行</text>
+<rect x="435" y="150" width="270" height="80" rx="16" fill="#FDF0E1" stroke="#D9822B" stroke-width="2.5"/>
+<text x="570" y="184" text-anchor="middle" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#1F2937">awaiting_review</text>
+<text x="570" y="210" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="15" fill="#374151">草稿 PR 已开，等待人评审</text>
+<rect x="150" y="360" width="270" height="80" rx="16" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2.5"/>
+<text x="285" y="394" text-anchor="middle" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#1F2937">queued</text>
+<text x="285" y="420" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="15" fill="#374151">等待 Worker 领取</text>
+<rect x="800" y="780" width="270" height="80" rx="16" fill="#F3F4F6" stroke="#6B7280" stroke-width="2.5"/>
+<text x="935" y="814" text-anchor="middle" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#1F2937">cancelled</text>
+<text x="935" y="840" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="15" fill="#374151">被人为打断</text>
+<rect x="435" y="780" width="270" height="80" rx="16" fill="#F3F4F6" stroke="#6B7280" stroke-width="2.5"/>
+<text x="570" y="814" text-anchor="middle" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#1F2937">shelved</text>
+<text x="570" y="840" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="15" fill="#374151">长期无人回应而搁置，停止消耗预算</text>
+<rect x="1130" y="560" width="270" height="80" rx="16" fill="#FCEAEA" stroke="#C0392B" stroke-width="2.5"/>
+<text x="1265" y="594" text-anchor="middle" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#1F2937">failed</text>
+<text x="1265" y="620" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="15" fill="#374151">出错、超预算或重试用尽</text>
+<path d="M 940 60 L 970 60" stroke="#4B5563" stroke-width="2.5" fill="none"/>
+<text x="978" y="65" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#1F2937">正常流转</text>
+<path d="M 1064 60 L 1094 60" stroke="#2E8B57" stroke-width="2.5" fill="none"/>
+<text x="1102" y="65" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#1F2937">成功路径</text>
+<path d="M 1188 60 L 1218 60" stroke="#D9822B" stroke-width="2.5" fill="none"/>
+<text x="1226" y="65" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#1F2937">等待人</text>
+<path d="M 1296 60 L 1326 60" stroke="#C0392B" stroke-width="2.5" fill="none"/>
+<text x="1334" y="65" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#1F2937">失败</text>
+<path d="M 1388 60 L 1418 60" stroke="#C0392B" stroke-width="2.5" fill="none" stroke-dasharray="7 4"/>
+<text x="1426" y="65" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#1F2937">人为打断</text>
+<text x="1100" y="950" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="16" fill="#4B5563">所有状态更新带 version（乐观锁）</text>
+</svg>

@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="1018" viewBox="0 0 1300 1018" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif">
+<defs><marker id="ah" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#4B5563"/></marker><marker id="ao" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" orient="auto"><path d="M1,1 L11,6 L1,11" fill="none" stroke="#4B5563" stroke-width="1.8"/></marker></defs>
+<rect width="1300" height="1018" fill="#FFFFFF"/>
+<text x="40" y="62" font-size="28" text-anchor="start" fill="#1F2937" font-weight="bold">5.3 事务与发件箱</text>
+<rect x="633.6" y="30" width="18" height="18" rx="4" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="1.8"/>
+<text x="659.6" y="45" font-size="15" text-anchor="start" fill="#374151">RepoAegis 进程</text>
+<rect x="795.6" y="30" width="18" height="18" rx="4" fill="#EFEAFB" stroke="#6D4AC2" stroke-width="1.8"/>
+<text x="821.6" y="45" font-size="15" text-anchor="start" fill="#374151">agent / 引擎 / 沙箱</text>
+<rect x="996" y="30" width="18" height="18" rx="4" fill="#E6F4EA" stroke="#2E8B57" stroke-width="1.8"/>
+<text x="1022" y="45" font-size="15" text-anchor="start" fill="#374151">数据库</text>
+<rect x="1089" y="30" width="18" height="18" rx="4" fill="#FDF0E1" stroke="#D9822B" stroke-width="1.8"/>
+<text x="1115" y="45" font-size="15" text-anchor="start" fill="#374151">外部系统</text>
+<rect x="1197" y="30" width="18" height="18" rx="4" fill="#F3F4F6" stroke="#6B7280" stroke-width="1.8"/>
+<text x="1223" y="45" font-size="15" text-anchor="start" fill="#374151">人</text>
+<rect x="35.6" y="182" width="588.8" height="326" rx="12" fill="#FFF3C4" fill-opacity="0.55" stroke="#D9A62B" stroke-width="1.8" stroke-dasharray="6 4"/>
+<rect x="355.6" y="522" width="908.8" height="360" rx="12" fill="#DCE8F7" fill-opacity="0.35" stroke="#9CA3AF" stroke-width="1.8"/>
+<rect x="367.6" y="674" width="884.8" height="190" rx="12" fill="#E9E4F7" fill-opacity="0.35" stroke="#9CA3AF" stroke-width="1.8"/>
+<line x1="170" y1="152" x2="170" y2="916" stroke="#4B5563" stroke-width="1.5" stroke-dasharray="6 6"/>
+<line x1="490" y1="152" x2="490" y2="916" stroke="#4B5563" stroke-width="1.5" stroke-dasharray="6 6"/>
+<line x1="810" y1="152" x2="810" y2="916" stroke="#4B5563" stroke-width="1.5" stroke-dasharray="6 6"/>
+<line x1="1130" y1="152" x2="1130" y2="916" stroke="#4B5563" stroke-width="1.5" stroke-dasharray="6 6"/>
+<polygon points="35.6,182 89.6,182 89.6,198 79.6,208 35.6,208" fill="#FFFFFF" stroke="#D9A62B" stroke-width="1.8"/>
+<text x="46.6" y="201" font-size="16" text-anchor="start" fill="#374151" font-weight="bold">事务</text>
+<rect x="95.6" y="184" width="265.92" height="24" fill="#fff" fill-opacity="0.9"/>
+<text x="99.6" y="202" font-size="16" text-anchor="start" fill="#374151">[同一事务内，一并提交或一并回滚]</text>
+<polygon points="355.6,522 413.44,522 413.44,538 403.44,548 355.6,548" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.8"/>
+<text x="366.6" y="541" font-size="16" text-anchor="start" fill="#374151" font-weight="bold">loop</text>
+<rect x="419.44" y="524" width="89.92" height="24" fill="#fff" fill-opacity="0.9"/>
+<text x="423.44" y="542" font-size="16" text-anchor="start" fill="#374151">[周期轮询]</text>
+<polygon points="367.6,674 416.48,674 416.48,690 406.48,700 367.6,700" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.8"/>
+<text x="378.6" y="693" font-size="16" text-anchor="start" fill="#374151" font-weight="bold">alt</text>
+<rect x="422.48" y="676" width="89.92" height="24" fill="#fff" fill-opacity="0.9"/>
+<text x="426.48" y="694" font-size="16" text-anchor="start" fill="#374151">[发送成功]</text>
+<line x1="367.6" y1="772" x2="1252.4" y2="772" stroke="#6B7280" stroke-width="1.6" stroke-dasharray="8 5"/>
+<rect x="374.6" y="778" width="89.92" height="24" fill="#fff" fill-opacity="0.9"/>
+<text x="378.6" y="796" font-size="16" text-anchor="start" fill="#374151">[发送失败]</text>
+<rect x="105" y="100" width="130" height="52" rx="10" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2.2"/>
+<text x="170" y="132" font-size="18" text-anchor="middle" fill="#1A3F6B" font-weight="bold">Worker</text>
+<rect x="425" y="100" width="130" height="52" rx="10" fill="#E6F4EA" stroke="#2E8B57" stroke-width="2.2"/>
+<text x="490" y="132" font-size="18" text-anchor="middle" fill="#1B5E3A" font-weight="bold">数据库</text>
+<rect x="745" y="100" width="130" height="52" rx="10" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2.2"/>
+<text x="810" y="132" font-size="18" text-anchor="middle" fill="#1A3F6B" font-weight="bold">通知循环</text>
+<rect x="1065" y="100" width="130" height="52" rx="10" fill="#FDF0E1" stroke="#D9822B" stroke-width="2.2"/>
+<text x="1130" y="132" font-size="18" text-anchor="middle" fill="#7A4513" font-weight="bold">GitHub</text>
+<rect x="105" y="916" width="130" height="52" rx="10" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2.2"/>
+<text x="170" y="948" font-size="18" text-anchor="middle" fill="#1A3F6B" font-weight="bold">Worker</text>
+<rect x="425" y="916" width="130" height="52" rx="10" fill="#E6F4EA" stroke="#2E8B57" stroke-width="2.2"/>
+<text x="490" y="948" font-size="18" text-anchor="middle" fill="#1B5E3A" font-weight="bold">数据库</text>
+<rect x="745" y="916" width="130" height="52" rx="10" fill="#E8F1FB" stroke="#2F6FB5" stroke-width="2.2"/>
+<text x="810" y="948" font-size="18" text-anchor="middle" fill="#1A3F6B" font-weight="bold">通知循环</text>
+<rect x="1065" y="916" width="130" height="52" rx="10" fill="#FDF0E1" stroke="#D9822B" stroke-width="2.2"/>
+<text x="1130" y="948" font-size="18" text-anchor="middle" fill="#7A4513" font-weight="bold">GitHub</text>
+<line x1="170" y1="262" x2="490" y2="262" stroke="#4B5563" stroke-width="1.8" marker-end="url(#ah)"/>
+<rect x="302.6" y="235" width="54.8" height="23" fill="#fff" fill-opacity="0.92"/>
+<text x="330" y="252" font-size="16" text-anchor="middle" fill="#1F2937"><tspan font-family="Consolas, monospace">BEGIN</tspan></text>
+<line x1="170" y1="320" x2="490" y2="320" stroke="#4B5563" stroke-width="1.8" marker-end="url(#ah)"/>
+<rect x="214.28" y="293" width="231.44" height="23" fill="#fff" fill-opacity="0.92"/>
+<text x="330" y="310" font-size="16" text-anchor="middle" fill="#1F2937">任务状态改为 <tspan font-family="Consolas, monospace">waiting_human</tspan></text>
+<line x1="170" y1="378" x2="490" y2="378" stroke="#4B5563" stroke-width="1.8" marker-end="url(#ah)"/>
+<rect x="269" y="351" width="122" height="23" fill="#fff" fill-opacity="0.92"/>
+<text x="330" y="368" font-size="16" text-anchor="middle" fill="#1F2937">插入收件箱条目</text>
+<line x1="170" y1="436" x2="490" y2="436" stroke="#4B5563" stroke-width="1.8" marker-end="url(#ah)"/>
+<rect x="233.16" y="409" width="193.68" height="23" fill="#fff" fill-opacity="0.92"/>
+<text x="330" y="426" font-size="16" text-anchor="middle" fill="#1F2937">插入发件箱记录 <tspan font-family="Consolas, monospace">pending</tspan></text>
+<line x1="170" y1="494" x2="490" y2="494" stroke="#4B5563" stroke-width="1.8" marker-end="url(#ah)"/>
+<rect x="298.12" y="467" width="63.76" height="23" fill="#fff" fill-opacity="0.92"/>
+<text x="330" y="484" font-size="16" text-anchor="middle" fill="#1F2937"><tspan font-family="Consolas, monospace">COMMIT</tspan></text>
+<line x1="810" y1="602" x2="490" y2="602" stroke="#4B5563" stroke-width="1.8" marker-end="url(#ah)"/>
+<rect x="548.68" y="575" width="202.64" height="23" fill="#fff" fill-opacity="0.92"/>
+<text x="650" y="592" font-size="16" text-anchor="middle" fill="#1F2937">取 <tspan font-family="Consolas, monospace">pending</tspan> 的发件箱记录</text>
+<line x1="810" y1="660" x2="1130" y2="660" stroke="#4B5563" stroke-width="1.8" marker-end="url(#ah)"/>
+<rect x="933" y="633" width="74" height="23" fill="#fff" fill-opacity="0.92"/>
+<text x="970" y="650" font-size="16" text-anchor="middle" fill="#1F2937">发送评论</text>
+<line x1="810" y1="754" x2="490" y2="754" stroke="#4B5563" stroke-width="1.8" marker-end="url(#ah)"/>
+<rect x="606.6" y="727" width="86.8" height="23" fill="#fff" fill-opacity="0.92"/>
+<text x="650" y="744" font-size="16" text-anchor="middle" fill="#1F2937">标记 <tspan font-family="Consolas, monospace">sent</tspan></text>
+<line x1="810" y1="850" x2="490" y2="850" stroke="#4B5563" stroke-width="1.8" marker-end="url(#ah)"/>
+<rect x="517" y="823" width="266" height="23" fill="#fff" fill-opacity="0.92"/>
+<text x="650" y="840" font-size="16" text-anchor="middle" fill="#1F2937">尝试次数加一，并计算下次重试时间</text>
+</svg>
