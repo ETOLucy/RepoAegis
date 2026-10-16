@@ -30,7 +30,7 @@
   <!-- 七彩补天石：五切面宝石（青 / 粉 / 橙 / 蓝 / 黄 + 绿色高光切面），垂直居中于画布
        Reversed 变体：描边改用亮紫罗兰 #C4B5FD，在深色背景上更醒目 -->
   <g transform="translate(512 497) scale(0.75)">
-    <path d="M0 292 L-176 92 L-118 -86 L118 -86 L176 92 Z" fill="#0D1726" stroke="#C4B5FD" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M0 292 L-176 92 L-118 -86 L118 -86 L176 92 Z" fill="#0D1726"/>
     <path d="M0 292 L-176 92 L-118 -86 L0 -16 Z" fill="url(#facet2)"/>
     <path d="M0 292 L176 92 L118 -86 L0 -16 Z" fill="url(#facet3)"/>
     <path d="M0 -16 L-118 -86 L-62 -196 L0 -126 Z" fill="url(#facet5)"/>
