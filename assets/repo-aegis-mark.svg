@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="277 277 470 470">
   <defs>
-    <!-- 五切面七彩宝石渐变 -->
+    <!-- 五切面宝石渐变：青 / 粉 / 橙 / 蓝 / 黄 -->
     <linearGradient id="facet2" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#22D3EE"/>
       <stop offset="1" stop-color="#0E7490"/>
@@ -21,13 +21,9 @@
       <stop offset="0" stop-color="#FACC15"/>
       <stop offset="1" stop-color="#EAB308"/>
     </linearGradient>
-    <linearGradient id="facet1" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#79E3AE"/>
-      <stop offset="1" stop-color="#00A141"/>
-    </linearGradient>
   </defs>
 
-  <!-- 七彩补天石：五切面宝石（青 / 粉 / 橙 / 蓝 / 黄 + 绿色高光切面），垂直居中于画布 -->
+  <!-- 七彩补天石：五个渐变切面，无描边 -->
   <g transform="translate(512 497) scale(0.75)">
     <path d="M0 292 L-176 92 L-118 -86 L118 -86 L176 92 Z" fill="#0D1726"/>
     <path d="M0 292 L-176 92 L-118 -86 L0 -16 Z" fill="url(#facet2)"/>
