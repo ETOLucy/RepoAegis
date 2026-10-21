@@ -1,6 +1,7 @@
 <div align="center">
-  <img src="assets/repo-aegis-mark-tight.png" height="120" alt="RepoAegis">
-  <h1>RepoAegis</h1>
+  <h1>
+    <img src="assets/repo-aegis-mark-tight.png" height="90" alt="RepoAegis"><br>RepoAegis
+  </h1>
   <p>事件驱动的代码仓库维护平台</p>
   <p>状态：设计阶段 · 许可证：Apache-2.0</p>
 </div>
