@@ -14,8 +14,8 @@
 
 下面是目标流程，**还没有实现**：
 
-1. 有权限的人给 issue 打上专用标签。其他标签、其他事件一概不管。
-2. RepoAegis 收到 GitHub 发来的"加标签"通知，确认打的是专用标签、不是自己打的。
+1. 有权限的人给一个**开着的** issue 打上专用标签，新建的、以前建的都可以。新建 issue 本身、打别的标签、已关闭的 issue，一概不触发。
+2. GitHub Actions 只在"打上专用标签"时启动一次运行，其他事件在 GitHub 那边就被筛掉了，不会启动任何机器。
 3. 在隔离环境里克隆仓库、装依赖，agent 读代码、改代码、跑测试。
 4. 把改动推到一个新分支，开草稿 PR，PR 描述里写 `Closes #编号` 让 GitHub 自动关联 issue。
 5. 做不出来或跑不起来时，在 issue 里如实说明原因。
@@ -23,24 +23,28 @@
 
 目前不处理带图片的 issue，图片以外的附件一律跳过。图片要靠能看图的模型才能读懂，是否引入看图能力，等主体流程做完再决定；遇到带图片的 issue 时具体怎么回应，尚未确定。
 
+## 用什么触发
+
+用 GitHub Actions，而不是自己搭一个接收通知的服务。Actions 的配置可以直接写成"只在 issue 被打上标签、并且标签名是专用标签时运行"，筛选在 GitHub 那边完成；每次运行的记录和日志都保存在仓库的 Actions 页面上，不需要自己再存一份。用 Actions 自带的令牌撤掉标签不会再次触发运行，这是 GitHub 为防止循环触发做的规定。
+
 ## 谁能触发
 
 GitHub 规定只有 Triage 及以上权限的人才能给 issue 打标签（[权限文档](https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization)），所以只读权限的外部人触发不了。是否再加一层更严格的检查，尚未确定。
 
 ## 验证进展
 
-已在私有测试仓库里实测通过：
+改用 Actions 之前，先在私有测试仓库里用转发工具（`gh webhook forward`）把 issue 通知转到本机做过实测。Actions 收到的事件内容和这份通知是同一套，所以下面的结论仍然有效：
 
-- 用 GitHub 官方命令行的转发扩展（`gh webhook forward`）把 `issues` 通知转到本机，打标签后一两秒内就能收到。
-- 通知里的字段和 GitHub 文档一致：打的标签在 `label.name`，操作者在 `sender.login`，`sender.type` 区分人和机器人，`issue` 里有没有 `pull_request` 字段可以区分 issue 和 PR。
-- 打专用标签、打其他标签、撤标签三种通知都能正确区分，只有第一种会触发。
-- 请求头的大小写和文档写法不同（`X-Github-Event` 而不是 `X-GitHub-Event`），读取时必须不区分大小写。
+- 打标签后一两秒内就能收到通知。
+- 打的标签在 `label.name`，操作者在 `sender.login`，`sender.type` 区分人和机器人，`issue` 里有没有 `pull_request` 字段可以区分 issue 和 PR。
+- 打专用标签、打其他标签、撤标签三种动作能清楚区分，只有第一种需要处理。
 
-还没验证：
+还没验证或还没定：
 
-- 用机器人身份（GitHub App）撤标签时，程序能否认出是自己做的而不再触发。
-- 设置密钥后的签名校验。
-- 在 GitHub 网页上重发同一条通知时，投递编号是否保持不变（去重要靠它）。
+- 在测试仓库里放一个最小的 Actions 配置，验证"打上标签 → 运行 → 撤掉标签"的全过程。
+- 新建 issue 时就直接带上专用标签，按 GitHub 官方文档会触发"打标签"，与我们的规则一致，待实测确认。
+- 处理中途标签被人撤掉、撤掉后又重新打上怎么办，以及能否从外部停止正在运行的处理：官方项目的做法和我们的建议见 [docs/中途撤标签与重复触发.md](docs/中途撤标签与重复触发.md)，待拍板和实测。
+- 用 Actions 自带令牌推送的代码不会触发仓库的 CI，推代码和开 PR 用什么身份，还没定。
 
 ## 许可证
 
