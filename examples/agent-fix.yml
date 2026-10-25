@@ -1,0 +1,17 @@
+# 放进要处理 issue 的仓库：.github/workflows/agent-fix.yml，并合进默认分支。
+name: RepoAegis
+
+on:
+  issues:
+    # 只订阅这五种动作；新建、编辑、指派等不会产生运行
+    types: [labeled, unlabeled, closed, deleted, transferred]
+
+# 顶层不给任何权限，只给下面这个作业；RepoAegis 里的每个作业再从中各取所需
+permissions: {}
+
+jobs:
+  repoaegis:
+    permissions:
+      issues: write    # 留言、撤标签
+      contents: read   # 克隆本仓库
+    uses: ETOLucy/RepoAegis/.github/workflows/agent-fix.yml@main

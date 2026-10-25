@@ -1,0 +1,47 @@
+name: RepoAegis
+
+on:
+  # 只供用户仓库的工作流调用，不会被本仓库自己的 issue 触发
+  workflow_call:
+
+jobs:
+  resolve:
+    # github.event 是用户仓库里那条 issue 事件。
+    # 必须是 issue 而不是 PR，并且满足其一：
+    # ① 打上或撤掉的正是 agent-fix
+    # ② 被关闭、删除或转移的 issue 身上挂着 agent-fix
+    if: >-
+      github.event.issue.pull_request == null && (
+        (contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
+          && github.event.label.name == 'agent-fix')
+        || (contains(fromJSON('["closed","deleted","transferred"]'), github.event.action)
+          && contains(github.event.issue.labels.*.name, 'agent-fix'))
+      )
+    # 同一个 issue 的运行进同一组；新来的进组时，取消组里正在跑的那次。
+    # 调用方不要再写同名的组，否则会把自己取消。
+    concurrency:
+      group: agent-fix-issue-${{ github.event.issue.number }}
+      cancel-in-progress: true
+    # 读 issue 和它的事件；查协作者权限只需要 metadata，令牌总是带着
+    permissions:
+      issues: read
+    runs-on: ubuntu-latest
+    steps:
+      # 取 RepoAegis 自己的代码，和这个工作流文件来自同一次提交
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: repoaegis
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.14"
+      # 开工前检查：看 issue 现在的状态和最后打上标签的人的权限。只用标准库，不装任何东西
+      - id: precheck
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          LABEL: agent-fix
+          PYTHONPATH: repoaegis/src
+        run: python -m repoaegis.precheck
