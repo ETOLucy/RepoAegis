@@ -18,7 +18,7 @@ RepoAegis 被打上标签后只运行一次，中途没有人可以回答它的�
 2. issue 是**开着的**。已关闭的 issue 打上标签也不处理。
 3. 对象是 issue，不是 PR。给 PR 打标签不处理。
 4. issue 正文里没有图片。带图片的 issue 暂不处理，图片以外的附件一律跳过。
-5. 打标签的人在仓库里的角色是 Write、Maintain 或 Admin（2026-10-24 已定）。这一条 Actions 配置判断不了，由处理开始后的第一步用接口查（`GET /repos/{owner}/{repo}/collaborators/{用户名}/permission`，用户名取事件里的 `sender.login`）。不满足时不处理，在 issue 里说明"没有触发权限"并撤掉标签；机器人账号打的标签同样不算。
+5. 打标签的人在仓库里的角色是 Write、Maintain 或 Admin（2026-10-24 已定）。这一条 Actions 配置判断不了，由处理开始后的第一步用接口查（`GET /repos/{owner}/{repo}/collaborators/{用户名}/permission`，看返回的 `permission` 是否为 `admin` 或 `write`；接口把 Maintain 记作 write、Triage 记作 read）。用户名取 issue 事件记录里**最后一次打上 `agent-fix` 的人**，不用触发事件里的 `sender`：GitHub 不保证事件按发生顺序处理，一次"撤标签"产生的运行可能最后才轮到并接手干活，它的 `sender` 是撤标签的人（2026-10-26 已定，见 [中途撤标签与重复触发](中途撤标签与重复触发.md)）。不满足时不处理，在 issue 里说明"没有触发权限"并撤掉标签；机器人账号打的标签同样不算。已实现：`src/repoaegis/precheck.py`，2026-10-25 在测试仓库实测通过。
 
 **依据：** 前三条是项目定位（一次性处理开着的 issue）。第五条是因为 Triage 角色（能管 issue 和标签、不能改代码）也能打标签；Copilot、claude-code-action、codex-action 都要求触发者有写权限，gh-aw 默认只放行 admin、maintainer、write。第四条是因为现在不引入看图能力；抽样统计中约 12% 的 issue 带图片，有界面的应用类仓库约 29%，通用库约 4%。
 
