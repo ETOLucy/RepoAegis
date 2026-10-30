@@ -5,7 +5,7 @@ on:
   workflow_call:
 
 jobs:
-  resolve:
+  precheck:
     # github.event 是用户仓库里那条 issue 事件。
     # 必须是 issue 而不是 PR，并且满足其一：
     # ① 打上或撤掉的正是 agent-fix
@@ -17,15 +17,28 @@ jobs:
         || (contains(fromJSON('["closed","deleted","transferred"]'), github.event.action)
           && contains(github.event.issue.labels.*.name, 'agent-fix'))
       )
-    # 同一个 issue 的运行进同一组；新来的进组时，取消组里正在跑的那次。
-    # 调用方不要再写同名的组，否则会把自己取消。
+    # 同一个 issue 的检查排队，按先后一个一个跑，互相不取消；
+    # 要不要停掉正在跑的运行，由检查程序判断后调接口完成。
+    # 调用方不要再写同名的组。
     concurrency:
       group: agent-fix-issue-${{ github.event.issue.number }}
-      cancel-in-progress: true
-    # 读 issue 和它的事件；查协作者权限只需要 metadata，令牌总是带着
+      queue: max
     permissions:
-      issues: read
+      issues: read     # 读 issue 和它的事件；查协作者权限只需要 metadata，令牌总是带着
+      actions: write   # 列出运行和产物、停掉运行、删掉过时的暂停存档
     runs-on: ubuntu-latest
+    # 停掉别的运行后要等它完全结束（它还要上传暂停存档、跑收尾），程序里最多等 7 分钟
+    timeout-minutes: 10
+    outputs:
+      action: ${{ steps.precheck.outputs.action }}
+      reason: ${{ steps.precheck.outputs.reason }}
+      labeler: ${{ steps.precheck.outputs.labeler }}
+      content_hash: ${{ steps.precheck.outputs.content_hash }}
+      artifact_name: ${{ steps.precheck.outputs.artifact_name }}
+      labeled_at: ${{ steps.precheck.outputs.labeled_at }}             # 运行的身份：issue 编号 + 这个时间
+      resume_run_id: ${{ steps.precheck.outputs.resume_run_id }}       # 有值时从这次运行的暂停存档接着做
+      resume_artifact_id: ${{ steps.precheck.outputs.resume_artifact_id }}
+      kind: ${{ steps.precheck.outputs.kind }}                         # action 为 stop 时内容检查给的类别
     steps:
       # 取 RepoAegis 自己的代码，和这个工作流文件来自同一次提交
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -37,11 +50,27 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: "3.14"
-      # 开工前检查：看 issue 现在的状态和最后打上标签的人的权限。只用标准库，不装任何东西
+      # 开工前检查：这条事件是谁做的 + issue 现在的状态，决定停掉谁、要不要开工。只用标准库。
+      # 打标签的人有权限时，接着做内容检查（打标签那一刻的版本是谁改的、有没有图片附件、读引用），
+      # 再拿整理好的内容和正在跑的运行、暂停存档比。标题和正文都从接口按打标签的时间倒推，不用事件里带的。
       - id: precheck
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          EVENT_ACTION: ${{ github.event.action }}
+          SENDER: ${{ github.event.sender.login }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           LABEL: agent-fix
+          SNAPSHOT_PATH: ${{ runner.temp }}/snapshot.json
+          CONTENT_PATH: ${{ runner.temp }}/content.json
           PYTHONPATH: repoaegis/src
         run: python -m repoaegis.precheck
+      # 开工时把快照和整理好的内容存成产物，名字带内容指纹，供之后的运行对比
+      - if: steps.precheck.outputs.action == 'start'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: ${{ steps.precheck.outputs.artifact_name }}
+          path: |
+            ${{ runner.temp }}/snapshot.json
+            ${{ runner.temp }}/content.json
+          retention-days: 1
+          if-no-files-found: error
