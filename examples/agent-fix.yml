@@ -15,4 +15,5 @@ jobs:
       issues: write    # 留言、撤标签
       contents: read   # 克隆本仓库
       actions: write   # 有权限的人撤标签或改内容重打时，停掉正在跑的处理
+      pull-requests: read  # 正文引用的编号是 PR 时，查得出它是 PR
     uses: ETOLucy/RepoAegis/.github/workflows/agent-fix.yml@main

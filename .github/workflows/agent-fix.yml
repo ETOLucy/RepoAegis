@@ -26,6 +26,8 @@ jobs:
     permissions:
       issues: read     # 读 issue 和它的事件；查协作者权限只需要 metadata，令牌总是带着
       actions: write   # 列出运行和产物、停掉运行、删掉过时的暂停存档
+      # 内容检查按编号查引用时，编号可能是 PR；没有这项，GitHub 对 PR 回"没权限"（2026-10-30 实测）
+      pull-requests: read
     runs-on: ubuntu-latest
     # 停掉别的运行后要等它完全结束（它还要上传暂停存档、跑收尾），程序里最多等 7 分钟
     timeout-minutes: 10
