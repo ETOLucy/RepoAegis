@@ -19,7 +19,7 @@ EVENTS = f"/repos/{REPO}/issues/8/events?per_page=100"
 RUNS = {status: f"/repos/{REPO}/actions/runs?event=issues&status={status}&per_page=100"
         for status in ("in_progress", "queued")}
 TITLE, BODY = "parse_date 遇到空字符串时崩溃", "调用 parse_date('') 抛 ValueError"
-CONTENT = {"issue": 8, "title": TITLE, "body": BODY, "version": {}, "references": []}
+CONTENT = {"issue": 8, "title": TITLE, "body": BODY, "version": {}}
 HASH = content_hash(CONTENT)
 
 
@@ -217,10 +217,10 @@ class ContentCheckStepTest(unittest.TestCase):
 
     def test_failed_content_check_stops(self):
         r, github = repo(issue(), [labeled("alice")], ALICE_WRITE, artifacts=[pause(55)])
-        inspector = Inspector(Result("stop", "引用多于一层（#12 引用了 #30）", "nested"))
+        inspector = Inspector(Result("stop", "正文里有图片 1 处", "media"))
         self.assertEqual(check(r, event(), LABEL, now=NOW, inspect=inspector),
-                         Decision("stop", "alice（write）打上了 agent-fix，但引用多于一层（#12 引用了 #30）",
-                                  "alice", kind="nested", labeled_at="2026-10-25T10:00:00Z"))
+                         Decision("stop", "alice（write）打上了 agent-fix，但正文里有图片 1 处",
+                                  "alice", kind="media", labeled_at="2026-10-25T10:00:00Z"))
         self.assertEqual(github.deletes, [])  # 暂停存档留着，到期自然删
 
     def test_failed_content_check_cancels_running_job(self):
@@ -229,9 +229,9 @@ class ContentCheckStepTest(unittest.TestCase):
         self.assertEqual((decision.action, decision.kind, decision.cancelled), ("stop", "media", (123,)))
         self.assertEqual(github.posts, [f"/repos/{REPO}/actions/runs/123/cancel"])
 
-    def test_reference_change_restarts_running_job(self):
-        # 标题正文没变，引用的 #12 被维护者改过：内容不一致，停掉重来
-        changed = {**CONTENT, "references": [{"ref": "#12", "read": True, "title": "t", "state": "open", "body": "新"}]}
+    def test_body_change_restarts_running_job(self):
+        # 维护者改了正文后重新打标签：内容不一致，停掉重来
+        changed = {**CONTENT, "body": BODY + "，补充一句"}
         r, github = repo(issue(), [labeled("alice")], ALICE_WRITE, active=runs((123, [artifact_name(8, HASH)])))
         decision = check(r, event(), LABEL, inspect=Inspector(Result("start", "通过", content=changed)))
         self.assertEqual((decision.action, decision.cancelled, decision.content), ("start", (123,), changed))

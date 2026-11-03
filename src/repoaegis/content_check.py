@@ -1,21 +1,19 @@
-"""开工前的内容检查：打标签那一刻的版本是谁改的、正文里有没有图片和附件、引用了哪些 issue。
+"""开工前的内容检查：打标签那一刻的版本是谁改的、正文里有没有图片和附件。
 
-开工前检查确认打标签的人有权限之后调用 check_content，只用标准库。整理出的内容算一个指纹，
-开工前检查拿它和正在跑的运行、暂停存档比：引用的那一层也算在内容里（2026-10-30 定）。规则见 docs/什么样的issue适合交给agent.md 第六节（2026-10-26、2026-10-28 定）：
+开工前检查确认打标签的人有权限之后调用 check_content，只用标准库。整理出的内容（标题、正文）算一个指纹，
+开工前检查拿它和正在跑的运行、暂停存档比。规则见 docs/agent读到的内容.md（2026-10-26、2026-10-28 定）：
 
 - 打标签之前最后一次改标题、最后一次改正文的人，有一个没有写权限（Write、Maintain、Admin），就不开工。
   只发过、没改过不算修改：issue 是谁发的不管，打标签的人已经替这一版担保。
   程序提醒过之后维护者重新打标签，表示认可这一版：提醒留言在那次修改之后、本次打标签之前，就开工。
 - 正文里有图片、视频或上传的文件，就不开工。
-- 正文直接引用的本仓库 issue 读一层，读打标签那一刻的版本。那一版的标题或正文由没有写权限的人
-  写或改的，只列编号和原因，不读，也不往下查。读了的 issue 里又引用了本仓库别的 issue
-  （指回原 issue 的、原 issue 也直接引用了的不算），就不开工。PR、讨论区帖子、其他仓库的不读，也不算层数。
-- 被引用的最多读 10 篇、合计约 4,000 token，其余只列编号和标题；里面的图片和附件换成一句说明。
 
-图片和引用都只认代码以外的文字（代码块、行内代码里的不算），而且是在清洗过的正文上找（HTML 注释已删）。
+图片只认代码以外的文字（代码块、行内代码里的不算），而且是在清洗过的正文上找（HTML 注释已删）。
 被打标签的 issue 也用修改记录倒推出的那一版，不用触发事件里带的：事件可能早于最后一次打标签，
-内容和时间就会对不上。通过时把清洗后的标题、正文和读到的引用交给后面的步骤；
-不通过时写明原因，由收尾步骤留言、撤标签。
+内容和时间就会对不上。通过时把清洗后的标题、正文交给后面的步骤；不通过时写明原因，由收尾步骤留言、撤标签。
+
+正文引用的其他 issue 开工前不读：agent 运行中想读哪篇，用 read_issue_ref 托读 issue 服务
+（repoaegis.issue_service）当场读，那边用这里的 version_at、omit_media 和 Source（2026-11-01 定）。
 """
 
 import hashlib
@@ -29,9 +27,6 @@ from datetime import datetime
 from repoaegis.precheck import GitHub, Repo, _expect_ok
 from repoaegis.sanitize import apply_to_non_code_regions, sanitize_body, sanitize_title
 
-MAX_REFERENCES = 10
-# 合计长度按 UTF-8 字节数算：英文大约 4 个字母一个 token，16,000 字节约 4,000 token
-MAX_REFERENCE_BYTES = 16_000
 # 程序发"修改人没有权限"提醒时用的账号和留言里的标记。只认这个账号发的，别人把标记抄进评论不算。
 # 账号取决于收尾步骤用什么身份发留言（GITHUB_TOKEN 是这个账号；改用 GitHub App 时要跟着改）
 NOTICE_AUTHOR = "github-actions[bot]"
@@ -147,7 +142,7 @@ _NOISE = re.compile(r"shields\.io|/badge|badge\.|badgen|codecov|vercel\.com|verc
                     r"cursor\.com/assets/images/open-in|cubic\.dev/buttons|static\.devin\.ai/assets|"
                     r"codesandbox\.io/static/img|^data:|^\\", re.I)
 
-# 被引用的 issue 里的图片和附件换成这几句（给模型看，用英文）
+# 读 issue 服务交给 agent 的 issue 里，图片和附件换成这几句（给模型看，用英文）
 _PLACEHOLDER = {
     "image": "[image omitted]",
     "video": "[video omitted]",
@@ -261,56 +256,6 @@ def _describe_media(media: list[Media]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 引用
-#
-# 按 GitHub 自动转成链接的四种写法认（github/docs 的 autolinked-references-and-urls.md
-# "Issues and pull requests" 一节）：完整网址、#编号、GH-编号、用户名/仓库#编号。只用规则，不用模型。
-# ---------------------------------------------------------------------------
-
-_REFERENCE = re.compile(
-    r"(?i:https?://github\.com/(?P<url_owner>[\w.-]+)/(?P<url_repo>[\w.-]+)"
-    r"/(?P<url_kind>issues|pull|discussions)/(?P<url_number>\d+))"
-    r"|(?<![\w/.-])(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+)#(?P<number>\d+)\b"
-    r"|(?<![\w/#&])(?:#|GH-)(?P<local>\d+)\b"
-)
-
-
-@dataclass(frozen=True)
-class Reference:
-    number: int
-    kind: str  # number：#12 这类，查过才知道是 issue 还是 PR；pull：网址写明是 PR；discussion：讨论区帖子
-    repo: str = ""  # 其他仓库的写成 owner/repo；本仓库的为空
-
-    @property
-    def name(self) -> str:
-        return f"{self.repo}#{self.number}"
-
-
-def find_references(body: str, repo: str) -> list[Reference]:
-    """正文里代码以外的引用，按第一次出现的顺序，同一个编号只留一次。repo 是本仓库 owner/repo。"""
-    found = {}
-
-    def collect(segment):
-        for match in _REFERENCE.finditer(segment):
-            if match.group("local"):
-                ref = Reference(int(match.group("local")), "number")
-            else:
-                if match.group("url_number"):
-                    owner, name = match.group("url_owner"), match.group("url_repo")
-                    kind = {"issues": "number", "pull": "pull", "discussions": "discussion"}[match.group("url_kind").lower()]
-                    number = match.group("url_number")
-                else:
-                    owner, name, kind, number = match.group("owner"), match.group("repo"), "number", match.group("number")
-                other = f"{owner}/{name}"
-                ref = Reference(int(number), kind, "" if other.lower() == repo.lower() else other)
-            found.setdefault((ref.repo.lower(), ref.number), ref)
-        return segment
-
-    apply_to_non_code_regions(body, collect)
-    return list(found.values())
-
-
-# ---------------------------------------------------------------------------
 # 向 GitHub 查
 # ---------------------------------------------------------------------------
 
@@ -345,11 +290,6 @@ class Source:
     def issues(self, numbers: list[int]) -> dict[int, Issue | str | None]:
         """按编号查本仓库：issue 返回带全部修改记录的 Issue，PR 返回 "PullRequest"，查不到返回 None。"""
         return self._batch(numbers, f"__typename ... on Issue {{ {_ISSUE_FIELDS} }}")
-
-    def kinds(self, numbers: list[int]) -> dict[int, str | None]:
-        """按编号查本仓库：返回 "Issue"、"PullRequest"，查不到返回 None。"""
-        found = self._batch(numbers, "__typename")
-        return {number: "Issue" if isinstance(item, Issue) else item for number, item in found.items()}
 
     def is_allowed(self, login: str) -> bool:
         """有没有 Write 以上的权限；已注销的账号算没有。同一个人只查一次。"""
@@ -427,7 +367,7 @@ class Source:
 class Result:
     action: str  # start：开工；stop：不开工，由收尾步骤留言、撤标签
     reason: str
-    kind: str = ""  # 不开工时是哪一类：editor（修改人没有权限）、media（图片或附件）、nested（引用多于一层）
+    kind: str = ""  # 不开工时是哪一类：editor（修改人没有权限）、media（图片或附件）
     content: dict | None = None  # 开工时交给后面步骤的内容
 
     @property
@@ -436,7 +376,7 @@ class Result:
 
 
 def content_hash(content: dict) -> str:
-    """内容的指纹：标题、正文、每个引用（读了的连同全文，没读的编号和原因）。
+    """内容的指纹：编号、标题、正文。
 
     version 里是打标签的时间这类记录，不算：不然每次重新打标签，指纹都不一样。
     """
@@ -481,67 +421,6 @@ def check_content(source: Source, number: int, labeled_at: str) -> Result:
     if media:
         return Result("stop", f"正文里有{_describe_media(media)}，暂不处理带图片或附件的 issue", "media")
 
-    # 第三步：读直接引用的 issue
-    references = [ref for ref in find_references(clean_body, source.repo) if ref.name != f"#{number}"]
-    lookup = [ref.number for ref in references if not ref.repo and ref.kind == "number"]
-    found = source.issues(lookup) if lookup else {}
-    entries, read, used = [], [], 0
-    for ref in references:
-        entry = {"ref": ref.name, "read": False}
-        entries.append(entry)
-        if ref.repo:
-            entry["skipped"] = "other_repo"
-            continue
-        if ref.kind != "number":
-            entry["skipped"] = {"pull": "pull_request", "discussion": "discussion"}[ref.kind]
-            continue
-        item = found[ref.number]
-        if item is None:
-            entry["skipped"] = "not_found"  # 已删除、已转移，或是讨论区帖子
-            continue
-        if not isinstance(item, Issue):
-            entry["skipped"] = "pull_request"
-            continue
-        ref_version = version_at(item, labeled_at)
-        if ref_version is None:
-            entry["skipped"] = "created_after_label"
-            continue
-        # 被引用的没人替它担保，所以发出的人也要查：标题、正文没改过的，看作者
-        writers = [change.login if change else item.author
-                   for change in (ref_version.title_change, ref_version.body_change)]
-        untrusted = sorted({_who(login) for login in writers if not source.is_allowed(login)})
-        if untrusted:
-            entry.update(skipped="untrusted_writer", writers=untrusted)
-            continue
-        if ref_version.body is None:
-            entry["skipped"] = "body_deleted"
-            continue
-        ref_title = sanitize_title(ref_version.title)
-        ref_body = omit_media(sanitize_body(ref_version.body))
-        size = len((ref_title + ref_body).encode("utf-8"))
-        if len(read) >= MAX_REFERENCES or used + size > MAX_REFERENCE_BYTES:
-            entry.update(skipped="over_limit", title=ref_title)
-            continue
-        used += size
-        # state 是现在的状态（open、closed），不是打标签那一刻的
-        entry.update(read=True, title=ref_title, state=item.state, body=ref_body)
-        read.append((ref.number, ref_body))
-
-    # 第四步：读了的里面有没有再引用别的 issue
-    known = {number, *lookup}
-    deeper = {}
-    for ref_number, ref_body in read:
-        for inner in find_references(ref_body, source.repo):
-            if not inner.repo and inner.kind == "number" and inner.number not in known:
-                deeper.setdefault(inner.number, ref_number)
-    if deeper:
-        kinds = source.kinds(list(deeper))
-        nested = [(deeper[inner], inner) for inner in deeper if kinds.get(inner) == "Issue"]
-        if nested:
-            pairs = "、".join(f"#{outer} 引用了 #{inner}" for outer, inner in nested)
-            return Result("stop", f"引用多于一层（{pairs}），只处理凭本 issue 和它直接引用的 issue 就能看懂的任务",
-                          "nested")
-
     content = {
         "issue": number,
         "title": clean_title,
@@ -553,9 +432,8 @@ def check_content(source: Source, number: int, labeled_at: str) -> Result:
             # 修改人没有写权限，但程序提醒之后维护者重新打了标签
             "accepted_after_notice": accepted,
         },
-        "references": entries,
     }
-    reason = f"内容检查通过：引用 {len(entries)} 处，读了 {len(read)} 篇"
+    reason = "内容检查通过"
     if accepted:
         reason += "；修改人没有写权限，提醒后维护者重新打了标签"
     return Result("start", reason, content=content)

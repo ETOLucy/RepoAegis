@@ -5,12 +5,12 @@
 - 只有 Write、Maintain、Admin（接口里的 permission 为 admin 或 write）的动作才算数。
 - 他们撤标签、关闭、删除、转移 issue：无条件停掉这个 issue 正在跑的运行。
 - 他们打标签时，如果已有运行在跑：内容一致就让它继续，不一致就停掉重来。
-  内容是内容检查（content_check.py）按打标签的时间整理出来的：标题、正文，加上引用的那一层（2026-10-30 定）。
+  内容是内容检查（content_check.py）按打标签的时间整理出来的标题和正文（2026-11-01 起不含引用的 issue）。
   内容检查没通过就不开工（结论 stop，由收尾步骤留言、撤标签），正在跑的处理的是旧版本，一并停掉。
 - 其他人做这些动作：一律不理会，这次运行安静结束。
 - 停掉该停的之后，再按 issue 现在的状态决定要不要开工：开着、挂着标签、最后打标签的人有权限。
 
-暂停与存档（2026-10-27 定，见 docs/暂停、存档与失败重来.md）：
+暂停与存档（2026-10-27 定，见 docs/暂停存档与监控.md）：
 
 - 停掉一次运行后，等它完全结束再往下判断，因为它被取消后还要上传暂停存档。
 - 开工时找这个 issue 的暂停存档：内容一致、没过截止时刻的，从最新一份接着做；其余的删掉。
@@ -73,7 +73,7 @@ class Decision:
     resume: PauseCheckpoint | None = None  # 开工时从这份暂停存档接着做
     deleted: tuple[int, ...] = ()  # 删掉的过时暂停存档（产物编号）
     unfinished: tuple[int, ...] = ()  # 停掉后等到超时仍没结束的运行
-    kind: str = ""  # stop 时内容检查给的类别：editor、media、nested
+    kind: str = ""  # stop 时内容检查给的类别：editor、media
     content: dict | None = None  # start 时交给 agent 的内容
 
 
@@ -333,7 +333,7 @@ def check(repo: Repo, event: Event, label: str, inspect, now: datetime | None = 
         return stopped.apply(Decision("skip", reason, labeler))
 
     # 第四步：按打标签的时间做内容检查，整理出要交给 agent 的内容。
-    # 先检查再比较：引用的那一层也算内容，不重新读一遍就不知道它变没变
+    # 先检查再比较：内容是按这次打标签的时间倒推的那一版，不重新读一遍就不知道它变没变
     reason = f"{labeler}（{role}）打上了 {label}"
     inspected = inspect(labeling.created_at)
     if inspected.action != "start":

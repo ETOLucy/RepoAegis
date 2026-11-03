@@ -2,9 +2,8 @@ import re
 import unittest
 
 from repoaegis import content_check
-from repoaegis.content_check import (NOTICE_AUTHOR, NOTICE_MARKER, Change, Issue, Media, Reference, Source,
-                                     check_content, content_hash, find_media, find_references, omit_media,
-                                     version_at)
+from repoaegis.content_check import (NOTICE_AUTHOR, NOTICE_MARKER, Change, Issue, Media, Source, check_content,
+                                     content_hash, find_media, omit_media, version_at)
 from repoaegis.precheck import Response
 
 REPO = "octo/demo"
@@ -27,15 +26,8 @@ class FakeSource:
         self._issues = issues
         self._allowed = set(allowed)
         self._notices = notices
-        self.kind_queries = []
-
     def issues(self, numbers):
         return {number: self._issues.get(number) for number in numbers}
-
-    def kinds(self, numbers):
-        self.kind_queries.append(list(numbers))
-        return {number: "Issue" if isinstance(self._issues.get(number), Issue) else self._issues.get(number)
-                for number in numbers}
 
     def is_allowed(self, login):
         return login in self._allowed
@@ -137,31 +129,6 @@ class FindMediaTest(unittest.TestCase):
                          "前 [image omitted] 中 [attached file omitted: out.log] 后\n`![留](u.png)`")
 
 
-class FindReferencesTest(unittest.TestCase):
-    def names(self, body):
-        return [(ref.name, ref.kind) for ref in find_references(body, REPO)]
-
-    def test_four_forms_in_order(self):
-        body = ("见 #12，另见 GH-13、octo/demo#14、"
-                "https://github.com/octo/demo/issues/15 和 https://github.com/other/lib/issues/3")
-        self.assertEqual(self.names(body), [("#12", "number"), ("#13", "number"), ("#14", "number"),
-                                            ("#15", "number"), ("other/lib#3", "number")])
-
-    def test_pull_and_discussion_urls(self):
-        body = "https://github.com/octo/demo/pull/20 https://github.com/Octo/Demo/discussions/21"
-        self.assertEqual(self.names(body), [("#20", "pull"), ("#21", "discussion")])
-
-    def test_not_references(self):
-        body = "abc#12 &#13; 颜色 #fff 版本 v1#2\n```\n#14\n```\n`#15`"
-        self.assertEqual(self.names(body), [])
-
-    def test_duplicates_kept_once(self):
-        self.assertEqual(self.names("#12 和 https://github.com/octo/demo/issues/12"), [("#12", "number")])
-
-    def test_reference_fields(self):
-        self.assertEqual(find_references("other/lib#3", REPO), [Reference(3, "number", "other/lib")])
-
-
 class CheckContentTest(unittest.TestCase):
     def check(self, source):
         return check_content(source, 8, LABELED_AT)
@@ -170,7 +137,6 @@ class CheckContentTest(unittest.TestCase):
         result = self.check(FakeSource({8: issue(8, BODY, author=OUTSIDER)}))
         self.assertEqual(result.action, "start")
         self.assertEqual(result.content["body"], BODY)
-        self.assertEqual(result.content["references"], [])
         self.assertIsNone(result.content["version"]["body_changed"])
 
     def test_edit_by_outsider_stops(self):
@@ -237,91 +203,19 @@ class CheckContentTest(unittest.TestCase):
         self.assertEqual(result.action, "start")
         self.assertEqual(result.content["body"], BODY + "\n")
 
-    def test_references_read_and_skipped(self):
-        body = "见 #12 #13 #14 #15 #8 other/lib#3 https://github.com/octo/demo/pull/16"
-        source = FakeSource({
-            8: issue(8, body),
-            12: issue(12, "背景说明", title="相关问题", state="closed"),
-            13: "PullRequest",
-            14: issue(14, "外人写的", author=OUTSIDER),
-            15: issue(15, "打标签后才发", created_at="2026-10-26T00:00:00Z"),
-        })
-        result = self.check(source)
-        self.assertEqual(result.action, "start")
-        self.assertEqual(result.content["references"], [
-            {"ref": "#12", "read": True, "title": "相关问题", "state": "closed", "body": "背景说明"},
-            {"ref": "#13", "read": False, "skipped": "pull_request"},
-            {"ref": "#14", "read": False, "skipped": "untrusted_writer", "writers": [OUTSIDER]},
-            {"ref": "#15", "read": False, "skipped": "created_after_label"},
-            {"ref": "other/lib#3", "read": False, "skipped": "other_repo"},
-            {"ref": "#16", "read": False, "skipped": "pull_request"},
-        ])
-
-    def test_reference_edited_by_maintainer_is_trusted(self):
-        edits = [("2026-10-24T09:00:00Z", MAINTAINER, "整理过"), ("2026-10-20T08:00:00Z", OUTSIDER, "原文")]
-        source = FakeSource({8: issue(8, "见 #12"), 12: issue(12, "整理过", author=OUTSIDER, edits=edits)})
-        entry = self.check(source).content["references"][0]
-        # 正文是维护者改的，但标题没改过，仍是外人写的
-        self.assertEqual(entry["skipped"], "untrusted_writer")
-
-    def test_reference_uses_version_at_label_time(self):
-        edits = [("2026-10-26T09:00:00Z", MAINTAINER, "打标签后改的"), ("2026-10-20T08:00:00Z", MAINTAINER, "当时的")]
-        source = FakeSource({8: issue(8, "见 #12"), 12: issue(12, "打标签后改的", edits=edits)})
-        self.assertEqual(self.check(source).content["references"][0]["body"], "当时的")
-
-    def test_reference_images_are_omitted(self):
-        source = FakeSource({8: issue(8, "见 #12"), 12: issue(12, "如图 ![](https://example.com/a.png)")})
-        self.assertEqual(self.check(source).content["references"][0]["body"], "如图 [image omitted]")
-
-    def test_reference_limits(self):
-        numbers = range(20, 32)
-        body = " ".join(f"#{n}" for n in numbers)
-        source = FakeSource({8: issue(8, body), **{n: issue(n, "短") for n in numbers}})
-        entries = self.check(source).content["references"]
-        self.assertEqual(sum(entry["read"] for entry in entries), 10)
-        self.assertEqual(entries[10], {"ref": "#30", "read": False, "skipped": "over_limit", "title": "标题"})
-
-    def test_reference_byte_limit(self):
-        source = FakeSource({8: issue(8, "#12 #13"), 12: issue(12, "长" * 6000), 13: issue(13, "短")})
-        entries = self.check(source).content["references"]
-        self.assertEqual([entry["read"] for entry in entries], [False, True])
-
-    def test_nested_issue_stops(self):
-        source = FakeSource({8: issue(8, "见 #12"), 12: issue(12, "起因是 #30"), 30: issue(30)})
-        result = self.check(source)
-        self.assertEqual((result.action, result.kind), ("stop", "nested"))
-        self.assertIn("#12 引用了 #30", result.reason)
-
-    def test_nested_pr_back_reference_and_sibling_do_not_count(self):
-        source = FakeSource({8: issue(8, "见 #12 #13"), 12: issue(12, "修复在 #30，回到 #8，另见 #13"),
-                             13: issue(13), 30: "PullRequest"})
-        result = self.check(source)
-        self.assertEqual(result.action, "start")
-        self.assertEqual(source.kind_queries, [[30]])
-
-    def test_untrusted_reference_is_not_checked_for_nesting(self):
-        source = FakeSource({8: issue(8, "见 #12"), 12: issue(12, "起因是 #30", author=OUTSIDER), 30: issue(30)})
-        self.assertEqual(self.check(source).action, "start")
-        self.assertEqual(source.kind_queries, [])
-
-    def test_nested_in_other_repo_does_not_count(self):
-        source = FakeSource({8: issue(8, "见 #12"), 12: issue(12, "上游 other/lib#3")})
-        self.assertEqual(self.check(source).action, "start")
-
-
 class ContentHashTest(unittest.TestCase):
     """内容指纹：开工前检查拿它和正在跑的运行、暂停存档比。"""
 
-    def content(self, ref_body="背景说明", labeled_at=LABELED_AT, title=TITLE):
-        source = FakeSource({8: issue(8, "见 #12", title=title), 12: issue(12, ref_body)})
+    def content(self, body=BODY, labeled_at=LABELED_AT, title=TITLE):
+        source = FakeSource({8: issue(8, body, title=title)})
         return check_content(source, 8, labeled_at)
 
     def test_relabel_with_nothing_changed_has_same_hash(self):
         # 重新打标签只改了时间，内容没变
         self.assertEqual(self.content().digest, self.content(labeled_at="2026-10-25T11:00:00Z").digest)
 
-    def test_reference_change_changes_hash(self):
-        self.assertNotEqual(self.content().digest, self.content(ref_body="背景说明，补充一句").digest)
+    def test_body_change_changes_hash(self):
+        self.assertNotEqual(self.content().digest, self.content(body=BODY + "，补充一句").digest)
 
     def test_title_change_changes_hash(self):
         self.assertNotEqual(self.content().digest, self.content(title="另一个标题").digest)
@@ -331,7 +225,7 @@ class ContentHashTest(unittest.TestCase):
         self.assertEqual(check_content(source, 8, LABELED_AT).digest, "")
 
     def test_hash_format(self):
-        self.assertRegex(content_hash({"issue": 8, "title": "", "body": "", "references": []}), r"^[0-9a-f]{16}$")
+        self.assertRegex(content_hash({"issue": 8, "title": "", "body": ""}), r"^[0-9a-f]{16}$")
 
 
 class FakeGitHub:
@@ -390,15 +284,19 @@ class SourceTest(unittest.TestCase):
         self.assertEqual(github.queries[1][1]["after"], "c1")
 
     def test_batches(self):
+        asked = []
+
         def answer(query, variables=None):
             numbers = [int(n) for n in re.findall(r"n(\d+): issueOrPullRequest", query)]
-            return Response(200, {"data": {"repository": {f"n{n}": {"__typename": "Issue"} for n in numbers}}})
+            asked.append(len(numbers))
+            return Response(200, {"data": {"repository": {f"n{n}": {"__typename": "PullRequest"} for n in numbers}}})
 
         github = FakeGitHub([])
         github.graphql = answer
-        kinds = Source(github, REPO).kinds(list(range(1, 46)))
-        self.assertEqual(set(kinds.values()), {"Issue"})
-        self.assertEqual(len(kinds), 45)
+        found = Source(github, REPO).issues(list(range(1, 46)))
+        self.assertEqual(set(found.values()), {"PullRequest"})
+        self.assertEqual(len(found), 45)
+        self.assertEqual(asked, [20, 20, 5])
 
     def test_notified(self):
         url = f"/repos/{REPO}/issues/8/comments?since=2026-10-24T09%3A00%3A00Z&per_page=100"
