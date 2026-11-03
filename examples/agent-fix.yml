@@ -15,5 +15,12 @@ jobs:
       issues: write    # 留言、撤标签
       contents: read   # 克隆本仓库
       actions: write   # 有权限的人撤标签或改内容重打时，停掉正在跑的处理
-      pull-requests: read  # 正文引用的编号是 PR 时，查得出它是 PR
+      pull-requests: read  # agent 运行中按编号读 issue，编号是 PR 时查得出它是 PR
     uses: ETOLucy/RepoAegis/.github/workflows/agent-fix.yml@main
+    # 可选：在 Langfuse 网页上回看每次运行的完整过程。不用就删掉下面这几行。
+    # 先在仓库的 Settings → Secrets and variables → Actions 里加两个 secret 和一个变量。
+    with:
+      langfuse_base_url: ${{ vars.LANGFUSE_BASE_URL }}
+    secrets:
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}

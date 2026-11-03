@@ -3,6 +3,19 @@ name: RepoAegis
 on:
   # 只供用户仓库的工作流调用，不会被本仓库自己的 issue 触发
   workflow_call:
+    # 以下都是可选的：不传就不往 Langfuse 上传，其余照常
+    inputs:
+      langfuse_base_url:
+        description: Langfuse 的地址，例如 https://jp.cloud.langfuse.com；不填用欧盟区 https://cloud.langfuse.com
+        type: string
+        required: false
+        default: ""
+    # 调用方的 secrets 不会自动传进来，要在调用方的 secrets: 里逐个写明
+    secrets:
+      LANGFUSE_PUBLIC_KEY:
+        required: false
+      LANGFUSE_SECRET_KEY:
+        required: false
 
 jobs:
   precheck:
@@ -26,8 +39,6 @@ jobs:
     permissions:
       issues: read     # 读 issue 和它的事件；查协作者权限只需要 metadata，令牌总是带着
       actions: write   # 列出运行和产物、停掉运行、删掉过时的暂停存档
-      # 内容检查按编号查引用时，编号可能是 PR；没有这项，GitHub 对 PR 回"没权限"（2026-10-30 实测）
-      pull-requests: read
     runs-on: ubuntu-latest
     # 停掉别的运行后要等它完全结束（它还要上传暂停存档、跑收尾），程序里最多等 7 分钟
     timeout-minutes: 10
@@ -53,7 +64,7 @@ jobs:
         with:
           python-version: "3.14"
       # 开工前检查：这条事件是谁做的 + issue 现在的状态，决定停掉谁、要不要开工。只用标准库。
-      # 打标签的人有权限时，接着做内容检查（打标签那一刻的版本是谁改的、有没有图片附件、读引用），
+      # 打标签的人有权限时，接着做内容检查（打标签那一刻的版本是谁改的、有没有图片附件），
       # 再拿整理好的内容和正在跑的运行、暂停存档比。标题和正文都从接口按打标签的时间倒推，不用事件里带的。
       - id: precheck
         env:
@@ -76,3 +87,151 @@ jobs:
             ${{ runner.temp }}/content.json
           retention-days: 1
           if-no-files-found: error
+
+  agent:
+    # agent 在 AWF 沙箱里改代码，交出补丁和汇报；不做任何 GitHub 写操作（见 docs/安全设计.md）。
+    # 整个 agent 程序跑在一个 AWF 容器里，它执行的命令是程序开的子进程（2026-10-30 定）。
+    needs: precheck
+    if: needs.precheck.outputs.action == 'start'
+    permissions:
+      contents: read   # 克隆本仓库；AWF 安装步骤也用它查发布文件的来源证明
+      # 只给读 issue 服务：agent 运行中托它读本仓库的 issue。编号可能是 PR，
+      # 没有 pull-requests，GitHub 对 PR 回"没权限"（2026-10-30 实测）
+      issues: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    # agent 程序自己限时 60 分钟，AWF 留 65 分钟兜底，其余是装 AWF、拉代码、传产物
+    timeout-minutes: 80
+    env:
+      ISSUE_SERVICE_PORT: 18080
+    steps:
+      # RepoAegis 自己的代码，和这个工作流文件来自同一次提交
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: repoaegis
+          persist-credentials: false
+      # 要处理的仓库，只取最新一次提交（见 docs/agent怎么干活.md）；不把令牌留在 git 配置里，agent 读不到
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          path: repo
+          fetch-depth: 1
+          persist-credentials: false
+      # 装在 /opt 下，容器里只读可见
+      - id: python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.14"
+      # 检查作业存下的快照和整理好的内容（标题、正文在 content.json 里）。
+      # agent 的输入输出都放在工作区的 agent-io 下：AWF 容器里看不到运行机的 $RUNNER_TEMP
+      # （2026-10-31 实测，见 docs/调研/AWF沙箱实测.md 第七节）
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: ${{ needs.precheck.outputs.artifact_name }}
+          path: ${{ github.workspace }}/agent-io/input
+      # 官方安装步骤偶尔失败：它检查 gh 的那句管道有时序问题，会把合格的 gh 误判为不合格
+      # （见 docs/调研/AWF沙箱实测.md "两个坑"），失败就再装一次
+      - id: awf
+        continue-on-error: true
+        uses: github/gh-aw-firewall@b8eaea207ed8c217256096c10485077aad5ff6cc  # v0.29.0
+        with:
+          version: v0.29.0
+          pull-images: 'true'
+      - id: awf-retry
+        if: steps.awf.outcome == 'failure'
+        uses: github/gh-aw-firewall@b8eaea207ed8c217256096c10485077aad5ff6cc  # v0.29.0
+        with:
+          version: v0.29.0
+          pull-images: 'true'
+      # 读 issue 服务：在运行机上（AWF 容器外）后台运行，令牌只给这一步。agent 运行中想读本仓库哪篇 issue，
+      # 就托它当场去 GitHub 读，按打标签那一刻的版本把关、清洗（见 src/repoaegis/issue_service.py）。
+      # 作业结束时 GitHub 会清掉留下的后台进程。等它答得上 /health 再往下走，最多等 10 秒。
+      - name: issue service
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LABELED_AT: ${{ needs.precheck.outputs.labeled_at }}
+          PYTHONPATH: ${{ github.workspace }}/repoaegis/src
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          nohup "$PYTHON" -m repoaegis.issue_service > "$RUNNER_TEMP/issue-service.log" 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf "http://127.0.0.1:$ISSUE_SERVICE_PORT/health" > /dev/null && exit 0
+            sleep 0.5
+          done
+          cat "$RUNNER_TEMP/issue-service.log"
+          echo "::error::读 issue 服务没有启动"
+          exit 1
+      # 启动 AWF，在容器里跑 agent 程序。
+      # - 用完整路径调 awf：sudo 用自己固定的 PATH，看不到安装步骤加的目录。
+      # - 用完整路径调 Python 3.14：sudo 同样丢掉 setup-python 加的目录，容器里的 python3 是系统自带的 3.12。
+      # - 出网只放行运行机上读 issue 服务的那一个端口（AWF 文档 docs/usage.md "Host Access"，2026-11-02 实测）；
+      #   容器里要经 AWF 的代理访问它。其余网络白名单和装依赖一起定，模型地址等接模型时再加。
+      # - 不用 --env-all，运行机上的变量一个都不带进去，程序要的用 -e 明着传。
+      - name: agent
+        env:
+          IMAGE_TAG: ${{ steps.awf.outputs.image-tag || steps.awf-retry.outputs.image-tag }}
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: >-
+          sudo -E "$(command -v awf)"
+          --image-tag "$IMAGE_TAG"
+          --container-workdir "$GITHUB_WORKSPACE/repo"
+          --agent-timeout 65
+          --enable-host-access
+          --allow-domains host.docker.internal
+          --allow-host-ports "$ISSUE_SERVICE_PORT"
+          -e "PYTHONPATH=$GITHUB_WORKSPACE/repoaegis/src"
+          -e "SNAPSHOT_PATH=$GITHUB_WORKSPACE/agent-io/input/snapshot.json"
+          -e "CONTENT_PATH=$GITHUB_WORKSPACE/agent-io/input/content.json"
+          -e "OUTPUT_DIR=$GITHUB_WORKSPACE/agent-io/output"
+          -e "ISSUE_SERVICE_URL=http://host.docker.internal:$ISSUE_SERVICE_PORT"
+          -- "$PYTHON" -m repoaegis.agent
+      # 读 issue 服务的日志（每次读了哪篇、给没给看、为什么）随 agent 的产出一起留下
+      - if: success() || failure()
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/agent-io/output"
+          cp "$RUNNER_TEMP/issue-service.log" "$GITHUB_WORKSPACE/agent-io/output/" || true
+      # 补丁、汇报、对话记录交给后面的作业；做完或出错都留 30 天，被叫停时的暂停存档另行处理
+      - if: success() || failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: agent-output
+          path: ${{ github.workspace }}/agent-io/output
+          retention-days: 30
+          if-no-files-found: warn
+
+  wrapup:
+    # 收尾作业：只要 agent 作业开过工，不管它成功、失败还是被取消都执行（见 docs/安全设计.md）。
+    # 现在只做一件事：把轨迹文件上传到 Langfuse。在 issue 里留言、撤标签等以后加在这里。
+    needs: [precheck, agent]
+    if: always() && needs.agent.result != 'skipped'
+    permissions: {}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: repoaegis
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.14"
+      # agent 作业没走到上传那一步时（比如中途崩溃）没有这个产物，不算收尾失败
+      - id: output
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: agent-output
+          path: ${{ runner.temp }}/agent-output
+      # Langfuse 密钥只给这一步。这一步不在 AWF 容器里，agent 碰不到（2026-10-30 定，见 docs/暂停存档与监控.md）。
+      # 没配密钥就跳过；上传失败只打警告，不让收尾作业失败。
+      - name: langfuse
+        if: steps.output.outcome == 'success'
+        env:
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASE_URL: ${{ inputs.langfuse_base_url }}
+          PYTHONPATH: repoaegis/src
+        run: python -m repoaegis.langfuse_upload "$RUNNER_TEMP/agent-output/trajectory.jsonl"
