@@ -1,0 +1,36 @@
+# gitleaks 的规则：提交前扫描暂存区，出现敏感内容就拒绝提交。
+# 在 gitleaks 自带规则的基础上，补上自带规则认不出的几种。
+# 自带规则见 https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+
+[extend]
+useDefault = true
+
+# DeepSeek 密钥：sk- 加 32 位小写字母或数字。自带规则里没有 DeepSeek，
+# 通用规则只认"名字 = 值"的写法，单独出现的密钥认不出。格式取自 trufflehog 的 DeepSeek 识别器。
+[[rules]]
+id = "deepseek-api-key"
+description = "DeepSeek API 密钥"
+regex = '''\b(sk-[a-z0-9]{32})\b'''
+keywords = ["sk-"]
+
+# Langfuse 公钥和私钥：pk-lf- 或 sk-lf- 加一个 UUID。格式取自 trufflehog 的 Langfuse 识别器。
+[[rules]]
+id = "langfuse-api-key"
+description = "Langfuse 公钥或私钥"
+regex = '''\b([ps]k-lf-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b'''
+keywords = ["pk-lf-", "sk-lf-"]
+
+# 只看文件名：存放环境变量的 .env 文件，不管内容是什么都不许提交。
+# .env.example 这类示例文件放行，但它的内容照样会被上面和自带的规则扫描。
+[[rules]]
+id = "env-file"
+description = "环境变量文件"
+path = '''(?:^|/)\.env(?:\.[^/]+)?$'''
+    [[rules.allowlists]]
+    paths = ['''(?:^|/)\.env\.(?:example|sample|template)$''']
+
+# 只看文件名：私钥和证书容器文件。其中 .p12、.pfx 等是二进制文件，按内容扫不到，只能按文件名拦。
+[[rules]]
+id = "key-file"
+description = "私钥或证书容器文件"
+path = '''(?i)(?:\.(?:pem|key|p12|pfx|jks|keystore)|(?:^|/)id_(?:rsa|dsa|ecdsa|ed25519))$'''
