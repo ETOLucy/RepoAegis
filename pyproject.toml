@@ -5,7 +5,9 @@ description = "让 agent 根据 GitHub issue 改代码并开 PR"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "flake8==7.4.1",  # 编辑器改完 Python 文件后的检查
+]
 
 [build-system]
 requires = ["hatchling"]
